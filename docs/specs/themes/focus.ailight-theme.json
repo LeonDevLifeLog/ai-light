@@ -1,0 +1,46 @@
+{
+  "theme": { "name": "focus", "version": 1 },
+  "scenes": {
+    "center-breathe-cyan": {
+      "leds": [
+        null,
+        { "curve": "TRIANGLE", "low": "#0A1A1A", "high": "#4DD0E1", "brightness": 40, "period_ms": 2000, "phase_deg": 0 },
+        null
+      ],
+      "buzzer": null
+    },
+    "center-breathe-amber": {
+      "leds": [
+        null,
+        { "curve": "TRIANGLE", "low": "#1A1400", "high": "#FFD54F", "brightness": 30, "period_ms": 2600, "phase_deg": 0 },
+        null
+      ],
+      "buzzer": null
+    },
+    "center-glow-green": {
+      "leds": [
+        null,
+        { "curve": "CONSTANT", "high": "#81C784", "brightness": 40 },
+        null
+      ],
+      "buzzer": null
+    },
+    "center-blink-red": {
+      "leds": [
+        null,
+        { "curve": "SQUARE", "low": "#000000", "high": "#E57373", "brightness": 60, "period_ms": 700, "duty_percent": 50, "repeat": 8, "end_level": "HIGH" },
+        null
+      ],
+      "buzzer": {
+        "start_delay_ms": 0, "repeat": 1,
+        "segments": [ { "frequency_hz": 2000, "duration_ms": 120, "volume": 30 } ]
+      }
+    }
+  },
+  "states": {
+    "WORKING": { "scene": "center-breathe-cyan", "transition_ms": 600 },
+    "WAITING": { "scene": "center-breathe-amber", "transition_ms": 600 },
+    "SUCCESS": { "scene": "center-glow-green", "transition_ms": 600, "hold_ms": 5000 },
+    "ERROR":   { "scene": "center-blink-red", "transition_ms": 0, "hold_ms": 0 }
+  }
+}

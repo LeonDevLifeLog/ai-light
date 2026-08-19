@@ -1,0 +1,43 @@
+{
+  "theme": { "name": "minimal", "version": 1 },
+  "scenes": {
+    "steady-white": {
+      "leds": [
+        { "curve": "CONSTANT", "high": "#FFFFFF", "brightness": 30 },
+        { "curve": "CONSTANT", "high": "#FFFFFF", "brightness": 30 },
+        { "curve": "CONSTANT", "high": "#FFFFFF", "brightness": 30 }
+      ],
+      "buzzer": null
+    },
+    "breathe-white": {
+      "leds": [
+        { "curve": "TRIANGLE", "low": "#1A1A1A", "high": "#FFFFFF", "brightness": 25, "period_ms": 3000, "phase_deg": 0 },
+        { "curve": "TRIANGLE", "low": "#1A1A1A", "high": "#FFFFFF", "brightness": 25, "period_ms": 3000, "phase_deg": 0 },
+        { "curve": "TRIANGLE", "low": "#1A1A1A", "high": "#FFFFFF", "brightness": 25, "period_ms": 3000, "phase_deg": 0 }
+      ],
+      "buzzer": null
+    },
+    "bright-white": {
+      "leds": [
+        { "curve": "CONSTANT", "high": "#FFFFFF", "brightness": 55 },
+        { "curve": "CONSTANT", "high": "#FFFFFF", "brightness": 55 },
+        { "curve": "CONSTANT", "high": "#FFFFFF", "brightness": 55 }
+      ],
+      "buzzer": null
+    },
+    "flash-white": {
+      "leds": [
+        { "curve": "SQUARE", "low": "#000000", "high": "#FFFFFF", "brightness": 90, "period_ms": 600, "duty_percent": 50, "repeat": 12, "end_level": "HIGH" },
+        { "curve": "SQUARE", "low": "#000000", "high": "#FFFFFF", "brightness": 90, "period_ms": 600, "duty_percent": 50, "repeat": 12, "end_level": "HIGH" },
+        { "curve": "SQUARE", "low": "#000000", "high": "#FFFFFF", "brightness": 90, "period_ms": 600, "duty_percent": 50, "repeat": 12, "end_level": "HIGH" }
+      ],
+      "buzzer": null
+    }
+  },
+  "states": {
+    "WORKING": { "scene": "steady-white", "transition_ms": 500 },
+    "WAITING": { "scene": "breathe-white", "transition_ms": 500 },
+    "SUCCESS": { "scene": "bright-white", "transition_ms": 500, "hold_ms": 5000 },
+    "ERROR":   { "scene": "flash-white", "transition_ms": 0, "hold_ms": 0 }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "theme": { "name": "neon", "version": 1 },
+  "scenes": {
+    "sweep-cyan": {
+      "leds": [
+        { "curve": "SAW_UP", "low": "#003333", "high": "#00FFFF", "brightness": 70, "period_ms": 900, "phase_deg": 0 },
+        { "curve": "SAW_UP", "low": "#003333", "high": "#00FFFF", "brightness": 70, "period_ms": 900, "phase_deg": 120 },
+        { "curve": "SAW_UP", "low": "#003333", "high": "#00FFFF", "brightness": 70, "period_ms": 900, "phase_deg": 240 }
+      ],
+      "buzzer": null
+    },
+    "pulse-magenta": {
+      "leds": [
+        { "curve": "TRIANGLE", "low": "#330033", "high": "#FF00FF", "brightness": 60, "period_ms": 800, "phase_deg": 0 },
+        { "curve": "TRIANGLE", "low": "#330033", "high": "#FF00FF", "brightness": 60, "period_ms": 800, "phase_deg": 0 },
+        { "curve": "TRIANGLE", "low": "#330033", "high": "#FF00FF", "brightness": 60, "period_ms": 800, "phase_deg": 0 }
+      ],
+      "buzzer": null
+    },
+    "glow-lime": {
+      "leds": [
+        { "curve": "CONSTANT", "high": "#39FF14", "brightness": 80 },
+        { "curve": "CONSTANT", "high": "#39FF14", "brightness": 80 },
+        { "curve": "CONSTANT", "high": "#39FF14", "brightness": 80 }
+      ],
+      "buzzer": {
+        "start_delay_ms": 0, "repeat": 1,
+        "segments": [ { "frequency_hz": 880, "duration_ms": 120, "volume": 50 } ]
+      }
+    },
+    "alarm-red": {
+      "leds": [
+        { "curve": "SQUARE", "low": "#000000", "high": "#FF0000", "brightness": 100, "period_ms": 250, "duty_percent": 50, "repeat": 12, "end_level": "HIGH" },
+        { "curve": "SQUARE", "low": "#000000", "high": "#FF0000", "brightness": 100, "period_ms": 250, "duty_percent": 50, "repeat": 12, "end_level": "HIGH" },
+        { "curve": "SQUARE", "low": "#000000", "high": "#FF0000", "brightness": 100, "period_ms": 250, "duty_percent": 50, "repeat": 12, "end_level": "HIGH" }
+      ],
+      "buzzer": {
+        "start_delay_ms": 0, "repeat": 1,
+        "segments": [
+          { "frequency_hz": 2000, "duration_ms": 200, "volume": 70 },
+          { "frequency_hz": 0,    "duration_ms": 150, "volume": 1 },
+          { "frequency_hz": 2000, "duration_ms": 200, "volume": 70 },
+          { "frequency_hz": 0,    "duration_ms": 150, "volume": 1 },
+          { "frequency_hz": 2000, "duration_ms": 200, "volume": 70 }
+        ]
+      }
+    }
+  },
+  "states": {
+    "WORKING": { "scene": "sweep-cyan", "transition_ms": 200 },
+    "WAITING": { "scene": "pulse-magenta", "transition_ms": 200 },
+    "SUCCESS": { "scene": "glow-lime", "transition_ms": 300, "hold_ms": 5000 },
+    "ERROR":   { "scene": "alarm-red", "transition_ms": 0, "hold_ms": 0 }
+  }
+}
