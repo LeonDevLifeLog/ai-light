@@ -13,9 +13,12 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 
-use crate::arbiter::{Arbiter, ArbitrationMode, HookEvent};
+use crate::arbiter::{Arbiter, ArbitrationMode};
 use crate::config::DEFAULT_PORT;
+use crate::engine;
+use crate::protocol::OutputScene;
 use crate::theme::ThemeFile;
 
 /// 端口退避上限（hook-api §1）
@@ -70,13 +73,16 @@ pub struct StatusSnapshot {
 pub struct SharedState {
     pub app_version: String,
     pub arbiter: RwLock<Arbiter>,
-    /// 当前生效主题（hold_ms 查询）
+    /// 当前生效主题（hold_ms 查询与 SCENE 编译）
     pub theme: RwLock<Option<ThemeFile>>,
     pub theme_name: RwLock<String>,
     pub device: RwLock<DeviceSnapshot>,
     pub token: RwLock<Option<String>>,
     pub port: RwLock<u16>,
     pub now_ms: Box<dyn Fn() -> u64 + Send + Sync>,
+    /// 编译后的 SCENE 出站队列（Engine 后台任务消费下发）
+    outbound: mpsc::UnboundedSender<OutputScene>,
+    outbound_rx_slot: RwLock<Option<mpsc::UnboundedReceiver<OutputScene>>>,
 }
 
 impl SharedState {
@@ -86,6 +92,7 @@ impl SharedState {
         now_ms: impl Fn() -> u64 + Send + Sync + 'static,
     ) -> Arc<Self> {
         let now = now_ms();
+        let (outbound_tx, outbound_rx) = mpsc::unbounded_channel();
         Arc::new(Self {
             app_version: app_version.to_string(),
             arbiter: RwLock::new(Arbiter::new(mode, now)),
@@ -95,7 +102,23 @@ impl SharedState {
             token: RwLock::new(None),
             port: RwLock::new(DEFAULT_PORT),
             now_ms: Box::new(now_ms),
+            outbound: outbound_tx,
+            outbound_rx_slot: RwLock::new(Some(outbound_rx)),
         })
+    }
+
+    /// 取出 outbound 消费端（仅一次；由 Engine 调用）
+    pub fn outbound_rx(&self) -> mpsc::UnboundedReceiver<OutputScene> {
+        self.outbound_rx_slot
+            .write()
+            .ok()
+            .and_then(|mut s| s.take())
+            .expect("outbound receiver 已被取出（Engine 只能创建一次）")
+    }
+
+    /// 投递一个编译后的 SCENE 到出站队列
+    pub fn send_outbound(&self, scene: OutputScene) -> Result<(), String> {
+        self.outbound.send(scene).map_err(|_| "outbound 队列已关闭".into())
     }
 
     /// 由调用方驱动驻留回落（tick），返回是否发生了回落
@@ -183,29 +206,16 @@ async fn hook_handler(
         return Err(err("INVALID_REQUEST", "source/state 命名非法（允许字母数字_-，≤64）"));
     }
 
-    let now = (state.now_ms)();
-    // 主题中查 hold_ms（ADR-0002 Q2：终态驻留）
-    let hold_ms = {
-        let guard = state.theme.read().ok();
-        guard
-            .as_ref()
-            .and_then(|g| g.as_ref())
-            .and_then(|t| t.states.get(&req.state).and_then(|s| s.hold_ms))
-    };
+    // 仲裁 + 编译 + 入出站队列（engine 后台任务下发）
+    let applied = engine::process_event(
+        &state,
+        &req.source,
+        &req.state,
+        req.session.as_deref(),
+        req.ts,
+    )
+    .map_err(|e| err("INTERNAL", e.to_string()))?;
 
-    let ev = HookEvent {
-        source: req.source.clone(),
-        state: req.state.clone(),
-        session: req.session.clone(),
-        ts_ms: req.ts.unwrap_or(now),
-    };
-    let outcome = state
-        .arbiter
-        .write()
-        .map_err(|_| err("INTERNAL", "arbiter 锁失败"))?
-        .apply(&ev, hold_ms, now);
-
-    let applied = matches!(outcome, crate::arbiter::ApplyOutcome::Applied(_));
     Ok(Json(HookResponse {
         ok: true,
         applied,
@@ -288,7 +298,7 @@ pub async fn serve(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::arbiter::ST_WORKING;
+    use crate::arbiter::ArbitrationMode;
     use axum::body::Body;
     use axum::http::{Request, StatusCode as HttpStatus};
     use http_body_util::BodyExt;

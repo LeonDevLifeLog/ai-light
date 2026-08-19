@@ -10,6 +10,7 @@
 
 pub mod arbiter;
 pub mod config;
+pub mod engine;
 pub mod hook_server;
 pub mod protocol;
 pub mod theme;
