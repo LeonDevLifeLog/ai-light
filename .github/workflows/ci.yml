@@ -40,17 +40,19 @@ jobs:
         include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"name":"Linux","platform":"ubuntu-22.04"}]' || '[{"name":"Linux","platform":"ubuntu-22.04"},{"name":"macOS","platform":"macos-latest"},{"name":"Windows","platform":"windows-latest"}]') }}
     steps:
       - uses: actions/checkout@v7
-      - name: Install Linux dependencies
+      - name: Switch apt sources (azure mirror workaround)
         if: runner.os == 'Linux'
-        timeout-minutes: 20
-        env:
-          DEBIAN_FRONTEND: noninteractive
         run: |
-          # GitHub runner 的 azure.archive.ubuntu.com 镜像偶发不可达，切到官方源并增强重试
+          # GitHub runner 的 azure.archive.ubuntu.com 镜像偶发不可达/极慢，切到官方源
           sudo sed -i 's/azure.archive.ubuntu.com/archive.ubuntu.com/g' \
             /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
-          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
-          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+      - name: Install Linux dependencies (cached)
+        if: runner.os == 'Linux'
+        timeout-minutes: 30
+        uses: awalsh128/cache-apt-pkgs-action@v1.1.3
+        with:
+          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+          version: 1.0
       - uses: pnpm/action-setup@v6.0.9
       - uses: actions/setup-node@v6
         with:
