@@ -1,5 +1,11 @@
 # CI/CD 故障排查
 
+## Tauri 依赖版本不匹配
+
+现象：`tauri-action` 报告 `Found version mismatched Tauri packages`。
+
+处理：确保 `package.json` 中 `@tauri-apps/api` 与 `src-tauri/Cargo.toml` 中 `tauri` 使用相同的 major/minor 版本，并提交 `pnpm-lock.yaml` 和 `src-tauri/Cargo.lock`。不要关闭 Tauri CLI 的版本检查。
+
 ## 版本校验失败
 
 现象：`Validate release version` 报告版本不一致或标签非法。
@@ -43,4 +49,3 @@
 2. 使用与工作流一致的锁定依赖命令在本地复现。
 3. 不通过放宽权限、关闭版本校验或取消锁文件约束规避问题。
 4. 修复工作流后同步更新本目录中的进展和操作说明。
-

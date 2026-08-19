@@ -35,6 +35,11 @@
 - `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 版本一致性检查
 - `git diff --check`
 
+### GitHub Actions 运行记录
+
+- 2026-08-19：PR #1 的首次 Linux Tauri 构建失败。根因是 Rust `tauri` 2.10 与 JavaScript `@tauri-apps/api` 2.11 的 minor 版本不一致。
+- 2026-08-19：已将 Tauri API、CLI 和 Rust crate 对齐到 2.11 版本线，并将 `src-tauri/Cargo.lock` 纳入版本控制。本地 Tauri release 编译和锁定依赖检查已通过，等待 PR 重新运行确认。
+
 ## 待线上验证
 
 - 首次推送分支后，确认 CI 两个 Job 均成功
@@ -51,4 +56,3 @@
 - 自动化单元测试、端到端测试和安装包冒烟测试
 - 依赖漏洞扫描、SBOM 和构建来源证明
 - 自动发布正式 Release；当前必须人工验收 Draft 后发布
-
