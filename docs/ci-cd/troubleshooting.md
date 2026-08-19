@@ -27,6 +27,8 @@
 - 前端 `pnpm build` 是否独立通过
 - Runner 磁盘空间和 GitHub Actions 服务状态
 
+如果长时间停留在 `Install Linux dependencies`，根因通常是 Ubuntu APT 镜像或网络连接异常，而不是 Rust 编译。当前工作流会在网络请求超时后重试，并在 8 分钟后终止该步骤。Job 在 `startedAt` 之前长时间没有 Runner 属于 GitHub 排队时间，修改项目构建命令无法消除。
+
 ## Release 上传失败
 
 如果出现 `Resource not accessible by integration`：

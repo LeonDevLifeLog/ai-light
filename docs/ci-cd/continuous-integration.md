@@ -27,11 +27,13 @@ pnpm build
 
 任何步骤失败都会阻止该 Job 通过。
 
-### Tauri build (Linux)
+### Tauri build
 
-运行环境为 `ubuntu-22.04`，超时时间 45 分钟。工作流安装 WebKitGTK 等系统依赖，通过 `tauri-apps/tauri-action@v1` 进行完整打包，并将安装包保存为 Workflow Artifact。
+工作流通过矩阵在 `ubuntu-22.04`、`macos-latest`、`windows-latest` 上分别执行原生 Tauri release 编译，单个平台超时时间为 45 分钟。CI 使用 `--no-bundle` 校验前端与原生应用编译链路，不生成安装包；跨平台安装包由 Release 工作流统一生成。
 
-该 Job 用于验证真实桌面应用构建链路，不能由单独的前端构建或 `cargo check` 替代。
+Linux 构建前会安装 WebKitGTK 等系统依赖。APT 设置 30 秒网络超时、3 次重试，安装步骤最多运行 8 分钟，避免镜像或网络异常导致 Job 长时间无结果。
+
+该矩阵用于验证三个桌面平台的真实编译链路，不能由单独的前端构建或 `cargo check` 替代。矩阵设置 `fail-fast: false`，一个平台失败不会取消其他平台，便于横向定位平台差异。
 
 ## 权限与依赖
 
@@ -48,4 +50,5 @@ pnpm build
 
 - `Quality checks`
 - `Tauri build (Linux)`
-
+- `Tauri build (macOS)`
+- `Tauri build (Windows)`
