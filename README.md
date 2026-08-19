@@ -1,5 +1,18 @@
 # Tauri: An Ultimate Project Template
 
+## CI/CD
+
+GitHub Actions runs formatting, type checking, frontend builds, and a Linux Tauri bundle build for pushes and pull requests. To create a cross-platform draft release, update the version in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`, then push a matching tag:
+
+See [`docs/ci-cd`](./docs/README.md) for implementation status, operating procedures, and troubleshooting.
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The release workflow builds macOS (Apple Silicon and Intel), Linux x64, and Windows x64 installers. It rejects tags that do not match the application version. Releases are drafts so artifacts can be tested and signed before publishing.
+
 [![NPM Version](https://img.shields.io/npm/v/create-tauri-react)](https://www.npmjs.com/package/create-tauri-react)
 [![NPM Downloads](https://img.shields.io/npm/dm/create-tauri-react)](https://www.npmjs.com/package/create-tauri-react)
 
