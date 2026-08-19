@@ -323,3 +323,57 @@ mod tests {
         }
     }
 }
+
+/// DeviceIo 热切换测试：纯逻辑，无需硬件
+#[cfg(test)]
+mod device_io_tests {
+    use super::*;
+    use crate::protocol::CMD_PING;
+    use crate::transport::TransportIo;
+
+    /// 简单回声 mock：write 成功；next_frame 返回一个 PING 应答
+    struct EchoIo;
+
+    #[async_trait]
+    impl TransportIo for EchoIo {
+        async fn write(&self, _bytes: Vec<u8>) -> Result<(), String> {
+            Ok(())
+        }
+        async fn next_frame(&self) -> Option<Frame> {
+            Some(Frame {
+                seq: 1,
+                cmd: crate::protocol::response_cmd(CMD_PING),
+                data: vec![0x00, 0x00, 0x00, 0x0E, 0x10],
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn disconnected_write_fails() {
+        let io = DeviceIo::new();
+        assert!(!io.is_connected().await);
+        assert!(io.write(vec![1, 2, 3]).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn hot_switch_connect_disconnect() {
+        let io = DeviceIo::new();
+        // 连接：set(Some) → write 转发成功
+        io.set(Some(Arc::new(EchoIo))).await;
+        assert!(io.is_connected().await);
+        assert!(io.write(vec![1]).await.is_ok());
+        // 断开：set(None) → write 报"设备未连接"
+        io.set(None).await;
+        assert!(!io.is_connected().await);
+        let err = io.write(vec![1]).await.unwrap_err();
+        assert!(err.contains("设备未连接"));
+    }
+
+    #[tokio::test]
+    async fn next_frame_forwards_to_inner() {
+        let io = DeviceIo::new();
+        io.set(Some(Arc::new(EchoIo))).await;
+        let f = io.next_frame().await.expect("应转发内层帧");
+        assert_eq!(f.cmd, crate::protocol::response_cmd(CMD_PING));
+    }
+}

@@ -339,4 +339,86 @@ mod tests {
         let scene = OutputScene::decode_data(&parsed.data).unwrap();
         assert_eq!(scene, OutputScene::none());
     }
+
+    #[tokio::test]
+    async fn preview_restart_scene_semantics() {
+        // 试听：RESTART_SCENE 强制重播，且不改变业务状态（ipc-contract §2.4）
+        let (shared, io, engine) = setup();
+        engine.preview("WORKING", None).await.unwrap();
+        for _ in 0..100 {
+            if !io.writes().is_empty() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert_eq!(io.writes().len(), 1);
+        let parsed = crate::protocol::parse_frame(&io.writes()[0]).unwrap().0;
+        let scene = OutputScene::decode_data(&parsed.data).unwrap();
+        assert_eq!(scene.apply_mode, crate::protocol::RESTART_SCENE);
+        // 业务状态未被改变（仍 IDLE）
+        assert_eq!(shared.arbiter.read().unwrap().current().state, "IDLE");
+    }
+
+    #[tokio::test]
+    async fn preview_unmapped_state_errors() {
+        let (_shared, _io, engine) = setup();
+        let r = engine.preview("NOPE", None).await;
+        assert!(matches!(
+            r,
+            Err(EngineError::Theme(theme::ThemeError::StateNotFound(_)))
+        ));
+    }
+
+    #[tokio::test]
+    async fn resync_replays_current_scene() {
+        // 断线重连对齐：重发当前业务 SCENE（APPLY_IF_CHANGED，协议 §15.5）
+        let (shared, io, engine) = setup();
+        process_event(&shared, "cc", "WORKING", None, None).unwrap();
+        for _ in 0..100 {
+            if !io.writes().is_empty() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert_eq!(io.writes().len(), 1);
+
+        engine.resync().await.unwrap();
+        for _ in 0..100 {
+            if io.writes().len() >= 2 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert_eq!(io.writes().len(), 2);
+        let parsed = crate::protocol::parse_frame(&io.writes()[1]).unwrap().0;
+        let scene = OutputScene::decode_data(&parsed.data).unwrap();
+        assert_eq!(scene.apply_mode, crate::protocol::APPLY_IF_CHANGED);
+        assert_eq!(scene.leds[0].curve, crate::protocol::CURVE_TRIANGLE);
+    }
+
+    #[tokio::test]
+    async fn reset_then_resync_no_scene() {
+        // reset 后业务回 IDLE，resync 应下发全灭（无当前场景）
+        let (shared, io, engine) = setup();
+        process_event(&shared, "cc", "ERROR", None, None).unwrap();
+        engine.reset().await.unwrap();
+        // 消费掉 ERROR 下发 + RESET_OUTPUTS
+        for _ in 0..100 {
+            if io.writes().len() >= 2 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        engine.resync().await.unwrap();
+        for _ in 0..100 {
+            if io.writes().len() >= 3 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        let parsed = crate::protocol::parse_frame(&io.writes()[2]).unwrap().0;
+        assert_eq!(parsed.cmd, crate::protocol::CMD_SET_SCENE);
+        let scene = OutputScene::decode_data(&parsed.data).unwrap();
+        assert_eq!(scene, OutputScene::none()); // IDLE → 全灭
+    }
 }

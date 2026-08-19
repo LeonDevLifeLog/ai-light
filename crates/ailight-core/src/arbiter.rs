@@ -294,4 +294,27 @@ mod tests {
         assert_eq!(s.state, ST_IDLE);
         assert_eq!(a.current().state, ST_IDLE);
     }
+
+    #[test]
+    fn mode_switch_runtime() {
+        // 运行时切换仲裁模式（update_config 会用到）
+        let mut a = Arbiter::new(ArbitrationMode::Priority, 0);
+        a.apply(&ev("cc", ST_ERROR, 1), None, 1);
+        assert_eq!(a.mode(), ArbitrationMode::Priority);
+
+        // 切 LastActive：低优先级事件也覆盖
+        a.set_mode(ArbitrationMode::LastActive);
+        assert!(applied(&a.apply(&ev("cc", ST_WORKING, 2), None, 2)));
+        assert_eq!(a.current().state, ST_WORKING);
+        // 再降级也能覆盖
+        assert!(applied(&a.apply(&ev("cc", ST_WAITING, 3), None, 3)));
+
+        // 切回 Priority：低优先级不再覆盖（ERROR 抢占，WAITING 被忽略）
+        a.set_mode(ArbitrationMode::Priority);
+        assert!(applied(&a.apply(&ev("cc", ST_ERROR, 4), None, 4)));
+        assert!(!applied(&a.apply(&ev("codex", ST_WAITING, 5), None, 5)));
+        assert_eq!(a.current().state, ST_ERROR);
+        // IDLE 特例仍生效（显式清除）
+        assert!(applied(&a.apply(&ev("cc", ST_IDLE, 6), None, 6)));
+    }
 }

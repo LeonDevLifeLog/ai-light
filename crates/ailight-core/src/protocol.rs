@@ -1110,5 +1110,29 @@ mod tests {
             assert_eq!(phase_from_deg(240), 0xAAAA);
             assert_eq!(phase_from_deg(360), 0);
         }
+
+        #[test]
+        fn response_parsers_need_more() {
+            // 截断输入 → NeedMore（各应答解析器边界）
+            assert!(matches!(parse_ping_response(&[0x00]), Err(ParseError::NeedMore)));
+            assert!(matches!(parse_device_info_response(&[0x00; 5]), Err(ParseError::NeedMore)));
+            assert!(matches!(parse_capabilities_response(&[0x00; 10]), Err(ParseError::NeedMore)));
+            assert!(matches!(parse_power_status_response(&[0x00; 3]), Err(ParseError::NeedMore)));
+            assert!(matches!(parse_output_status_response(&[0x00; 10]), Err(ParseError::NeedMore)));
+            assert!(matches!(parse_runtime_status_response(&[0x00; 5]), Err(ParseError::NeedMore)));
+            assert!(matches!(parse_set_scene_response(&[0x00; 2]), Err(ParseError::NeedMore)));
+            // 空数据 → 非法结果码（InvalidLength）
+            assert_eq!(parse_result(&[]), ResultCode::InvalidLength);
+            // 未知结果码透传
+            assert_eq!(parse_result(&[0x7F]), ResultCode::Unknown(0x7F));
+        }
+
+        #[test]
+        fn event_parsers_truncated() {
+            assert!(parse_device_ready(&[4, 1]).is_none());
+            assert!(parse_power_changed(&[0; 3]).is_none());
+            assert!(parse_button_event(&[1]).is_none());
+            assert!(parse_fault_event(&[1, 2]).is_none());
+        }
     }
 }
