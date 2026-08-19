@@ -3,17 +3,59 @@
   "scenes": {
     "breath-blue": {
       "leds": [
-        { "curve": "TRIANGLE", "low": "#003366", "high": "#4A9EFF", "brightness": 60, "period_ms": 1200, "phase_deg": 0 },
-        { "curve": "TRIANGLE", "low": "#003366", "high": "#4A9EFF", "brightness": 60, "period_ms": 1200, "phase_deg": 0 },
-        { "curve": "TRIANGLE", "low": "#003366", "high": "#4A9EFF", "brightness": 60, "period_ms": 1200, "phase_deg": 0 }
+        {
+          "curve": "TRIANGLE",
+          "low": "#003366",
+          "high": "#4A9EFF",
+          "brightness": 60,
+          "period_ms": 1200,
+          "phase_deg": 0
+        },
+        {
+          "curve": "TRIANGLE",
+          "low": "#003366",
+          "high": "#4A9EFF",
+          "brightness": 60,
+          "period_ms": 1200,
+          "phase_deg": 0
+        },
+        {
+          "curve": "TRIANGLE",
+          "low": "#003366",
+          "high": "#4A9EFF",
+          "brightness": 60,
+          "period_ms": 1200,
+          "phase_deg": 0
+        }
       ],
       "buzzer": null
     },
     "breath-amber": {
       "leds": [
-        { "curve": "TRIANGLE", "low": "#3D2B00", "high": "#FFB400", "brightness": 50, "period_ms": 1800, "phase_deg": 0 },
-        { "curve": "TRIANGLE", "low": "#3D2B00", "high": "#FFB400", "brightness": 50, "period_ms": 1800, "phase_deg": 0 },
-        { "curve": "TRIANGLE", "low": "#3D2B00", "high": "#FFB400", "brightness": 50, "period_ms": 1800, "phase_deg": 0 }
+        {
+          "curve": "TRIANGLE",
+          "low": "#3D2B00",
+          "high": "#FFB400",
+          "brightness": 50,
+          "period_ms": 1800,
+          "phase_deg": 0
+        },
+        {
+          "curve": "TRIANGLE",
+          "low": "#3D2B00",
+          "high": "#FFB400",
+          "brightness": 50,
+          "period_ms": 1800,
+          "phase_deg": 0
+        },
+        {
+          "curve": "TRIANGLE",
+          "low": "#3D2B00",
+          "high": "#FFB400",
+          "brightness": 50,
+          "period_ms": 1800,
+          "phase_deg": 0
+        }
       ],
       "buzzer": null
     },
@@ -27,13 +69,41 @@
     },
     "alert-red": {
       "leds": [
-        { "curve": "SQUARE", "low": "#000000", "high": "#FF3B30", "brightness": 80, "period_ms": 400, "duty_percent": 50, "repeat": 8, "end_level": "HIGH" },
-        { "curve": "SQUARE", "low": "#000000", "high": "#FF3B30", "brightness": 80, "period_ms": 400, "duty_percent": 50, "repeat": 8, "end_level": "HIGH" },
-        { "curve": "SQUARE", "low": "#000000", "high": "#FF3B30", "brightness": 80, "period_ms": 400, "duty_percent": 50, "repeat": 8, "end_level": "HIGH" }
+        {
+          "curve": "SQUARE",
+          "low": "#000000",
+          "high": "#FF3B30",
+          "brightness": 80,
+          "period_ms": 400,
+          "duty_percent": 50,
+          "repeat": 8,
+          "end_level": "HIGH"
+        },
+        {
+          "curve": "SQUARE",
+          "low": "#000000",
+          "high": "#FF3B30",
+          "brightness": 80,
+          "period_ms": 400,
+          "duty_percent": 50,
+          "repeat": 8,
+          "end_level": "HIGH"
+        },
+        {
+          "curve": "SQUARE",
+          "low": "#000000",
+          "high": "#FF3B30",
+          "brightness": 80,
+          "period_ms": 400,
+          "duty_percent": 50,
+          "repeat": 8,
+          "end_level": "HIGH"
+        }
       ],
       "buzzer": {
-        "start_delay_ms": 0, "repeat": 1,
-        "segments": [ { "frequency_hz": 2000, "duration_ms": 150, "volume": 60 } ]
+        "start_delay_ms": 0,
+        "repeat": 1,
+        "segments": [{ "frequency_hz": 2000, "duration_ms": 150, "volume": 60 }]
       }
     }
   },
@@ -41,6 +111,6 @@
     "WORKING": { "scene": "breath-blue", "transition_ms": 300 },
     "WAITING": { "scene": "breath-amber", "transition_ms": 300 },
     "SUCCESS": { "scene": "glow-green", "transition_ms": 500, "hold_ms": 5000 },
-    "ERROR":   { "scene": "alert-red", "transition_ms": 0, "hold_ms": 0 }
+    "ERROR": { "scene": "alert-red", "transition_ms": 0, "hold_ms": 0 }
   }
 }

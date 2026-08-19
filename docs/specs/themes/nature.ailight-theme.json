@@ -3,17 +3,59 @@
   "scenes": {
     "breathe-forest": {
       "leds": [
-        { "curve": "TRIANGLE", "low": "#1A2E1A", "high": "#6B8E6B", "brightness": 55, "period_ms": 2400, "phase_deg": 0 },
-        { "curve": "TRIANGLE", "low": "#1A2E1A", "high": "#6B8E6B", "brightness": 55, "period_ms": 2400, "phase_deg": 0 },
-        { "curve": "TRIANGLE", "low": "#1A2E1A", "high": "#6B8E6B", "brightness": 55, "period_ms": 2400, "phase_deg": 0 }
+        {
+          "curve": "TRIANGLE",
+          "low": "#1A2E1A",
+          "high": "#6B8E6B",
+          "brightness": 55,
+          "period_ms": 2400,
+          "phase_deg": 0
+        },
+        {
+          "curve": "TRIANGLE",
+          "low": "#1A2E1A",
+          "high": "#6B8E6B",
+          "brightness": 55,
+          "period_ms": 2400,
+          "phase_deg": 0
+        },
+        {
+          "curve": "TRIANGLE",
+          "low": "#1A2E1A",
+          "high": "#6B8E6B",
+          "brightness": 55,
+          "period_ms": 2400,
+          "phase_deg": 0
+        }
       ],
       "buzzer": null
     },
     "breathe-umber": {
       "leds": [
-        { "curve": "TRIANGLE", "low": "#2E241A", "high": "#B08968", "brightness": 45, "period_ms": 3000, "phase_deg": 0 },
-        { "curve": "TRIANGLE", "low": "#2E241A", "high": "#B08968", "brightness": 45, "period_ms": 3000, "phase_deg": 0 },
-        { "curve": "TRIANGLE", "low": "#2E241A", "high": "#B08968", "brightness": 45, "period_ms": 3000, "phase_deg": 0 }
+        {
+          "curve": "TRIANGLE",
+          "low": "#2E241A",
+          "high": "#B08968",
+          "brightness": 45,
+          "period_ms": 3000,
+          "phase_deg": 0
+        },
+        {
+          "curve": "TRIANGLE",
+          "low": "#2E241A",
+          "high": "#B08968",
+          "brightness": 45,
+          "period_ms": 3000,
+          "phase_deg": 0
+        },
+        {
+          "curve": "TRIANGLE",
+          "low": "#2E241A",
+          "high": "#B08968",
+          "brightness": 45,
+          "period_ms": 3000,
+          "phase_deg": 0
+        }
       ],
       "buzzer": null
     },
@@ -27,13 +69,41 @@
     },
     "blink-clay": {
       "leds": [
-        { "curve": "SQUARE", "low": "#000000", "high": "#B0413E", "brightness": 70, "period_ms": 800, "duty_percent": 50, "repeat": 6, "end_level": "HIGH" },
-        { "curve": "SQUARE", "low": "#000000", "high": "#B0413E", "brightness": 70, "period_ms": 800, "duty_percent": 50, "repeat": 6, "end_level": "HIGH" },
-        { "curve": "SQUARE", "low": "#000000", "high": "#B0413E", "brightness": 70, "period_ms": 800, "duty_percent": 50, "repeat": 6, "end_level": "HIGH" }
+        {
+          "curve": "SQUARE",
+          "low": "#000000",
+          "high": "#B0413E",
+          "brightness": 70,
+          "period_ms": 800,
+          "duty_percent": 50,
+          "repeat": 6,
+          "end_level": "HIGH"
+        },
+        {
+          "curve": "SQUARE",
+          "low": "#000000",
+          "high": "#B0413E",
+          "brightness": 70,
+          "period_ms": 800,
+          "duty_percent": 50,
+          "repeat": 6,
+          "end_level": "HIGH"
+        },
+        {
+          "curve": "SQUARE",
+          "low": "#000000",
+          "high": "#B0413E",
+          "brightness": 70,
+          "period_ms": 800,
+          "duty_percent": 50,
+          "repeat": 6,
+          "end_level": "HIGH"
+        }
       ],
       "buzzer": {
-        "start_delay_ms": 0, "repeat": 1,
-        "segments": [ { "frequency_hz": 1500, "duration_ms": 120, "volume": 30 } ]
+        "start_delay_ms": 0,
+        "repeat": 1,
+        "segments": [{ "frequency_hz": 1500, "duration_ms": 120, "volume": 30 }]
       }
     }
   },
@@ -41,6 +111,6 @@
     "WORKING": { "scene": "breathe-forest", "transition_ms": 800 },
     "WAITING": { "scene": "breathe-umber", "transition_ms": 800 },
     "SUCCESS": { "scene": "glow-leaf", "transition_ms": 1000, "hold_ms": 5000 },
-    "ERROR":   { "scene": "blink-clay", "transition_ms": 300, "hold_ms": 0 }
+    "ERROR": { "scene": "blink-clay", "transition_ms": 300, "hold_ms": 0 }
   }
 }

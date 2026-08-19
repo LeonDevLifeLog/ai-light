@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
-        timeout-minutes: 8
+        timeout-minutes: 20
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
