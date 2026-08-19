@@ -1,6 +1,7 @@
 {
   "name": "ai-light",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.15.1",
   "description": "",
   "type": "module",
   "scripts": {
