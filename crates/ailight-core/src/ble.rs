@@ -213,6 +213,58 @@ impl TransportIo for BleIo {
     }
 }
 
+/// 可热切换设备的代理传输（Engine 固定持有；连接/断开时动态替换，无需重建 Engine）
+///
+/// - 未连接：write 返回"设备未连接"；next_frame 轮询等待设备出现
+/// - 已连接：转发到当前设备
+pub struct DeviceIo {
+    inner: tokio::sync::RwLock<Option<Arc<dyn TransportIo>>>,
+}
+
+impl DeviceIo {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            inner: tokio::sync::RwLock::new(None),
+        })
+    }
+
+    /// 热切换设备（None = 断开）
+    pub async fn set(&self, io: Option<Arc<dyn TransportIo>>) {
+        *self.inner.write().await = io;
+    }
+
+    /// 当前是否已连接设备
+    pub async fn is_connected(&self) -> bool {
+        self.inner.read().await.is_some()
+    }
+}
+
+#[async_trait]
+impl TransportIo for DeviceIo {
+    async fn write(&self, bytes: Vec<u8>) -> Result<(), String> {
+        let guard = self.inner.read().await;
+        match guard.as_ref() {
+            Some(io) => io.write(bytes).await,
+            None => Err("设备未连接".into()),
+        }
+    }
+
+    async fn next_frame(&self) -> Option<Frame> {
+        loop {
+            let guard = self.inner.read().await;
+            match guard.as_ref() {
+                Some(io) => {
+                    return io.next_frame().await;
+                }
+                None => {
+                    drop(guard);
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

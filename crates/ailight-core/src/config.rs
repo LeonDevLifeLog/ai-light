@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::theme;
+
 /// 默认 hook 服务端口
 pub const DEFAULT_PORT: u16 = 47800;
 /// 端口退避上限（hook-api §1）
@@ -14,11 +16,14 @@ pub struct RememberedDevice {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct AppConfig {
     /// schema 版本，当前 = 1
     pub version: u32,
     /// 仲裁模式："priority" | "last_active"（ADR-0001 Q8）
     pub arbitration_mode: String,
+    /// 当前生效主题名（默认 "default"）
+    pub active_theme: String,
     /// hook 服务首选端口；0 = 自动（47800 起退避至 47810）
     pub port_preference: u16,
     /// 记住的设备；null = 无
@@ -34,6 +39,7 @@ impl Default for AppConfig {
         Self {
             version: 1,
             arbitration_mode: "priority".into(),
+            active_theme: "default".into(),
             port_preference: DEFAULT_PORT,
             remembered_device: None,
             token: String::new(),
@@ -66,6 +72,13 @@ impl AppConfig {
                         cfg.port_preference, DEFAULT_PORT
                     ));
                     cfg.port_preference = DEFAULT_PORT;
+                }
+                if !theme::builtin_theme_names().contains(&cfg.active_theme.as_str()) {
+                    // 主题名非法或不存在：回退 default（用户主题可能未加载，这里只做静态检查）
+                    if cfg.active_theme.is_empty() || cfg.active_theme.len() > 64 {
+                        warn.push(format!("active_theme 非法({}), 回退 default", cfg.active_theme));
+                        cfg.active_theme = "default".into();
+                    }
                 }
                 let warn = if warn.is_empty() { None } else { Some(warn.join("; ")) };
                 (cfg, warn)
