@@ -19,6 +19,48 @@ pub const THEME_FORMAT_VERSION: u32 = 1;
 /// 状态级 transition_ms 静态上限（运行时以设备能力为准）
 pub const MAX_TRANSITION_STATIC_MS: u16 = 2500;
 
+/// 内置主题（编译进二进制，KAD-04）：(文件名, 内容)
+/// 路径相对 src/：src → ailight-core → crates → ai-light（../../../docs）
+pub const BUILTIN_THEMES: &[(&str, &str)] = &[
+    (
+        "default",
+        include_str!("../../../docs/specs/themes/default.ailight-theme.json"),
+    ),
+    (
+        "minimal",
+        include_str!("../../../docs/specs/themes/minimal.ailight-theme.json"),
+    ),
+    (
+        "neon",
+        include_str!("../../../docs/specs/themes/neon.ailight-theme.json"),
+    ),
+    (
+        "nature",
+        include_str!("../../../docs/specs/themes/nature.ailight-theme.json"),
+    ),
+    (
+        "aurora",
+        include_str!("../../../docs/specs/themes/aurora.ailight-theme.json"),
+    ),
+    (
+        "focus",
+        include_str!("../../../docs/specs/themes/focus.ailight-theme.json"),
+    ),
+];
+
+/// 内置主题名列表
+pub fn builtin_theme_names() -> Vec<&'static str> {
+    BUILTIN_THEMES.iter().map(|(n, _)| *n).collect()
+}
+
+/// 加载内置主题（校验通过才返回）
+pub fn load_builtin(name: &str) -> Option<ThemeFile> {
+    BUILTIN_THEMES
+        .iter()
+        .find(|(n, _)| *n == name)
+        .and_then(|(_, content)| load(content).ok())
+}
+
 // ---- 数据结构（theme-format V1.0） ----
 
 #[derive(Debug, Clone, Deserialize)]
@@ -385,9 +427,9 @@ mod tests {
 
     #[test]
     fn all_builtin_themes_valid() {
-        for name in ["default", "minimal", "neon", "nature", "aurora", "focus"] {
-            let content = builtin(&format!("{THEMES_DIR}/{name}.ailight-theme.json"));
-            let theme = load(&content).unwrap_or_else(|e| panic!("主题 {name} 校验失败: {e}"));
+        assert_eq!(builtin_theme_names().len(), 6);
+        for (name, content) in BUILTIN_THEMES {
+            let theme = load(content).unwrap_or_else(|e| panic!("主题 {name} 校验失败: {e}"));
             // 5 态映射齐全
             for st in ["IDLE", "WORKING", "WAITING", "SUCCESS", "ERROR"] {
                 // IDLE 可省略（内置熄灭）；其余必须映射
@@ -396,6 +438,9 @@ mod tests {
                 }
             }
         }
+        // load_builtin 存在性
+        assert!(load_builtin("default").is_some());
+        assert!(load_builtin("nope").is_none());
     }
 
     #[test]

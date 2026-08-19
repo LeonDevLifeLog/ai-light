@@ -9,9 +9,11 @@
 //! - `transport`：L3 单 writer 发送队列 + 事务状态机（协议 §3.5/§15.6）
 
 pub mod arbiter;
+pub mod ble;
 pub mod config;
 pub mod engine;
 pub mod hook_server;
+pub mod logging;
 pub mod protocol;
 pub mod theme;
 pub mod transport;
