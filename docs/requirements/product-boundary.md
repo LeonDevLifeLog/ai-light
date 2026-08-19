@@ -108,9 +108,11 @@
 | D-09 | 终态驻留语义 | SUCCESS/ERROR 默认驻留到下一事件，主题可配 `hold_ms` 自动回落（状态驻留器，非瞬时确认） | 08-19 | ADR-0001 Q2 |
 | D-10 | WorkBuddy | 第一期不接入（无公开 hook，办公工作台语义异类），source 字段预留 | 08-19 | ADR-0001 Q3 |
 | D-11 | Claude Desktop | 纯聊天模式不覆盖；内置 Claude Code 复用 hooks 正常接入（产品边界声明） | 08-19 | ADR-0001 Q4 |
-| D-12 | Cursor 接入 | cursor-bridge 桥接进程（`bridges/`，Node + @cursor/sdk），接口与配置模板适配器同构 | 08-19 | ADR-0001 Q5 |
-| D-13 | 实测验证 | 开发前本机实测 Claude Code/Codex/Qoder 三客户端，通过后适配器模板入 `docs/specs/adapters/` | 08-19 | ADR-0001 Q6 |
-| D-14 | hook 协议形态 | HTTP POST `127.0.0.1:47800/hook` + GET `/api/status`（端口延续 PCDaemon）；仅回环，可选 token | 08-19 | ADR-0001 Q7 |
+| D-12 | Cursor 接入 | **第一期暂不接入**（08-19 晚调整）；cursor-bridge 桥接方案存档为未来选项，接口原则不变 | 08-19 | ADR-0001 Q5 |
+| D-13 | 实测验证 | **延后**至 hook API 正式文档之后、开发启动前；实测内容与产出不变 | 08-19 | ADR-0001 Q6 |
+| D-14 | hook API | 基线锁定（HTTP POST `127.0.0.1:47800/hook` + GET `/api/status`，仅回环，可选 token）；**出正式设计文档 `docs/specs/hook-api.md`** | 08-19 | ADR-0001 Q7 |
+| D-15 | L2 仲裁规则 | 默认优先级抢占：ERROR > SUCCESS > WORKING > WAITING > IDLE，同级最近活跃；可配置切换"最近活跃" | 08-19 | ADR-0001 Q8 |
+| D-16 | 会话支持 | 第一期不做（单灯单会话）；session 字段保留透传，未来启用不改协议 | 08-19 | ADR-0001 Q9 |
 
 ## 5. 待确认问题（截至 08-19 晚）
 
@@ -118,10 +120,8 @@
 
 ⏳ 仍待定：
 
-1. **L2 仲裁规则**：优先级抢占 vs 最近活跃（建议默认优先级抢占 ERROR > SUCCESS > PROCESSING > WAITING > IDLE，可配置）
-2. **会话支持范围**：单会话为主、多会话可配置（对应"单灯/多灯"产品形态）
-3. **高级直控通道**（direct_scene）：建议预留枚举、V2 实现
-4. **主题格式**：状态→SCENE 映射 + hold_ms 字段的具体 schema（待主题设计）
+1. **主题格式 schema**：状态→SCENE 映射 + hold_ms 的具体结构（08-19 晚起专项沟通）
+2. **高级直控通道**（direct_scene）：建议预留枚举、V2 实现
 
 ---
 
