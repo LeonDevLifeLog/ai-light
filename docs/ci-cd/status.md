@@ -40,6 +40,8 @@
 - 2026-08-19：PR #1 的首次 Linux Tauri 构建失败。根因是 Rust `tauri` 2.10 与 JavaScript `@tauri-apps/api` 2.11 的 minor 版本不一致。
 - 2026-08-19：已将 Tauri API、CLI 和 Rust crate 对齐到 2.11 版本线，并将 `src-tauri/Cargo.lock` 纳入版本控制。本地 Tauri release 编译和锁定依赖检查已通过，等待 PR 重新运行确认。
 - 2026-08-19：PR #1 后续运行在获取 Runner 前排队约 20 分钟，运行后停留于 Linux APT 依赖安装。CI 已扩展为三平台编译矩阵，并为 APT 增加超时和重试，等待线上确认。
+- 2026-08-19：`pnpm/action-setup` 从 v4 升级并固定到 v6.0.9，Action 运行时兼容 Node.js 24；CI 与 Release 工作流已同步更新。
+- 2026-08-19：PR 构建范围收敛为 Quality 与 Linux；主干推送和手动触发仍执行 Linux、macOS、Windows 三平台编译，以控制 GitHub Actions 月度额度。
 
 ## 待线上验证
 

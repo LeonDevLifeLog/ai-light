@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6.0.9
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -37,13 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: Linux
-            platform: ubuntu-22.04
-          - name: macOS
-            platform: macos-latest
-          - name: Windows
-            platform: windows-latest
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"name":"Linux","platform":"ubuntu-22.04"}]' || '[{"name":"Linux","platform":"ubuntu-22.04"},{"name":"macOS","platform":"macos-latest"},{"name":"Windows","platform":"windows-latest"}]') }}
     steps:
       - uses: actions/checkout@v7
       - name: Install Linux dependencies
@@ -54,7 +48,7 @@ jobs:
         run: |
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6.0.9
       - uses: actions/setup-node@v6
         with:
           node-version: 24

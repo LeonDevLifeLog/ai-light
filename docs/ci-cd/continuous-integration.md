@@ -29,16 +29,19 @@ pnpm build
 
 ### Tauri build
 
-工作流通过矩阵在 `ubuntu-22.04`、`macos-latest`、`windows-latest` 上分别执行原生 Tauri release 编译，单个平台超时时间为 45 分钟。CI 使用 `--no-bundle` 校验前端与原生应用编译链路，不生成安装包；跨平台安装包由 Release 工作流统一生成。
+Pull Request 仅在 `ubuntu-22.04` 上执行原生 Tauri release 编译。向 `main`、`master`、`develop` 推送或手动触发时，工作流通过矩阵在 `ubuntu-22.04`、`macos-latest`、`windows-latest` 上执行三平台编译。单个平台超时时间为 45 分钟。
+
+CI 使用 `--no-bundle` 校验前端与原生应用编译链路，不生成安装包；跨平台安装包由 Release 工作流统一生成。该策略让 PR 保留低成本的完整 Linux 编译门禁，并在代码进入主干后补充 macOS、Windows 兼容性反馈。
 
 Linux 构建前会安装 WebKitGTK 等系统依赖。APT 设置 30 秒网络超时、3 次重试，安装步骤最多运行 8 分钟，避免镜像或网络异常导致 Job 长时间无结果。
 
-该矩阵用于验证三个桌面平台的真实编译链路，不能由单独的前端构建或 `cargo check` 替代。矩阵设置 `fail-fast: false`，一个平台失败不会取消其他平台，便于横向定位平台差异。
+三平台矩阵设置 `fail-fast: false`，一个平台失败不会取消其他平台，便于横向定位平台差异。
 
 ## 权限与依赖
 
 - 工作流仅拥有 `contents: read` 权限
 - Node.js 固定为 24
+- pnpm 通过兼容 Node.js 24 的 `pnpm/action-setup@v6.0.9` 安装
 - pnpm 版本由 `package.json` 的 `packageManager` 字段固定
 - Rust 使用 stable 工具链
 - 前端依赖必须与 `pnpm-lock.yaml` 一致
@@ -50,5 +53,5 @@ Linux 构建前会安装 WebKitGTK 等系统依赖。APT 设置 30 秒网络超�
 
 - `Quality checks`
 - `Tauri build (Linux)`
-- `Tauri build (macOS)`
-- `Tauri build (Windows)`
+
+macOS 和 Windows 检查不在 Pull Request 事件中运行，不应设置为 PR 合并必需项。
