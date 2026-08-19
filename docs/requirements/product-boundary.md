@@ -27,8 +27,8 @@
 
 | 层 | 名称 | 职责 | 状态 | 关键依据 |
 |---|---|---|---|---|
-| L1 | **接入层** | 接收各智能体客户端 hook 事件 | ⚠️ 待明确（调研中） | 候选：Claude Code / Claude / Codex(CLI+Desktop) / WorkBuddy / Qoder / Cursor |
-| L2 | **业务层** | 状态仲裁 → 业务状态 → 主题映射 → SCENE 编译 | ⚠️ 部分待明确 | V0.4 系统模型：Hook 事件 → 仲裁 → 业务状态 → 主题配置 |
+| L1 | **接入层** | 接收各智能体客户端 hook 事件 | ✅ 已明确（hook-api V1.0） | 正式规范：`docs/specs/hook-api.md`；第一期支持 Claude Code / Qoder / Codex |
+| L2 | **业务层** | 状态仲裁 → 业务状态 → 主题映射 → SCENE 编译 | ✅ 已明确（除 direct_scene 预留） | 5 态 + 优先级仲裁（ADR-0001）；主题格式 V1.0（ADR-0002） |
 | L3 | **协议层** | V0.4 编解码、单 writer 队列、超时重试、幂等 | ✅ 已明确 | 协议 V0.4 §15 客户端实现指南 |
 | L4 | **设备层** | BLE 扫描/连接/握手/能力发现/断连重连 | ✅ 已明确 | 协议 V0.4 §5 握手流程；PCDaemon ble_worker 验证过退避重连 |
 | L5 | **展示层** | 配置窗口（主题编辑、设备管理、试听） | ⏸ 最后设计 | 托盘常驻、窗口可关；两个边界明确后才做 UI |
@@ -40,32 +40,28 @@
 
 ## 3. 各层细节
 
-### L1 接入层（⚠️ 调研中）
+### L1 接入层（✅ 已明确）
 
 **目标**：提供标准 API 服务，各智能体客户端通过自身 hook 机制调用，形成可插拔的事件接入。
 
-**第一期候选客户端**（昻哥指定）：
-- Claude Code（本机已装 CLI 2.1.31）
-- Claude（桌面应用）
-- Codex（CLI + Desktop，本机已装 CLI 0.147.0）
-- WorkBuddy
-- Qoder
-- Cursor
+**正式规范**：`docs/specs/hook-api.md`（V1.0）——本地 HTTP `127.0.0.1:47800`，`POST /hook` + `GET /api/status` + `GET /api/health`；标准 5 态事件模型；幂等对账（applied）；可选 token。
 
-**调研维度**：
-1. 各客户端的任务/会话生命周期定义（状态集合与转换）
-2. 各客户端对外暴露的 hook / 事件 / API 机制（如何感知状态变化）
-3. 状态语义与状态灯状态定义的出入
-4. 抽象层设计：如何用一层抽象兼容最大范围的客户端
+**第一期支持清单**（🟢 配置级接入）：
+- Claude Code（本机 CLI 2.1.31）——hooks 原生支持 HTTP handler
+- Qoder——hooks 事件与 Claude Code 同构
+- Codex（CLI 0.147.0 + Desktop）——hooks + notify（注意 Desktop 重写 notify 冲突，待实测）
 
-**产出**：`docs/specs/hook-api.md`（接入协议规范）+ 调研报告（`docs/research/`）
+**暂缓/不覆盖**：Cursor（🟡 桥接方案存档）、WorkBuddy（🔴 无公开 hook）、Claude Desktop 纯聊天（🔴 不覆盖，内置 Claude Code 可接）。
 
-### L2 业务层（⚠️ 部分待明确）
+**待办**：本机实测三客户端（Q6，延后至 hook-api 定稿后）→ 适配器配置模板入 `docs/specs/adapters/`。
 
-- **状态仲裁**：多会话/多客户端竞争时谁上屏。草案默认：**优先级抢占**（ERROR > SUCCESS > PROCESSING > WAITING > IDLE，同级最近活跃），可配置切换"最近活跃"。——待确认
-- **状态模型**：开放状态名 + 标准状态名集（IDLE/PROCESSING/WAITING/SUCCESS/ERROR…），状态名开放、主题映射表驱动。——待调研确认
-- **主题系统**：`状态 → SCENE` 映射表，本地 JSON 配置文件 + UI 可视化编辑；配置格式即"主题格式"，未来可分享/导入。——✅ 已确认（Q5）
-- **SCENE 编译**：业务状态 → OutputScene（V0.4 数据结构），含幂等去重（APPLY_IF_CHANGED）。——✅ 已明确（协议 §8.4）
+### L2 业务层（✅ 已明确）
+
+- **状态仲裁**：优先级抢占（`ERROR > SUCCESS > WORKING > WAITING > IDLE`，同级最近活跃），可配置切换"最近活跃"。——✅ 已确定（ADR-0001 Q8）
+- **状态模型**：标准 5 态（IDLE/WORKING/WAITING/SUCCESS/ERROR）+ 开放状态名，主题映射表驱动。——✅ 已确定（ADR-0001 Q1）
+- **主题系统**：命名 SCENE 库 + 状态引用（`.ailight-theme.json`），UI 可编辑、可分享导入；终态 hold_ms 驻留。——✅ 已确定（ADR-0002，规范 `docs/specs/theme-format.md`）
+- **SCENE 编译**：业务状态 → SCENE 名 → JSON → V0.4 OutputScene，幂等去重（APPLY_IF_CHANGED）。——✅ 已明确（协议 §8.4）
+- **会话**：第一期单灯单会话，session 字段透传记录。——✅ 已确定（ADR-0001 Q9）
 
 ### L3 协议层（✅ 已明确）
 
@@ -113,15 +109,20 @@
 | D-14 | hook API | 基线锁定（HTTP POST `127.0.0.1:47800/hook` + GET `/api/status`，仅回环，可选 token）；**出正式设计文档 `docs/specs/hook-api.md`** | 08-19 | ADR-0001 Q7 |
 | D-15 | L2 仲裁规则 | 默认优先级抢占：ERROR > SUCCESS > WORKING > WAITING > IDLE，同级最近活跃；可配置切换"最近活跃" | 08-19 | ADR-0001 Q8 |
 | D-16 | 会话支持 | 第一期不做（单灯单会话）；session 字段保留透传，未来启用不改协议 | 08-19 | ADR-0001 Q9 |
+| D-17 | 主题结构 | 命名 SCENE 库 + 状态引用（`.ailight-theme.json`） | 08-19 | ADR-0002 T-01 |
+| D-18 | 切换过渡 | transition_ms 状态级配置 | 08-19 | ADR-0002 T-02 |
+| D-19 | 状态级覆盖 | 第一期不做，保持"状态 = 引用 SCENE"简单模型 | 08-19 | ADR-0002 T-03 |
+| D-20 | 蜂鸣轨道 | 可选，null = 静音 | 08-19 | ADR-0002 T-04 |
+| D-21 | 自定义状态 | 随用随写；未映射状态 → IDLE + 记日志 | 08-19 | ADR-0002 T-05 |
+| D-22 | 校验容错 | 整体校验，任一非法 → 拒绝生效，默认主题兜底 | 08-19 | ADR-0002 T-06 |
 
 ## 5. 待确认问题（截至 08-19 晚）
 
-✅ 已确定（见 §4 决策日志 D-08~D-14 与 ADR-0001）：hook 协议形态、标准状态集、WorkBuddy、Claude Desktop 边界、Cursor 桥接、实测验证、终态驻留语义。
+✅ 已确定：L1 hook API 规范（`docs/specs/hook-api.md` V1.0）、主题格式规范（`docs/specs/theme-format.md` V1.0）、L2 仲裁与会话（ADR-0001 Q8/Q9）、主题格式 6 项（ADR-0002）。
 
 ⏳ 仍待定：
 
-1. **主题格式 schema**：状态→SCENE 映射 + hold_ms 的具体结构（08-19 晚起专项沟通）
-2. **高级直控通道**（direct_scene）：建议预留枚举、V2 实现
+1. **高级直控通道**（direct_scene）：建议预留枚举、V2 实现
 
 ---
 
