@@ -1,14 +1,14 @@
 //! Tauri commands（ipc-contract V1.0 §2：P1 全部 12 个）
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager};
 
 use ailight_core::arbiter::{ArbitrationMode, ST_IDLE};
-use ailight_core::ble::{self, BleDeviceInfo, BleIo};
+use ailight_core::ble::{self, BleDeviceInfo};
 use ailight_core::config::{AppConfig, RememberedDevice};
 use ailight_core::engine::{self, EngineError};
 use ailight_core::hook_server::{
-    BusinessSnapshot, DeviceSnapshot, ServiceSnapshot, SharedState, StatusSnapshot,
+    BusinessSnapshot, DeviceSnapshot, ServiceSnapshot, SharedState,
 };
 use ailight_core::theme::{self, ThemeFile};
 
@@ -39,12 +39,12 @@ fn shared(app: &AppHandle) -> std::sync::Arc<SharedState> {
 // ---- 状态查询 ----
 
 #[derive(Serialize)]
-struct AppStateSnapshot {
-    service: ServiceSnapshot,
-    device: DeviceSnapshot,
-    business: BusinessSnapshot,
-    themes: Vec<String>,
-    active_theme: String,
+pub struct AppStateSnapshot {
+    pub service: ServiceSnapshot,
+    pub device: DeviceSnapshot,
+    pub business: BusinessSnapshot,
+    pub themes: Vec<String>,
+    pub active_theme: String,
 }
 
 #[tauri::command]
@@ -86,9 +86,9 @@ pub fn get_app_state(app: AppHandle) -> CmdResult<AppStateSnapshot> {
 // ---- 主题域 ----
 
 #[derive(Serialize)]
-struct ThemeMeta {
-    name: String,
-    builtin: bool,
+pub struct ThemeMeta {
+    pub name: String,
+    pub builtin: bool,
 }
 
 #[tauri::command]
@@ -165,15 +165,8 @@ pub fn import_theme(app: AppHandle, content: String) -> CmdResult<String> {
 #[tauri::command]
 pub async fn scan_devices(_app: AppHandle) -> CmdResult<Vec<BleDeviceInfo>> {
     let adapter = ble::default_adapter().await.map_err(internal)?;
-    let mut devices = ble::scan(&adapter, 5).await.map_err(internal)?;
-    for d in &mut devices {
-        if let Some(name) = &d.name {
-            if name.starts_with(ble::NAME_PREFIX) {
-                d.recognized = true;
-            }
-        }
-    }
-    Ok(devices)
+    // recognized（广播名前缀，协议 §2.1）由 ble::scan 计算；服务 UUID 识别在连接后
+    ble::scan(&adapter, 5).await.map_err(internal)
 }
 
 /// 连接设备（供 command 与启动自动连接共用）
@@ -185,21 +178,10 @@ pub(crate) async fn connect_device_internal(
     let s = shared(app);
     let adapter = ble::default_adapter().await.map_err(|e| e.to_string())?;
     let _ = ble::scan(&adapter, 4).await.map_err(|e| e.to_string())?;
-    let peripherals = adapter.peripherals().await.map_err(|e| e.to_string())?;
     let addr_norm = ble::normalize_address(address);
-    let peripheral = peripherals
-        .into_iter()
-        .find(|p| {
-            p.properties()
-                .ok()
-                .flatten()
-                .map(|pr| ble::normalize_address(&pr.address.to_string()) == addr_norm)
-                .unwrap_or(false)
-        })
-        .ok_or_else(|| format!("未找到设备: {address}"))?;
-
-    let display_name = name.to_string();
-    let ble_io = BleIo::connect(peripheral).await.map_err(|e| e.to_string())?;
+    let (ble_io, actual_name) =
+        ble::connect_to_address(&adapter, &addr_norm).await.map_err(|e| e.to_string())?;
+    let display_name = if name.is_empty() { actual_name } else { name.to_string() };
 
     // 热切换设备（Engine 无需重建）
     let state = app.state::<AppState>();
@@ -220,7 +202,7 @@ pub(crate) async fn connect_device_internal(
     if let Ok(mut cfg) = state.config.write() {
         cfg.remembered_device =
             Some(RememberedDevice { address: addr_norm.clone(), name: display_name });
-        persist_config(app, &cfg)?;
+        persist_config(app, &cfg).map_err(|e| e.message)?;
     }
     // 重连对齐：重发当前业务 SCENE（协议 §15.5）
     state.engine.resync().await.map_err(|e| e.to_string())?;

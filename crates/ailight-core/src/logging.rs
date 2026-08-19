@@ -6,7 +6,6 @@
 use tracing_appender::non_blocking;
 use tracing_subscriber::fmt;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
 /// 初始化全局日志。

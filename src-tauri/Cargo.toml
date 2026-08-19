@@ -22,6 +22,8 @@ tauri-plugin-shell = "2"
 tauri-plugin-process = "2.3.1"
 tauri-plugin-single-instance = "2"
 ailight-core = { path = "../crates/ailight-core" }
+tokio = { version = "1", features = ["time", "sync"] }
+tracing = "0.1"
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!

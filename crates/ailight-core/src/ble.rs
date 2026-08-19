@@ -12,6 +12,7 @@ use btleplug::api::{
     Central, Characteristic, Manager as _, Peripheral as _, ScanFilter, WriteType,
 };
 use btleplug::platform::{Adapter, Manager, Peripheral};
+use serde::Serialize;
 use tokio::sync::mpsc;
 
 use crate::protocol::{Frame, FrameParser};
@@ -59,7 +60,7 @@ impl std::fmt::Display for BleError {
 
 impl std::error::Error for BleError {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct BleDeviceInfo {
     pub name: Option<String>,
     pub address: String,
@@ -102,10 +103,10 @@ pub async fn scan(adapter: &Adapter, timeout_secs: u64) -> Result<Vec<BleDeviceI
     for p in peripherals {
         if let Ok(Some(props)) = p.properties().await {
             out.push(BleDeviceInfo {
-                name: props.local_name,
+                name: props.local_name.clone(),
                 address: normalize_address(&props.address.to_string()),
                 rssi: props.rssi,
-                recognized: false, // 名称前缀识别在调用方用 is_recognized 判断
+                recognized: is_recognized(&props.local_name),
             });
         }
     }
@@ -118,6 +119,36 @@ pub async fn default_adapter() -> Result<Adapter, BleError> {
     let manager = Manager::new().await.map_err(|e| BleError::Scan(e.to_string()))?;
     let adapters = manager.adapters().await.map_err(|e| BleError::Scan(e.to_string()))?;
     adapters.into_iter().next().ok_or(BleError::NoAdapter)
+}
+
+/// 扫描并连接指定地址的设备（地址自动归一化）。
+/// 返回 (BleIo, 显示名)。
+pub async fn connect_to_address(
+    adapter: &Adapter,
+    address: &str,
+) -> Result<(BleIo, String), BleError> {
+    let peripherals = adapter
+        .peripherals()
+        .await
+        .map_err(|e| BleError::Connect(e.to_string()))?;
+    let addr_norm = normalize_address(address);
+    let mut found: Option<(Peripheral, String)> = None;
+    for p in peripherals {
+        let props = p.properties().await.ok().flatten();
+        let addr = props.as_ref().map(|pr| normalize_address(&pr.address.to_string()));
+        if addr.as_deref() == Some(addr_norm.as_str()) {
+            let name = props
+                .as_ref()
+                .and_then(|pr| pr.local_name.clone())
+                .unwrap_or_else(|| address.to_string());
+            found = Some((p, name));
+            break;
+        }
+    }
+    let (peripheral, name) =
+        found.ok_or_else(|| BleError::DeviceNotFound(address.to_string()))?;
+    let io = BleIo::connect(peripheral).await?;
+    Ok((io, name))
 }
 
 /// BLE 传输实现：扫描结果中的 peripheral + 已连接的 GATT 特征

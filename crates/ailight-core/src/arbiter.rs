@@ -6,6 +6,8 @@
 //! - `LastActive` 模式：任何事件都生效（最近活跃优先）
 //! - 终态驻留（hold_ms）：进入 SUCCESS/ERROR 且配置了 hold_ms>0 时，到期自动回落 IDLE
 
+use serde::Serialize;
+
 /// 标准状态名（ADR-0001 Q1）
 pub const ST_IDLE: &str = "IDLE";
 pub const ST_WORKING: &str = "WORKING";
@@ -65,7 +67,7 @@ pub struct HookEvent {
 }
 
 /// 当前业务状态（唯一事实源，KAD-03）
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct BusinessState {
     pub state: String,
     pub source: Option<String>,
