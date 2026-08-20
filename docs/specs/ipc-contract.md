@@ -78,11 +78,11 @@
 | Command | 请求 | 响应 | 错误码 | 优先级 |
 |---|---|---|---|---|
 | `trigger_state(state, meta?)` | state: string, meta?: object | boolean（是否生效） | `BAD_REQUEST` | P1 |
-| `preview_scene(state, theme?)` | state: string, theme?: string | `()` | `NOT_FOUND` / `THEME_INVALID` / `DEVICE_NOT_CONNECTED` | P1 |
+| `preview_scene(state, theme?, content?)` | state: string, theme?: string, content?: string | `()` | `NOT_FOUND` / `THEME_INVALID` / `DEVICE_NOT_CONNECTED` | P1 |
 | `reset_outputs()` | — | `()` | — | P1 |
 
 - **`trigger_state`**：`source` 固定 `"manual"`，走仲裁器（与 hook-api 同语义），`applied` 幂等对账
-- **`preview_scene`**：用主题的 state 映射编译 SCENE，以 **RESTART_SCENE** 语义下发试听；**不改变业务状态**；设备未连接返回 `DEVICE_NOT_CONNECTED`
+- **`preview_scene`**：用主题的 state 映射编译 SCENE，以 **RESTART_SCENE** 语义下发试听；`content` 存在时优先校验并编译未保存的主题草稿，但不替换当前主题；**不改变业务状态**；设备未连接返回 `DEVICE_NOT_CONNECTED`
 - **`reset_outputs`**：对应协议 `RESET_OUTPUTS`（0x05）原子全停；**同时业务状态复位为 IDLE**（保持灯效与业务状态一致）
 
 ### 2.5 配置域

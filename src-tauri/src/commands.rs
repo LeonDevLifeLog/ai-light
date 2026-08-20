@@ -232,9 +232,19 @@ pub fn trigger_state(
 }
 
 #[tauri::command]
-pub async fn preview_scene(app: AppHandle, state: String, theme: Option<String>) -> CmdResult<()> {
+pub async fn preview_scene(
+    app: AppHandle,
+    state: String,
+    theme: Option<String>,
+    content: Option<String>,
+) -> CmdResult<()> {
     let engine = &app.state::<AppState>().engine;
-    engine.preview(&state, theme.as_deref()).await.map_err(internal)
+    if let Some(content) = content {
+        let draft = theme::load(&content).map_err(|e| err("THEME_INVALID", e.to_string()))?;
+        engine.preview_theme(&draft, &state).await.map_err(internal)
+    } else {
+        engine.preview(&state, theme.as_deref()).await.map_err(internal)
+    }
 }
 
 #[tauri::command]

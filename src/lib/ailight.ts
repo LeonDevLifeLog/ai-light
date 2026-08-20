@@ -241,7 +241,11 @@ export const api = {
   triggerState: async (state: string) =>
     isTauri() ? call<boolean>("trigger_state", { state, meta: null }) : true,
   previewScene: (state: string, theme?: string) =>
-    call<void>("preview_scene", { state, theme }),
+    call<void>("preview_scene", { state, theme, content: null }),
+  previewThemeDraft: async (state: string, content: string) =>
+    isTauri()
+      ? call<void>("preview_scene", { state, theme: null, content })
+      : undefined,
   resetOutputs: async () =>
     isTauri() ? call<void>("reset_outputs") : undefined,
   getConfig: async () =>

@@ -49,7 +49,7 @@
 | `curve` | string | ✅ | `CONSTANT` / `SQUARE` / `TRIANGLE` / `SAW_UP` / `SAW_DOWN` | curve 枚举 |
 | `low` | hex color | 条件 | 波形低点颜色 `#RRGGBB`（CONSTANT 时忽略，须省略或 `#000000`） | low_rgb |
 | `high` | hex color | ✅ | 波形高点颜色 | high_rgb |
-| `brightness` | int 1~100 | ✅ | 整轨亮度 | brightness |
+| `brightness` | int 0~100 | ✅ | 整轨亮度；0 = 全黑，但轨道时间仍正常推进 | brightness |
 | `period_ms` | int | 条件 | 完整周期；0 或省略 = CONSTANT 静态轨 | period_ms |
 | `phase_deg` | int 0~360 | 条件 | 相位（角度制，编译时换算 `phase = phase_deg × 65536 / 360`） | phase |
 | `duty_percent` | int 1~99 | 条件 | 仅 SQUARE 有效；非 SQUARE 须省略 | duty_percent |
@@ -80,7 +80,7 @@
 |---|---|---|---|
 | `frequency_hz` | int | ✅ | 0 = 静音间隔；否则运行时须在能力范围 `[min_frequency_hz, max_frequency_hz]` |
 | `duration_ms` | int | ✅ | 必须 > 0 |
-| `volume` | int 1~100 | ✅ | 音量 |
+| `volume` | int 0~100 | ✅ | 音量；0 = 静音，`frequency_hz = 0` 时设备忽略该值 |
 
 ## 3. 状态映射（states）
 
@@ -116,11 +116,31 @@
 {
   "theme": { "name": "default", "version": 1 },
   "scenes": {
+    "off": {
+      "leds": [null, null, null],
+      "buzzer": null
+    },
     "breath-blue": {
       "leds": [
         { "curve": "TRIANGLE", "low": "#003366", "high": "#00CCFF", "brightness": 60, "period_ms": 1200, "phase_deg": 0 },
         { "curve": "TRIANGLE", "low": "#003366", "high": "#00CCFF", "brightness": 60, "period_ms": 1200, "phase_deg": 120 },
         { "curve": "TRIANGLE", "low": "#003366", "high": "#00CCFF", "brightness": 60, "period_ms": 1200, "phase_deg": 240 }
+      ],
+      "buzzer": null
+    },
+    "breath-amber": {
+      "leds": [
+        { "curve": "TRIANGLE", "low": "#3D2B00", "high": "#FFB400", "brightness": 50, "period_ms": 1800, "phase_deg": 0 },
+        { "curve": "TRIANGLE", "low": "#3D2B00", "high": "#FFB400", "brightness": 50, "period_ms": 1800, "phase_deg": 0 },
+        { "curve": "TRIANGLE", "low": "#3D2B00", "high": "#FFB400", "brightness": 50, "period_ms": 1800, "phase_deg": 0 }
+      ],
+      "buzzer": null
+    },
+    "glow-green": {
+      "leds": [
+        { "curve": "CONSTANT", "high": "#00E676", "brightness": 70 },
+        { "curve": "CONSTANT", "high": "#00E676", "brightness": 70 },
+        { "curve": "CONSTANT", "high": "#00E676", "brightness": 70 }
       ],
       "buzzer": null
     },
@@ -167,3 +187,21 @@
 - 主题格式是**协议无关的表达层**：所有字段最终编译为 V0.4 SCENE
 - 主题文件**不包含**协议版本/设备能力信息——能力适配在编译期（L3）完成
 - 未来协议升级（如 V0.5 增加新曲线）：主题格式可加字段并递增 `version`，旧主题仍可加载（缺省字段 = 默认值）
+
+## 8. 主题创作器表达约定
+
+主题文件保留精确的协议映射字段，但默认 UI 使用用户可理解的效果语言生成这些字段：
+
+| 用户选择 | 主题字段 |
+|---|---|
+| 常亮 / 呼吸 / 闪烁 / 渐亮 / 渐弱 | `CONSTANT / TRIANGLE / SQUARE / SAW_UP / SAW_DOWN` |
+| 舒缓 / 适中 / 活跃 | 预设 `period_ms` |
+| 一起 / 从上往下 / 从下往上 / 交错 | 三灯预设 `phase_deg` 组合 |
+| 光线强度 | 三灯 `brightness` |
+| 无声 / 轻提示 / 确认音 / 警报音 | 预设 `buzzer.segments` |
+
+- 默认界面不得要求用户理解“相位”“占空比”等协议术语。
+- 精确字段只在轨道工作台或 JSON 视图中渐进披露。
+- 自定义状态与标准状态使用同一 `states → scenes` 映射机制。
+- 一个 SCENE 被多个状态引用时，编辑器必须提示影响范围。
+- 内置主题只能作为创作起点另存为新主题；用户主题不得与内置主题同名。
