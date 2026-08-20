@@ -1,428 +1,1534 @@
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="dark">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>AI-Light · UI 原型预览</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-<style>
-  :root, :root[data-theme="dark"] {
-    --bg: #0F172A; --bg-2: #131C30; --bg-elev: #1E293B;
-    --primary: #1E293B; --secondary: #334155;
-    --accent: #22C55E; --accent-soft: rgba(34,197,94,0.12); --accent-glow: rgba(34,197,94,0.4);
-    --fg: #F8FAFC; --fg-2: rgba(248,250,252,0.68); --fg-3: rgba(248,250,252,0.42);
-    --muted: #272F42; --border: #475569; --border-soft: rgba(71,85,105,0.32);
-    --destructive: #EF4444; --warning: #F59E0B;
-    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px;
-    --space-6: 24px; --space-7: 32px; --space-8: 40px; --space-9: 56px;
-    --radius-xs: 4px; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
-    --text-2xs: 10px; --text-xs: 11px; --text-sm: 12px; --text-md: 13px; --text-base: 14px;
-    --text-lg: 16px; --text-xl: 18px; --text-2xl: 22px; --text-3xl: 28px; --text-4xl: 32px;
-    --shadow-sm: 0 1px 2px rgba(0,0,0,0.25); --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
-    --shadow-lg: 0 12px 32px rgba(0,0,0,0.45); --shadow-glow: 0 0 20px var(--accent-glow);
-    --card-pad: 20px;
-  }
-  :root[data-theme="light"] {
-    --bg: #F8FAFC; --bg-2: #F1F5F9; --bg-elev: #FFFFFF;
-    --primary: #FFFFFF; --secondary: #E2E8F0;
-    --accent: #16A34A; --accent-soft: rgba(22,163,74,0.10); --accent-glow: rgba(22,163,74,0.30);
-    --fg: #0F172A; --fg-2: rgba(15,23,42,0.70); --fg-3: rgba(15,23,42,0.45);
-    --muted: #CBD5E1; --border: #94A3B8; --border-soft: rgba(148,163,184,0.35);
-    --destructive: #DC2626; --warning: #D97706;
-    --shadow-sm: 0 1px 2px rgba(15,23,42,0.06); --shadow-md: 0 4px 12px rgba(15,23,42,0.08);
-    --shadow-lg: 0 12px 32px rgba(15,23,42,0.12); --shadow-glow: 0 0 20px var(--accent-glow);
-  }
-  @media (prefers-color-scheme: light) {
-    :root[data-theme="auto"] {
-      --bg: #F8FAFC; --bg-2: #F1F5F9; --bg-elev: #FFFFFF;
-      --primary: #FFFFFF; --secondary: #E2E8F0;
-      --accent: #16A34A; --accent-soft: rgba(22,163,74,0.10); --accent-glow: rgba(22,163,74,0.30);
-      --fg: #0F172A; --fg-2: rgba(15,23,42,0.70); --fg-3: rgba(15,23,42,0.45);
-      --muted: #CBD5E1; --border: #94A3B8; --border-soft: rgba(148,163,184,0.35);
-      --destructive: #DC2626; --warning: #D97706;
-      --shadow-sm: 0 1px 2px rgba(15,23,42,0.06); --shadow-md: 0 4px 12px rgba(15,23,42,0.08);
-      --shadow-lg: 0 12px 32px rgba(15,23,42,0.12); --shadow-glow: 0 0 20px var(--accent-glow);
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI-Light · UI 原型预览</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    >
+    <style>
+    :root,
+    :root[data-theme="dark"] {
+      --bg: #0f172a;
+      --bg-2: #131c30;
+      --bg-elev: #1e293b;
+      --primary: #1e293b;
+      --secondary: #334155;
+      --accent: #22c55e;
+      --accent-soft: rgba(34, 197, 94, 0.12);
+      --accent-glow: rgba(34, 197, 94, 0.4);
+      --fg: #f8fafc;
+      --fg-2: rgba(248, 250, 252, 0.68);
+      --fg-3: rgba(248, 250, 252, 0.42);
+      --muted: #272f42;
+      --border: #475569;
+      --border-soft: rgba(71, 85, 105, 0.32);
+      --destructive: #ef4444;
+      --warning: #f59e0b;
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 20px;
+      --space-6: 24px;
+      --space-7: 32px;
+      --space-8: 40px;
+      --space-9: 56px;
+      --radius-xs: 4px;
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+      --radius-full: 9999px;
+      --text-2xs: 10px;
+      --text-xs: 11px;
+      --text-sm: 12px;
+      --text-md: 13px;
+      --text-base: 14px;
+      --text-lg: 16px;
+      --text-xl: 18px;
+      --text-2xl: 22px;
+      --text-3xl: 28px;
+      --text-4xl: 32px;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+      --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45);
+      --shadow-glow: 0 0 20px var(--accent-glow);
+      --card-pad: 20px;
     }
-  }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; }
-  body {
-    margin: 0; background: var(--bg); color: var(--fg);
-    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-    font-feature-settings: 'cv11', 'ss01', 'tnum';
-    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
-    font-size: var(--text-base); line-height: 1.5;
-    transition: background 200ms ease, color 200ms ease;
-  }
-  .font-mono { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; font-feature-settings: 'tnum', 'zero'; }
-  .tabular { font-variant-numeric: tabular-nums; }
-  h1 { font-size: var(--text-2xl); font-weight: 600; margin: 0; letter-spacing: -0.01em; }
-  h2 { font-size: var(--text-xl); font-weight: 600; margin: 0; }
-  h3 { font-size: var(--text-lg); font-weight: 600; margin: 0; }
+    :root[data-theme="light"] {
+      --bg: #f8fafc;
+      --bg-2: #f1f5f9;
+      --bg-elev: #ffffff;
+      --primary: #ffffff;
+      --secondary: #e2e8f0;
+      --accent: #16a34a;
+      --accent-soft: rgba(22, 163, 74, 0.1);
+      --accent-glow: rgba(22, 163, 74, 0.3);
+      --fg: #0f172a;
+      --fg-2: rgba(15, 23, 42, 0.7);
+      --fg-3: rgba(15, 23, 42, 0.45);
+      --muted: #cbd5e1;
+      --border: #94a3b8;
+      --border-soft: rgba(148, 163, 184, 0.35);
+      --destructive: #dc2626;
+      --warning: #d97706;
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+      --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+      --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12);
+      --shadow-glow: 0 0 20px var(--accent-glow);
+    }
+    @media (prefers-color-scheme: light) {
+      :root[data-theme="auto"] {
+        --bg: #f8fafc;
+        --bg-2: #f1f5f9;
+        --bg-elev: #ffffff;
+        --primary: #ffffff;
+        --secondary: #e2e8f0;
+        --accent: #16a34a;
+        --accent-soft: rgba(22, 163, 74, 0.1);
+        --accent-glow: rgba(22, 163, 74, 0.3);
+        --fg: #0f172a;
+        --fg-2: rgba(15, 23, 42, 0.7);
+        --fg-3: rgba(15, 23, 42, 0.45);
+        --muted: #cbd5e1;
+        --border: #94a3b8;
+        --border-soft: rgba(148, 163, 184, 0.35);
+        --destructive: #dc2626;
+        --warning: #d97706;
+        --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+        --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+        --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12);
+        --shadow-glow: 0 0 20px var(--accent-glow);
+      }
+    }
+    * {
+      box-sizing: border-box;
+    }
+    html,
+    body {
+      height: 100%;
+    }
+    body {
+      margin: 0;
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: var(--text-base);
+      font-feature-settings: "cv11", "ss01", "tnum";
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+      color: var(--fg);
+      background: var(--bg);
+      text-rendering: optimizeLegibility;
+      transition:
+        background 200ms ease,
+        color 200ms ease;
+    }
+    .font-mono {
+      font-family:
+        "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-feature-settings: "tnum", "zero";
+    }
+    .tabular {
+      font-variant-numeric: tabular-nums;
+    }
+    h1 {
+      margin: 0;
+      font-size: var(--text-2xl);
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    h2 {
+      margin: 0;
+      font-size: var(--text-xl);
+      font-weight: 600;
+    }
+    h3 {
+      margin: 0;
+      font-size: var(--text-lg);
+      font-weight: 600;
+    }
 
-  /* 红绿灯 */
-  .light {
-    width: 40px; height: 40px; border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.04), rgba(0,0,0,0.2)), var(--muted);
-    border: 1px solid rgba(0,0,0,0.4);
-    box-shadow: inset 0 2px 4px rgba(255,255,255,0.04), inset 0 -2px 6px rgba(0,0,0,0.4);
-    opacity: 0.42;
-    transition: background 250ms, opacity 250ms, box-shadow 250ms, transform 250ms;
-    position: relative; flex-shrink: 0;
-  }
-  .light.v { width: 28px; height: 28px; }
-  .lights-row.h { gap: var(--space-7); }
-  .lights-col.v { gap: var(--space-5); }
-  .light.on.red {
-    background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.45), rgba(239,68,68,0.95) 50%, #B91C1C 100%);
-    opacity: 1;
-    box-shadow: inset 0 2px 4px rgba(255,255,255,0.5), inset 0 -3px 8px rgba(0,0,0,0.3),
-      0 0 18px rgba(239,68,68,0.55), 0 0 36px rgba(239,68,68,0.3);
-    animation: blink 1s infinite;
-  }
-  .light.on.yellow {
-    background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.55), rgba(245,158,11,0.95) 50%, #B45309 100%);
-    opacity: 1;
-    box-shadow: inset 0 2px 4px rgba(255,255,255,0.55), inset 0 -3px 8px rgba(0,0,0,0.3),
-      0 0 18px rgba(245,158,11,0.55), 0 0 36px rgba(245,158,11,0.28);
-  }
-  .light.on.green {
-    background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.5), rgba(34,197,94,0.95) 50%, #15803D 100%);
-    opacity: 1;
-    box-shadow: inset 0 2px 4px rgba(255,255,255,0.5), inset 0 -3px 8px rgba(0,0,0,0.3),
-      0 0 18px rgba(34,197,94,0.55), 0 0 36px rgba(34,197,94,0.3);
-  }
-  .light.on.green.breath { animation: breath 2s ease-in-out infinite; }
-  @keyframes breath {
-    0%,100% { opacity: 1; box-shadow: inset 0 2px 4px rgba(255,255,255,0.5), inset 0 -3px 8px rgba(0,0,0,0.3), 0 0 18px rgba(34,197,94,0.55), 0 0 36px rgba(34,197,94,0.3); }
-    50% { opacity: 0.62; box-shadow: inset 0 2px 4px rgba(255,255,255,0.3), inset 0 -3px 8px rgba(0,0,0,0.3), 0 0 8px rgba(34,197,94,0.35); }
-  }
-  @keyframes blink {
-    0%,49% { opacity: 1; box-shadow: inset 0 2px 4px rgba(255,255,255,0.5), inset 0 -3px 8px rgba(0,0,0,0.3), 0 0 18px rgba(239,68,68,0.6), 0 0 36px rgba(239,68,68,0.35); }
-    50%,100% { opacity: 0.35; box-shadow: inset 0 2px 4px rgba(255,255,255,0.15), inset 0 -3px 8px rgba(0,0,0,0.3), 0 0 4px rgba(239,68,68,0.15); }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .light.on.green.breath, .light.on.red, .pulse { animation: none; }
-    .light { transition: none; }
-  }
+    /* 红绿灯 */
+    .light {
+      position: relative;
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      background:
+        radial-gradient(
+          circle at 35% 30%,
+          rgba(255, 255, 255, 0.04),
+          rgba(0, 0, 0, 0.2)
+        ),
+        var(--muted);
+      border: 1px solid rgba(0, 0, 0, 0.4);
+      border-radius: 50%;
+      box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.04),
+        inset 0 -2px 6px rgba(0, 0, 0, 0.4);
+      opacity: 0.42;
+      transition:
+        background 250ms,
+        opacity 250ms,
+        box-shadow 250ms,
+        transform 250ms;
+    }
+    .light.v {
+      width: 28px;
+      height: 28px;
+    }
+    .lights-row.h {
+      gap: var(--space-7);
+    }
+    .lights-col.v {
+      gap: var(--space-5);
+    }
+    .light.on.red {
+      background: radial-gradient(
+        circle at 35% 30%,
+        rgba(255, 255, 255, 0.45),
+        rgba(239, 68, 68, 0.95) 50%,
+        #b91c1c 100%
+      );
+      box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.5),
+        inset 0 -3px 8px rgba(0, 0, 0, 0.3),
+        0 0 18px rgba(239, 68, 68, 0.55),
+        0 0 36px rgba(239, 68, 68, 0.3);
+      opacity: 1;
+      animation: blink 1s infinite;
+    }
+    .light.on.yellow {
+      background: radial-gradient(
+        circle at 35% 30%,
+        rgba(255, 255, 255, 0.55),
+        rgba(245, 158, 11, 0.95) 50%,
+        #b45309 100%
+      );
+      box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.55),
+        inset 0 -3px 8px rgba(0, 0, 0, 0.3),
+        0 0 18px rgba(245, 158, 11, 0.55),
+        0 0 36px rgba(245, 158, 11, 0.28);
+      opacity: 1;
+    }
+    .light.on.green {
+      background: radial-gradient(
+        circle at 35% 30%,
+        rgba(255, 255, 255, 0.5),
+        rgba(34, 197, 94, 0.95) 50%,
+        #15803d 100%
+      );
+      box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.5),
+        inset 0 -3px 8px rgba(0, 0, 0, 0.3),
+        0 0 18px rgba(34, 197, 94, 0.55),
+        0 0 36px rgba(34, 197, 94, 0.3);
+      opacity: 1;
+    }
+    .light.on.green.breath {
+      animation: breath 2s ease-in-out infinite;
+    }
+    @keyframes breath {
+      0%,
+      100% {
+        opacity: 1;
+        box-shadow:
+          inset 0 2px 4px rgba(255, 255, 255, 0.5),
+          inset 0 -3px 8px rgba(0, 0, 0, 0.3),
+          0 0 18px rgba(34, 197, 94, 0.55),
+          0 0 36px rgba(34, 197, 94, 0.3);
+      }
+      50% {
+        opacity: 0.62;
+        box-shadow:
+          inset 0 2px 4px rgba(255, 255, 255, 0.3),
+          inset 0 -3px 8px rgba(0, 0, 0, 0.3),
+          0 0 8px rgba(34, 197, 94, 0.35);
+      }
+    }
+    @keyframes blink {
+      0%,
+      49% {
+        opacity: 1;
+        box-shadow:
+          inset 0 2px 4px rgba(255, 255, 255, 0.5),
+          inset 0 -3px 8px rgba(0, 0, 0, 0.3),
+          0 0 18px rgba(239, 68, 68, 0.6),
+          0 0 36px rgba(239, 68, 68, 0.35);
+      }
+      50%,
+      100% {
+        opacity: 0.35;
+        box-shadow:
+          inset 0 2px 4px rgba(255, 255, 255, 0.15),
+          inset 0 -3px 8px rgba(0, 0, 0, 0.3),
+          0 0 4px rgba(239, 68, 68, 0.15);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .light.on.green.breath,
+      .light.on.red,
+      .pulse {
+        animation: none;
+      }
+      .light {
+        transition: none;
+      }
+    }
 
-  /* Sidebar */
-  .sidebar { width: 220px; background: var(--bg-2); border-right: 1px solid var(--border-soft);
-    display: flex; flex-direction: column; padding: var(--space-5) var(--space-3); flex-shrink: 0; }
-  .brand { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) var(--space-2) var(--space-6);
-    font-weight: 600; font-size: var(--text-lg); letter-spacing: -0.01em; }
-  .brand-mark { width: 24px; height: 24px; border-radius: var(--radius-sm);
-    background: linear-gradient(135deg, var(--accent) 0%, #15803D 100%);
-    box-shadow: 0 0 12px var(--accent-glow);
-    display: grid; place-items: center; color: #052E16; font-weight: 700; font-size: var(--text-sm); }
-  .nav-item { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-3);
-    border-radius: var(--radius-md); color: var(--fg-2); cursor: pointer;
-    transition: background 150ms, color 150ms; font-size: var(--text-base); font-weight: 500;
-    margin-bottom: 2px; user-select: none; }
-  .nav-item:hover { background: rgba(248,250,252,0.04); color: var(--fg); }
-  .nav-item.active { background: var(--accent-soft); color: var(--accent); }
-  .nav-item.active svg { color: var(--accent); }
-  .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--fg-3); }
-  .sidebar-foot { margin-top: auto; padding: var(--space-4) var(--space-3) var(--space-1);
-    border-top: 1px solid var(--border-soft); font-size: var(--text-sm); color: var(--fg-2);
-    display: flex; flex-direction: column; gap: var(--space-2); }
-  .sidebar-foot .row { display: flex; align-items: center; gap: var(--space-2); }
-  .sidebar-foot .row .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
-  .sidebar-foot .ver { color: var(--fg-3); font-size: var(--text-xs); }
+    /* Sidebar */
+    .sidebar {
+      display: flex;
+      flex-shrink: 0;
+      flex-direction: column;
+      width: 220px;
+      padding: var(--space-5) var(--space-3);
+      background: var(--bg-2);
+      border-right: 1px solid var(--border-soft);
+    }
+    .brand {
+      display: flex;
+      gap: var(--space-3);
+      align-items: center;
+      padding: var(--space-1) var(--space-2) var(--space-6);
+      font-size: var(--text-lg);
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      font-size: var(--text-sm);
+      font-weight: 700;
+      color: #052e16;
+      background: linear-gradient(135deg, var(--accent) 0%, #15803d 100%);
+      border-radius: var(--radius-sm);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+    .nav-item {
+      display: flex;
+      gap: var(--space-3);
+      align-items: center;
+      padding: var(--space-3) var(--space-3);
+      margin-bottom: 2px;
+      font-size: var(--text-base);
+      font-weight: 500;
+      color: var(--fg-2);
+      cursor: pointer;
+      user-select: none;
+      border-radius: var(--radius-md);
+      transition:
+        background 150ms,
+        color 150ms;
+    }
+    .nav-item:hover {
+      color: var(--fg);
+      background: rgba(248, 250, 252, 0.04);
+    }
+    .nav-item svg {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      color: var(--fg-3);
+    }
+    .nav-item.active {
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .nav-item.active svg {
+      color: var(--accent);
+    }
+    .sidebar-foot {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      padding: var(--space-4) var(--space-3) var(--space-1);
+      margin-top: auto;
+      font-size: var(--text-sm);
+      color: var(--fg-2);
+      border-top: 1px solid var(--border-soft);
+    }
+    .sidebar-foot .row {
+      display: flex;
+      gap: var(--space-2);
+      align-items: center;
+    }
+    .sidebar-foot .row .dot {
+      width: 7px;
+      height: 7px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+    .sidebar-foot .ver {
+      font-size: var(--text-xs);
+      color: var(--fg-3);
+    }
 
-  /* Card / Button / Switch / Radio / Pulse / Progress / Signal / Input / Tag */
-  .card { background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
-    padding: var(--card-pad); box-shadow: var(--shadow-sm); transition: border-color 200ms, transform 200ms, box-shadow 200ms; }
-  .card.interactive:hover { border-color: var(--border); box-shadow: var(--shadow-md); }
-  .card-title { font-size: var(--text-sm); color: var(--fg-3); font-weight: 500; margin-bottom: var(--space-3); }
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
-    padding: var(--space-2) var(--space-4); border-radius: var(--radius-md); background: var(--bg-elev);
-    border: 1px solid var(--border); color: var(--fg); cursor: pointer; font-size: var(--text-base);
-    font-weight: 500; transition: all 150ms; font-family: inherit; line-height: 1.2; }
-  .btn:hover { background: var(--secondary); border-color: var(--secondary); }
-  .btn.primary { background: var(--accent); color: #052E16; border-color: var(--accent); }
-  .btn.primary:hover { background: #16A34A; border-color: #16A34A; }
-  .btn.ghost { background: transparent; border-color: transparent; }
-  .btn.ghost:hover { background: var(--secondary); }
-  .btn.sm { padding: var(--space-2) var(--space-3); font-size: var(--text-sm); }
-  .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
-  .page-section { display: none; }
-  .page-section.active { display: block; }
-  .switch { position: relative; width: 36px; height: 20px; background: var(--secondary);
-    border-radius: var(--radius-full); cursor: pointer; transition: background 200ms; flex-shrink: 0; }
-  .switch.on { background: var(--accent); }
-  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
-    background: white; border-radius: 50%; transition: transform 200ms cubic-bezier(0.2,0,0,1); }
-  .switch.on::after { transform: translateX(16px); }
-  .radio { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border);
-    cursor: pointer; transition: all 150ms; position: relative; flex-shrink: 0; }
-  .radio.checked { border-color: var(--accent); }
-  .radio.checked::after { content: ""; position: absolute; inset: 3px; border-radius: 50%;
-    background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
-  .tag { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-3);
-    border-radius: var(--radius-full); font-size: var(--text-xs); font-weight: 500;
-    background: rgba(248,250,252,0.06); color: var(--fg-2); border: 1px solid var(--border-soft); }
-  .tag.accent { background: var(--accent-soft); color: var(--accent); border-color: rgba(34,197,94,0.3); }
-  .tag.warn { background: rgba(245,158,11,0.12); color: var(--warning); border-color: rgba(245,158,11,0.35); }
-  .tag .pip { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-  .tag.accent .pip { box-shadow: 0 0 6px currentColor; }
-  @keyframes pulse-soft { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-  .pulse { animation: pulse-soft 1.6s ease-in-out infinite; }
-  .progress { width: 100%; height: 4px; background: rgba(71,85,105,0.3);
-    border-radius: var(--radius-full); overflow: hidden; }
-  .progress-bar { height: 100%; width: 60%; background: linear-gradient(90deg, var(--accent), #4ADE80);
-    border-radius: var(--radius-full); box-shadow: 0 0 8px var(--accent); transition: width 200ms; }
-  .signal { display: inline-flex; align-items: flex-end; gap: var(--space-1); height: 12px; }
-  .signal span { width: var(--space-1); background: var(--fg-3); border-radius: var(--radius-xs); }
-  .signal span:nth-child(1) { height: 4px; }
-  .signal span:nth-child(2) { height: 6px; }
-  .signal span:nth-child(3) { height: 9px; }
-  .signal span:nth-child(4) { height: 12px; }
-  .signal.strong span { background: var(--accent); box-shadow: 0 0 4px var(--accent-glow); }
-  .signal.medium span:nth-child(-n+3) { background: var(--accent); }
-  .input { flex: 1; background: var(--bg-2); border: 1px solid var(--border-soft); color: var(--fg);
-    padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); font-size: var(--text-md);
-    outline: none; font-family: inherit; transition: border-color 150ms; }
-  .input:focus { border-color: var(--accent); }
-  .input::placeholder { color: var(--fg-3); }
+    /* Card / Button / Switch / Radio / Pulse / Progress / Signal / Input / Tag */
+    .card {
+      padding: var(--card-pad);
+      background: var(--bg-elev);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      transition:
+        border-color 200ms,
+        transform 200ms,
+        box-shadow 200ms;
+    }
+    .card.interactive:hover {
+      border-color: var(--border);
+      box-shadow: var(--shadow-md);
+    }
+    .card-title {
+      margin-bottom: var(--space-3);
+      font-size: var(--text-sm);
+      font-weight: 500;
+      color: var(--fg-3);
+    }
+    .btn {
+      display: inline-flex;
+      gap: var(--space-2);
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-2) var(--space-4);
+      font-family: inherit;
+      font-size: var(--text-base);
+      font-weight: 500;
+      line-height: 1.2;
+      color: var(--fg);
+      cursor: pointer;
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      transition: all 150ms;
+    }
+    .btn:hover {
+      background: var(--secondary);
+      border-color: var(--secondary);
+    }
+    .btn.primary {
+      color: #052e16;
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .btn.primary:hover {
+      background: #16a34a;
+      border-color: #16a34a;
+    }
+    .btn.ghost {
+      background: transparent;
+      border-color: transparent;
+    }
+    .btn.ghost:hover {
+      background: var(--secondary);
+    }
+    .btn.sm {
+      padding: var(--space-2) var(--space-3);
+      font-size: var(--text-sm);
+    }
+    .btn[disabled] {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+    .page-section {
+      display: none;
+    }
+    .page-section.active {
+      display: block;
+    }
+    .switch {
+      position: relative;
+      flex-shrink: 0;
+      width: 36px;
+      height: 20px;
+      cursor: pointer;
+      background: var(--secondary);
+      border-radius: var(--radius-full);
+      transition: background 200ms;
+    }
+    .switch.on {
+      background: var(--accent);
+    }
+    .switch::after {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      content: "";
+      background: white;
+      border-radius: 50%;
+      transition: transform 200ms cubic-bezier(0.2, 0, 0, 1);
+    }
+    .switch.on::after {
+      transform: translateX(16px);
+    }
+    .radio {
+      position: relative;
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      border: 2px solid var(--border);
+      border-radius: 50%;
+      transition: all 150ms;
+    }
+    .radio.checked {
+      border-color: var(--accent);
+    }
+    .radio.checked::after {
+      position: absolute;
+      inset: 3px;
+      content: "";
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+    .tag {
+      display: inline-flex;
+      gap: var(--space-2);
+      align-items: center;
+      padding: var(--space-1) var(--space-3);
+      font-size: var(--text-xs);
+      font-weight: 500;
+      color: var(--fg-2);
+      background: rgba(248, 250, 252, 0.06);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-full);
+    }
+    .tag.accent {
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-color: rgba(34, 197, 94, 0.3);
+    }
+    .tag.warn {
+      color: var(--warning);
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.35);
+    }
+    .tag .pip {
+      width: 6px;
+      height: 6px;
+      background: currentColor;
+      border-radius: 50%;
+    }
+    .tag.accent .pip {
+      box-shadow: 0 0 6px currentColor;
+    }
+    @keyframes pulse-soft {
+      0%,
+      100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.4;
+      }
+    }
+    .pulse {
+      animation: pulse-soft 1.6s ease-in-out infinite;
+    }
+    .progress {
+      width: 100%;
+      height: 4px;
+      overflow: hidden;
+      background: rgba(71, 85, 105, 0.3);
+      border-radius: var(--radius-full);
+    }
+    .progress-bar {
+      width: 60%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #4ade80);
+      border-radius: var(--radius-full);
+      box-shadow: 0 0 8px var(--accent);
+      transition: width 200ms;
+    }
+    .signal {
+      display: inline-flex;
+      gap: var(--space-1);
+      align-items: flex-end;
+      height: 12px;
+    }
+    .signal span {
+      width: var(--space-1);
+      background: var(--fg-3);
+      border-radius: var(--radius-xs);
+    }
+    .signal span:nth-child(1) {
+      height: 4px;
+    }
+    .signal span:nth-child(2) {
+      height: 6px;
+    }
+    .signal span:nth-child(3) {
+      height: 9px;
+    }
+    .signal span:nth-child(4) {
+      height: 12px;
+    }
+    .signal.strong span {
+      background: var(--accent);
+      box-shadow: 0 0 4px var(--accent-glow);
+    }
+    .signal.medium span:nth-child(-n + 3) {
+      background: var(--accent);
+    }
+    .input {
+      flex: 1;
+      padding: var(--space-3) var(--space-4);
+      font-family: inherit;
+      font-size: var(--text-md);
+      color: var(--fg);
+      outline: none;
+      background: var(--bg-2);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-md);
+      transition: border-color 150ms;
+    }
+    .input:focus {
+      border-color: var(--accent);
+    }
+    .input::placeholder {
+      color: var(--fg-3);
+    }
 
-  .page-content { padding: var(--space-7) var(--space-9); max-width: 1100px; }
-  .stack { display: flex; flex-direction: column; }
-  .stack > * + * { margin-top: var(--space-5); }
-  .hstack { display: flex; align-items: center; gap: var(--space-3); }
-  .between { display: flex; justify-content: space-between; align-items: center; }
+    .page-content {
+      max-width: 1100px;
+      padding: var(--space-7) var(--space-9);
+    }
+    .stack {
+      display: flex;
+      flex-direction: column;
+    }
+    .stack > * + * {
+      margin-top: var(--space-5);
+    }
+    .hstack {
+      display: flex;
+      gap: var(--space-3);
+      align-items: center;
+    }
+    .between {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
 
-  /* Dialog */
-  .dialog-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
-    z-index: 100; display: none; align-items: center; justify-content: center;
-    padding: var(--space-7); animation: fade-in 150ms ease; }
-  .dialog-mask.open { display: flex; }
-  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-  .dialog { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-xl);
-    width: 100%; max-width: 920px; max-height: 92vh;
-    display: flex; flex-direction: column; box-shadow: var(--shadow-lg); overflow: hidden; }
-  .dialog-header { padding: var(--space-5) var(--space-6); border-bottom: 1px solid var(--border-soft);
-    display: flex; justify-content: space-between; align-items: center; }
-  .dialog-body { padding: var(--space-6); overflow-y: auto; flex: 1; }
-  .dialog-footer { padding: var(--space-4) var(--space-6); border-top: 1px solid var(--border-soft);
-    display: flex; justify-content: flex-end; gap: var(--space-3); background: var(--bg-2); }
-  .icon-btn { width: 28px; height: 28px; border-radius: var(--radius-md); background: transparent;
-    border: 0; color: var(--fg-2); cursor: pointer; display: grid; place-items: center; transition: all 150ms; }
-  .icon-btn:hover { background: var(--secondary); color: var(--fg); }
+    /* Dialog */
+    .dialog-mask {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-7);
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(4px);
+      animation: fade-in 150ms ease;
+    }
+    .dialog-mask.open {
+      display: flex;
+    }
+    @keyframes fade-in {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+    .dialog {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 920px;
+      max-height: 92vh;
+      overflow: hidden;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-lg);
+    }
+    .dialog-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-5) var(--space-6);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .dialog-body {
+      flex: 1;
+      padding: var(--space-6);
+      overflow-y: auto;
+    }
+    .dialog-footer {
+      display: flex;
+      gap: var(--space-3);
+      justify-content: flex-end;
+      padding: var(--space-4) var(--space-6);
+      background: var(--bg-2);
+      border-top: 1px solid var(--border-soft);
+    }
+    .icon-btn {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      color: var(--fg-2);
+      cursor: pointer;
+      background: transparent;
+      border: 0;
+      border-radius: var(--radius-md);
+      transition: all 150ms;
+    }
+    .icon-btn:hover {
+      color: var(--fg);
+      background: var(--secondary);
+    }
 
-  /* 状态 tab */
-  .state-tab { background: var(--bg-elev); border: 1px solid var(--border-soft);
-    border-radius: var(--radius-md); padding: var(--space-3);
-    cursor: pointer; transition: all 150ms;
-    display: flex; flex-direction: column; align-items: center; gap: var(--space-1);
-    font-family: inherit; color: var(--fg); }
-  .state-tab:hover { border-color: var(--border); }
-  .state-tab.active { border-color: var(--accent); background: var(--accent-soft); }
-  .state-tab .state-tab-name { font-weight: 600; font-size: var(--text-md); }
-  .state-tab-en { font-family: 'JetBrains Mono', monospace; font-size: var(--text-xs); color: var(--fg-3); }
-  .state-tab-dots { display: flex; gap: var(--space-1); margin-top: 4px; }
-  .state-tab-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+    /* 状态 tab */
+    .state-tab {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      align-items: center;
+      padding: var(--space-3);
+      font-family: inherit;
+      color: var(--fg);
+      cursor: pointer;
+      background: var(--bg-elev);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-md);
+      transition: all 150ms;
+    }
+    .state-tab:hover {
+      border-color: var(--border);
+    }
+    .state-tab.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
+    .state-tab .state-tab-name {
+      font-size: var(--text-md);
+      font-weight: 600;
+    }
+    .state-tab-en {
+      font-family: "JetBrains Mono", monospace;
+      font-size: var(--text-xs);
+      color: var(--fg-3);
+    }
+    .state-tab-dots {
+      display: flex;
+      gap: var(--space-1);
+      margin-top: 4px;
+    }
+    .state-tab-dots span {
+      width: 8px;
+      height: 8px;
+      background: var(--muted);
+      border-radius: 50%;
+    }
 
-  /* 单状态编辑器 */
-  .state-edit-panel { background: var(--bg-elev); border: 1px solid var(--border-soft);
-    border-radius: var(--radius-md); padding: var(--space-5); }
-  .panel-head { display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: var(--space-4); padding-bottom: var(--space-3);
-    border-bottom: 1px solid var(--border-soft); }
-  .panel-head h3 { margin: 0; font-size: var(--text-lg); font-weight: 600; }
-  .panel-tag { font-size: var(--text-xs); color: var(--fg-3); padding: var(--space-1) var(--space-3);
-    background: var(--bg); border: 1px solid var(--border-soft); border-radius: var(--radius-full); }
-  .section { margin-top: var(--space-5); }
-  .section:first-child { margin-top: 0; }
-  .section-title { font-size: var(--text-xs); color: var(--accent); font-weight: 600;
-    letter-spacing: 0.06em; margin-bottom: var(--space-3); }
+    /* 单状态编辑器 */
+    .state-edit-panel {
+      padding: var(--space-5);
+      background: var(--bg-elev);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-md);
+    }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: var(--space-3);
+      margin-bottom: var(--space-4);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .panel-head h3 {
+      margin: 0;
+      font-size: var(--text-lg);
+      font-weight: 600;
+    }
+    .panel-tag {
+      padding: var(--space-1) var(--space-3);
+      font-size: var(--text-xs);
+      color: var(--fg-3);
+      background: var(--bg);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-full);
+    }
+    .section {
+      margin-top: var(--space-5);
+    }
+    .section:first-child {
+      margin-top: 0;
+    }
+    .section-title {
+      margin-bottom: var(--space-3);
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+    }
 
-  .curve-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-2); }
-  .curve-card { background: var(--bg); border: 1px solid var(--border-soft);
-    border-radius: var(--radius-md); padding: var(--space-3) var(--space-2);
-    cursor: pointer; display: flex; flex-direction: column; align-items: center;
-    gap: var(--space-2); font-family: inherit; color: var(--fg); transition: all 150ms; }
-  .curve-card:hover { border-color: var(--border); }
-  .curve-card.active { border-color: var(--accent); background: var(--accent-soft);
-    box-shadow: 0 0 0 1px var(--accent); }
-  .curve-card svg { width: 56px; height: 24px; }
-  .curve-card .curve-name { font-family: 'JetBrains Mono', monospace; font-size: var(--text-xs); color: var(--fg-2); }
+    .curve-cards {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: var(--space-2);
+    }
+    .curve-card {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      align-items: center;
+      padding: var(--space-3) var(--space-2);
+      font-family: inherit;
+      color: var(--fg);
+      cursor: pointer;
+      background: var(--bg);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-md);
+      transition: all 150ms;
+    }
+    .curve-card:hover {
+      border-color: var(--border);
+    }
+    .curve-card svg {
+      width: 56px;
+      height: 24px;
+    }
+    .curve-card .curve-name {
+      font-family: "JetBrains Mono", monospace;
+      font-size: var(--text-xs);
+      color: var(--fg-2);
+    }
+    .curve-card.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
 
-  .track-color-row { display: grid; grid-template-columns: 60px 1fr 1fr 1fr;
-    gap: var(--space-3); align-items: center; padding: var(--space-3) 0;
-    border-bottom: 1px dashed var(--border-soft); }
-  .track-color-row:last-child { border-bottom: 0; }
-  .track-color-row .track-label { font-weight: 600; color: var(--fg-2); font-size: var(--text-sm); }
-  .track-color-row input[type="color"] { width: 100%; height: 36px;
-    border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
-    cursor: pointer; padding: 0; background: transparent; }
+    .track-color-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 1fr 1fr;
+      gap: var(--space-3);
+      align-items: center;
+      padding: var(--space-3) 0;
+      border-bottom: 1px dashed var(--border-soft);
+    }
+    .track-color-row:last-child {
+      border-bottom: 0;
+    }
+    .track-color-row .track-label {
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--fg-2);
+    }
+    .track-color-row input[type="color"] {
+      width: 100%;
+      height: 36px;
+      padding: 0;
+      cursor: pointer;
+      background: transparent;
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-sm);
+    }
 
-  .slider-compact { display: flex; align-items: center; gap: var(--space-2); }
-  .slider-compact input[type="range"] { flex: 1; height: 4px; background: var(--border-soft);
-    border-radius: var(--radius-full); appearance: none; -webkit-appearance: none; }
-  .slider-compact input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none;
-    width: 16px; height: 16px; border-radius: 50%; background: var(--accent);
-    box-shadow: 0 0 8px var(--accent-glow); cursor: pointer; }
-  .slider-compact .slider-value { font-family: 'JetBrains Mono', monospace; font-size: var(--text-xs);
-    color: var(--fg); font-weight: 600; min-width: 50px; text-align: right; }
+    .slider-compact {
+      display: flex;
+      gap: var(--space-2);
+      align-items: center;
+    }
+    .slider-compact input[type="range"] {
+      flex: 1;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--border-soft);
+      border-radius: var(--radius-full);
+    }
+    .slider-compact input[type="range"]::-webkit-slider-thumb {
+      width: 16px;
+      height: 16px;
+      -webkit-appearance: none;
+      cursor: pointer;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+    .slider-compact .slider-value {
+      min-width: 50px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--fg);
+      text-align: right;
+    }
 
-  .slider-row { display: grid; grid-template-columns: 100px 1fr 120px;
-    gap: var(--space-3); align-items: center; margin-bottom: var(--space-3); }
-  .slider-row label { font-size: var(--text-sm); color: var(--fg-2); font-weight: 500; }
-  .slider-row input[type="range"] { height: 4px; background: var(--border-soft);
-    border-radius: var(--radius-full); appearance: none; -webkit-appearance: none; }
-  .slider-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none;
-    width: 16px; height: 16px; border-radius: 50%; background: var(--accent);
-    box-shadow: 0 0 8px var(--accent-glow); cursor: pointer; }
-  .slider-row input[type="number"], .slider-row select { background: var(--bg);
-    border: 1px solid var(--border-soft); color: var(--fg); padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm); font-size: var(--text-xs); font-family: 'JetBrains Mono', monospace; }
-  .slider-value { font-family: 'JetBrains Mono', monospace; font-size: var(--text-xs);
-    color: var(--fg); font-weight: 600; text-align: right; }
+    /* biome-ignore lint/style/noDescendingSpecificity: 单类选择器与多种父元素组合使用，无法按特异性统一排序 */
+    .slider-value {
+      font-family: "JetBrains Mono", monospace;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--fg);
+      text-align: right;
+    }
+    .slider-row {
+      display: grid;
+      grid-template-columns: 100px 1fr 120px;
+      gap: var(--space-3);
+      align-items: center;
+      margin-bottom: var(--space-3);
+    }
+    .slider-row label {
+      font-size: var(--text-sm);
+      font-weight: 500;
+      color: var(--fg-2);
+    }
+    .slider-row input[type="number"],
+    .slider-row select {
+      padding: var(--space-2) var(--space-3);
+      font-family: "JetBrains Mono", monospace;
+      font-size: var(--text-xs);
+      color: var(--fg);
+      background: var(--bg);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-sm);
+    }
+    .slider-row input[type="range"] {
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--border-soft);
+      border-radius: var(--radius-full);
+    }
+    .slider-row input[type="range"]::-webkit-slider-thumb {
+      width: 16px;
+      height: 16px;
+      -webkit-appearance: none;
+      cursor: pointer;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
 
-  .relation-presets { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-3); }
-  .relation-preset { background: var(--bg); border: 1px solid var(--border-soft);
-    color: var(--fg-2); padding: var(--space-2) var(--space-4); border-radius: var(--radius-md);
-    font-size: var(--text-sm); cursor: pointer; font-family: inherit; transition: all 150ms; }
-  .relation-preset:hover { border-color: var(--border); }
-  .relation-preset.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+    .relation-presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      margin-top: var(--space-3);
+    }
+    .relation-preset {
+      padding: var(--space-2) var(--space-4);
+      font-family: inherit;
+      font-size: var(--text-sm);
+      color: var(--fg-2);
+      cursor: pointer;
+      background: var(--bg);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-md);
+      transition: all 150ms;
+    }
+    .relation-preset:hover {
+      border-color: var(--border);
+    }
+    .relation-preset.active {
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
 
-  .buzzer-compact { display: flex; gap: var(--space-3); align-items: center;
-    padding: var(--space-3); background: var(--bg); border: 1px solid var(--border-soft);
-    border-radius: var(--radius-md); font-size: var(--text-sm); }
+    .buzzer-compact {
+      display: flex;
+      gap: var(--space-3);
+      align-items: center;
+      padding: var(--space-3);
+      font-size: var(--text-sm);
+      background: var(--bg);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-md);
+    }
 
-  .seg-list { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; margin-top: var(--space-3); }
-  .seg { display: inline-flex; gap: var(--space-2); align-items: center;
-    background: var(--bg); border: 1px solid var(--border-soft);
-    border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); font-size: var(--text-xs); }
-  .seg-num { font-family: 'JetBrains Mono', monospace; font-size: var(--text-2xs); color: var(--fg-3); }
-  .seg .seg-field { font-family: 'JetBrains Mono', monospace; color: var(--fg); }
-  .add-btn { background: var(--bg); border: 1px dashed var(--border); color: var(--fg-2);
-    padding: var(--space-2) var(--space-4); border-radius: var(--radius-md); cursor: pointer;
-    font-size: var(--text-sm); font-family: inherit; }
-  .add-btn:hover { background: var(--secondary); color: var(--fg); }
+    .seg-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      align-items: center;
+      margin-top: var(--space-3);
+    }
+    .seg {
+      display: inline-flex;
+      gap: var(--space-2);
+      align-items: center;
+      padding: var(--space-2) var(--space-3);
+      font-size: var(--text-xs);
+      background: var(--bg);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-md);
+    }
+    .seg-num {
+      font-family: "JetBrains Mono", monospace;
+      font-size: var(--text-2xs);
+      color: var(--fg-3);
+    }
+    .seg .seg-field {
+      font-family: "JetBrains Mono", monospace;
+      color: var(--fg);
+    }
+    .add-btn {
+      padding: var(--space-2) var(--space-4);
+      font-family: inherit;
+      font-size: var(--text-sm);
+      color: var(--fg-2);
+      cursor: pointer;
+      background: var(--bg);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-md);
+    }
+    .add-btn:hover {
+      color: var(--fg);
+      background: var(--secondary);
+    }
 
-  /* 简单模式：仅 3 灯轨色 + 蜂鸣开关 */
-  .simple-mode .section { display: none; }
-  .simple-mode .track-color-row { display: flex; gap: var(--space-3); padding: 0; border: 0; }
-  .simple-mode .track-color-row .track-label { font-size: var(--text-sm); margin-bottom: var(--space-2); display: block; text-align: center; }
-  .simple-mode .track-color-row > div { flex: 1; display: flex; flex-direction: column; align-items: center; }
-  .simple-mode .track-color-row > input[type="color"] { display: none; }
-  .simple-mode .track-color-row > input[type="color"]:first-of-type { display: block; width: 100%; height: 64px; }
-  .simple-mode .slider-compact { display: none; }
+    /* 简单模式：仅 3 灯轨色 + 蜂鸣开关 */
+    .simple-mode .section {
+      display: none;
+    }
+    .simple-mode .track-color-row {
+      display: flex;
+      gap: var(--space-3);
+      padding: 0;
+      border: 0;
+    }
+    .simple-mode .track-color-row .track-label {
+      display: block;
+      margin-bottom: var(--space-2);
+      font-size: var(--text-sm);
+      text-align: center;
+    }
+    .simple-mode .track-color-row > div {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      align-items: center;
+    }
+    .simple-mode .track-color-row > input[type="color"] {
+      display: none;
+    }
+    .simple-mode .track-color-row > input[type="color"]:first-of-type {
+      display: block;
+      width: 100%;
+      height: 64px;
+    }
+    .simple-mode .slider-compact {
+      display: none;
+    }
 
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--secondary); border-radius: var(--radius-full); }
-  ::-webkit-scrollbar-thumb:hover { background: var(--border); }
-  .theme-icon { width: 14px; height: 14px; }
-</style>
-</head>
-<body>
-
-<div style="display: flex; height: 100vh;">
-  <aside class="sidebar">
-    <div class="brand"><div class="brand-mark">A</div><span>AI-Light</span></div>
-    <nav id="navList">
-      <div class="nav-item active" data-target="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg><span>状态</span></div>
-      <div class="nav-item" data-target="devices"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg><span>设备</span></div>
-      <div class="nav-item" data-target="integrations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>接入</span></div>
-      <div class="nav-item" data-target="themes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-5.5-4.5-10-10-10z"/></svg><span>主题</span></div>
-      <div class="nav-item" data-target="preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span>试听</span></div>
-      <div class="nav-item" data-target="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0 4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>设置</span></div>
-    </nav>
-    <div class="sidebar-foot">
-      <div class="row"><span class="dot"></span><span>已连接</span></div>
-      <div class="ver">版本 0.1.0</div>
-    </div>
-  </aside>
-
-  <main style="flex: 1; overflow-y: auto; background: var(--bg); position: relative;">
-
-    <!-- Dashboard -->
-    <section class="page-section active" id="page-dashboard">
-      <div class="page-content stack">
-        <div class="card scanline-bg" style="padding: var(--space-7); text-align: center; position: relative; overflow: hidden;">
-          <div style="position: absolute; top: var(--space-4); left: var(--space-5); font-size: var(--text-xs); letter-spacing: 0.14em; color: var(--fg-3);">当前状态</div>
-          <div style="position: absolute; top: var(--space-4); right: var(--space-5);"><span class="tag accent"><span class="pip pulse"></span>实时</span></div>
-          <div id="lightsWrapper" style="margin: var(--space-4) auto var(--space-5); display: flex; align-items: center; justify-content: center;">
-            <div class="lights-row h" id="lightsH" style="display: flex;"><div><div class="light" id="L-red-h"></div></div><div><div class="light" id="L-yel-h"></div></div><div><div class="light" id="L-grn-h"></div></div></div>
-            <div class="lights-col v" id="lightsV" style="display: none; flex-direction: column;"><div><div class="light v" id="L-red-v"></div></div><div><div class="light v" id="L-yel-v"></div></div><div><div class="light v" id="L-grn-v"></div></div></div>
-          </div>
-          <div id="stateName" style="font-size: var(--text-4xl); font-weight: 600; letter-spacing: -0.02em; line-height: 1; margin-bottom: var(--space-2);">空闲</div>
-          <div id="stateSubtitle" style="font-size: var(--text-base); color: var(--fg-2);">一切就绪，等待任务</div>
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--secondary);
+      border-radius: var(--radius-full);
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border);
+    }
+    .theme-icon {
+      width: 14px;
+      height: 14px;
+    }
+    </style>
+  </head>
+  <body>
+    <div style="display: flex; height: 100vh;">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">A</div>
+          <span>AI-Light</span>
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5);">
-          <div class="card interactive">
-            <div class="between" style="margin-bottom: var(--space-4);"><div class="card-title" style="margin-bottom: 0;">设备</div><span class="tag accent"><span class="pip"></span>已连接</span></div>
-            <div class="hstack" style="margin-bottom: var(--space-4);">
-              <div style="width: 44px; height: 44px; border-radius: var(--radius-lg); background: linear-gradient(135deg, var(--accent) 0%, #15803D 100%); display: grid; place-items: center; box-shadow: 0 0 16px var(--accent-glow);">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#052E16" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="#052E16"/></svg>
+        <nav id="navList">
+          <div class="nav-item active" data-target="dashboard">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            </svg><span>状态</span>
+          </div>
+          <div class="nav-item" data-target="devices">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+              <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+              <circle cx="12" cy="20" r="1" />
+            </svg><span>设备</span>
+          </div>
+          <div class="nav-item" data-target="integrations">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"
+              />
+              <path
+                d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
+              />
+            </svg><span>接入</span>
+          </div>
+          <div class="nav-item" data-target="themes">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="13.5" cy="6.5" r=".5" />
+              <circle cx="17.5" cy="10.5" r=".5" />
+              <circle cx="8.5" cy="7.5" r=".5" />
+              <circle cx="6.5" cy="12.5" r=".5" />
+              <path
+                d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-5.5-4.5-10-10-10z"
+              />
+            </svg><span>主题</span>
+          </div>
+          <div class="nav-item" data-target="preview">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+              <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+            </svg><span>试听</span>
+          </div>
+          <div class="nav-item" data-target="settings">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0 4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+              />
+            </svg><span>设置</span>
+          </div>
+        </nav>
+        <div class="sidebar-foot">
+          <div class="row"><span class="dot"></span><span>已连接</span></div>
+          <div class="ver">版本 0.1.0</div>
+        </div>
+      </aside>
+
+      <main
+        style="flex: 1; overflow-y: auto; background: var(--bg); position: relative;"
+      >
+        <!-- Dashboard -->
+        <section class="page-section active" id="page-dashboard">
+          <div class="page-content stack">
+            <div
+              class="card scanline-bg"
+              style="padding: var(--space-7); text-align: center; position: relative; overflow: hidden;"
+            >
+              <div
+                style="position: absolute; top: var(--space-4); left: var(--space-5); font-size: var(--text-xs); letter-spacing: 0.14em; color: var(--fg-3);"
+              >
+                当前状态
               </div>
-              <div style="flex: 1;"><div style="font-size: var(--text-lg); font-weight: 600;">客厅的灯牌</div><div style="font-size: var(--text-sm); color: var(--fg-2); margin-top: 2px;">家里的桌面小灯</div></div>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--border-soft);">
-              <div><div style="font-size: var(--text-xs); color: var(--fg-3); margin-bottom: var(--space-1);">电量</div><div class="hstack"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent);"><rect x="2" y="7" width="18" height="10" rx="2"/><line x1="22" y1="11" x2="22" y2="13"/></svg><span class="font-mono tabular" style="font-size: var(--text-md); font-weight: 600;">75%</span></div></div>
-              <div><div style="font-size: var(--text-xs); color: var(--fg-3); margin-bottom: var(--space-1);">信号</div><div class="signal strong" style="margin-top: var(--space-1);"><span></span><span></span><span></span><span></span></div></div>
-              <div><div style="font-size: var(--text-xs); color: var(--fg-3); margin-bottom: var(--space-1);">5 秒前</div><div style="font-size: var(--text-sm); color: var(--fg-2);">已同步</div></div>
-            </div>
-          </div>
-          <div class="card interactive">
-            <div class="between" style="margin-bottom: var(--space-4);"><div class="card-title" style="margin-bottom: 0;">主题</div><span class="tag accent"><span class="pip"></span>正在使用</span></div>
-            <div class="hstack" style="margin-bottom: var(--space-4);">
-              <div style="display: flex; gap: var(--space-1);">
-                <div style="width: 8px; height: 24px; border-radius: var(--radius-xs); background: var(--accent); box-shadow: 0 0 6px var(--accent);"></div>
-                <div style="width: 8px; height: 24px; border-radius: var(--radius-xs); background: #3B82F6; box-shadow: 0 0 6px #3B82F6;"></div>
-                <div style="width: 8px; height: 24px; border-radius: var(--radius-xs); background: #A855F7; box-shadow: 0 0 6px #A855F7;"></div>
+              <div
+                style="position: absolute; top: var(--space-4); right: var(--space-5);"
+              >
+                <span class="tag accent"
+                  ><span class="pip pulse"></span>实时</span
+                >
               </div>
-              <div style="flex: 1;"><div style="font-size: var(--text-lg); font-weight: 600;">霓虹</div><div style="font-size: var(--text-sm); color: var(--fg-2); margin-top: 2px;">明亮多彩，适合白天编程</div></div>
-              <button class="btn sm">换主题</button>
+              <div
+                id="lightsWrapper"
+                style="margin: var(--space-4) auto var(--space-5); display: flex; align-items: center; justify-content: center;"
+              >
+                <div class="lights-row h" id="lightsH" style="display: flex;">
+                  <div><div class="light" id="L-red-h"></div></div>
+                  <div><div class="light" id="L-yel-h"></div></div>
+                  <div><div class="light" id="L-grn-h"></div></div>
+                </div>
+                <div
+                  class="lights-col v"
+                  id="lightsV"
+                  style="display: none; flex-direction: column;"
+                >
+                  <div><div class="light v" id="L-red-v"></div></div>
+                  <div><div class="light v" id="L-yel-v"></div></div>
+                  <div><div class="light v" id="L-grn-v"></div></div>
+                </div>
+              </div>
+              <div
+                id="stateName"
+                style="font-size: var(--text-4xl); font-weight: 600; letter-spacing: -0.02em; line-height: 1; margin-bottom: var(--space-2);"
+              >
+                空闲
+              </div>
+              <div
+                id="stateSubtitle"
+                style="font-size: var(--text-base); color: var(--fg-2);"
+              >
+                一切就绪，等待任务
+              </div>
+            </div>
+            <div
+              style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5);"
+            >
+              <div class="card interactive">
+                <div class="between" style="margin-bottom: var(--space-4);">
+                  <div class="card-title" style="margin-bottom: 0;">设备</div>
+                  <span class="tag accent"
+                    ><span class="pip"></span>已连接</span
+                  >
+                </div>
+                <div class="hstack" style="margin-bottom: var(--space-4);">
+                  <div
+                    style="width: 44px; height: 44px; border-radius: var(--radius-lg); background: linear-gradient(135deg, var(--accent) 0%, #15803D 100%); display: grid; place-items: center; box-shadow: 0 0 16px var(--accent-glow);"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      width="22"
+                      height="22"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#052E16"
+                      stroke-width="2.5"
+                      stroke-linecap="round"
+                    >
+                      <circle cx="12" cy="12" r="9" />
+                      <circle cx="12" cy="12" r="3" fill="#052E16" />
+                    </svg>
+                  </div>
+                  <div style="flex: 1;">
+                    <div style="font-size: var(--text-lg); font-weight: 600;">
+                      客厅的灯牌
+                    </div>
+                    <div
+                      style="font-size: var(--text-sm); color: var(--fg-2); margin-top: 2px;"
+                    >
+                      家里的桌面小灯
+                    </div>
+                  </div>
+                </div>
+                <div
+                  style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--border-soft);"
+                >
+                  <div>
+                    <div
+                      style="font-size: var(--text-xs); color: var(--fg-3); margin-bottom: var(--space-1);"
+                    >
+                      电量
+                    </div>
+                    <div class="hstack">
+                      <svg
+                        aria-hidden="true"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        style="color: var(--accent);"
+                      >
+                        <rect x="2" y="7" width="18" height="10" rx="2" />
+                        <line x1="22" y1="11" x2="22" y2="13" />
+                      </svg><span
+                        class="font-mono tabular"
+                        style="font-size: var(--text-md); font-weight: 600;"
+                        >75%</span
+                      >
+                    </div>
+                  </div>
+                  <div>
+                    <div
+                      style="font-size: var(--text-xs); color: var(--fg-3); margin-bottom: var(--space-1);"
+                    >
+                      信号
+                    </div>
+                    <div
+                      class="signal strong"
+                      style="margin-top: var(--space-1);"
+                    >
+                      <span></span><span></span><span></span><span></span>
+                    </div>
+                  </div>
+                  <div>
+                    <div
+                      style="font-size: var(--text-xs); color: var(--fg-3); margin-bottom: var(--space-1);"
+                    >
+                      5 秒前
+                    </div>
+                    <div style="font-size: var(--text-sm); color: var(--fg-2);">
+                      已同步
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="card interactive">
+                <div class="between" style="margin-bottom: var(--space-4);">
+                  <div class="card-title" style="margin-bottom: 0;">主题</div>
+                  <span class="tag accent"
+                    ><span class="pip"></span>正在使用</span
+                  >
+                </div>
+                <div class="hstack" style="margin-bottom: var(--space-4);">
+                  <div style="display: flex; gap: var(--space-1);">
+                    <div
+                      style="width: 8px; height: 24px; border-radius: var(--radius-xs); background: var(--accent); box-shadow: 0 0 6px var(--accent);"
+                    ></div>
+                    <div
+                      style="width: 8px; height: 24px; border-radius: var(--radius-xs); background: #3B82F6; box-shadow: 0 0 6px #3B82F6;"
+                    ></div>
+                    <div
+                      style="width: 8px; height: 24px; border-radius: var(--radius-xs); background: #A855F7; box-shadow: 0 0 6px #A855F7;"
+                    ></div>
+                  </div>
+                  <div style="flex: 1;">
+                    <div style="font-size: var(--text-lg); font-weight: 600;">
+                      霓虹
+                    </div>
+                    <div
+                      style="font-size: var(--text-sm); color: var(--fg-2); margin-top: 2px;"
+                    >
+                      明亮多彩，适合白天编程
+                    </div>
+                  </div>
+                  <button type="button" class="btn sm">换主题</button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
-    </section>
+        </section>
 
-    <!-- Devices -->
-    <section class="page-section" id="page-devices">
-      <div class="page-content stack">
-        <div class="between"><div><h1>设备</h1><div style="font-size: var(--text-md); color: var(--fg-2); margin-top: var(--space-1);">连接你家附近的 AgentCore 灯牌</div></div><button class="btn primary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.8 1 6.5 2.6"/><path d="M21 3v5h-5"/></svg>重新查找</button></div>
-        <div class="card" style="padding: var(--space-4); display: flex; align-items: center; gap: var(--space-4);"><span class="pulse" style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); flex-shrink: 0;"></span><div style="font-size: var(--text-md); flex: 1;">正在查找附近的灯牌…</div><div style="flex: 1; max-width: 220px;"><div class="progress"><div class="progress-bar" style="width: 60%;"></div></div></div></div>
-        <div class="stack-sm">
-          <div class="card interactive" style="display: flex; align-items: center; gap: var(--space-4);">
-            <div style="width: 40px; height: 40px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--accent) 0%, #15803D 100%); display: grid; place-items: center; box-shadow: 0 0 12px var(--accent-glow); flex-shrink: 0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#052E16" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="#052E16"/></svg></div>
-            <div style="flex: 1;"><div style="font-size: var(--text-base); font-weight: 600;">客厅的灯牌</div><div style="font-size: var(--text-xs); color: var(--fg-2); margin-top: 2px; display: flex; align-items: center; gap: var(--space-2);"><span class="signal strong"><span></span><span></span><span></span><span></span></span><span style="color: var(--accent);">信号很强</span></div></div>
-            <button class="btn primary sm">连接</button>
-          </div>
-          <div class="card interactive" style="display: flex; align-items: center; gap: var(--space-4);">
-            <div style="width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--muted); display: grid; place-items: center; flex-shrink: 0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--fg-2);"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg></div>
-            <div style="flex: 1;"><div style="font-size: var(--text-base); font-weight: 600;">书房的灯牌</div><div style="font-size: var(--text-xs); color: var(--fg-2); margin-top: 2px; display: flex; align-items: center; gap: var(--space-2);"><span class="signal medium"><span></span><span></span><span></span><span></span></span><span>信号一般</span></div></div>
-            <button class="btn primary sm">连接</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Integrations -->
-    <section class="page-section" id="page-integrations">
-      <div class="page-content stack" style="max-width: 920px;">
-        <div><h1>接入外部工具</h1><div style="font-size: var(--text-md); color: var(--fg-2); margin-top: var(--space-1);">把 AI 编程工具的状态自动同步到灯牌 · 配置一次，长期生效</div></div>
-        <div class="card">
-          <div class="between" style="margin-bottom: var(--space-3); align-items: flex-start;">
-            <div class="hstack" style="gap: var(--space-3);">
-              <div style="width: 40px; height: 40px; border-radius: var(--radius-md); background: linear-gradient(135deg, #D97706, #B45309); display: grid; place-items: center; color: white; font-weight: 700; font-size: var(--text-lg); flex-shrink: 0;">C</div>
-              <div><div style="font-size: var(--text-lg); font-weight: 600;">Claude Code</div><div style="font-size: var(--text-xs); color: var(--fg-2); margin-top: 2px; font-family: 'JetBrains Mono', monospace;">~/.claude/settings.json</div></div>
+        <!-- Devices -->
+        <section class="page-section" id="page-devices">
+          <div class="page-content stack">
+            <div class="between">
+              <div>
+                <h1>设备</h1>
+                <div
+                  style="font-size: var(--text-md); color: var(--fg-2); margin-top: var(--space-1);"
+                >
+                  连接你家附近的 AgentCore 灯牌
+                </div>
+              </div>
+              <button type="button" class="btn primary">
+                <svg
+                  aria-hidden="true"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                >
+                  <path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.8 1 6.5 2.6" />
+                  <path d="M21 3v5h-5" />
+                </svg>重新查找
+              </button>
             </div>
-            <div class="hstack"><span class="tag accent"><span class="pip"></span>已配置</span><button class="btn sm">测试连接</button></div>
+            <div
+              class="card"
+              style="padding: var(--space-4); display: flex; align-items: center; gap: var(--space-4);"
+            >
+              <span
+                class="pulse"
+                style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); flex-shrink: 0;"
+              ></span>
+              <div style="font-size: var(--text-md); flex: 1;">
+                正在查找附近的灯牌…
+              </div>
+              <div style="flex: 1; max-width: 220px;">
+                <div class="progress">
+                  <div class="progress-bar" style="width: 60%;"></div>
+                </div>
+              </div>
+            </div>
+            <div class="stack-sm">
+              <div
+                class="card interactive"
+                style="display: flex; align-items: center; gap: var(--space-4);"
+              >
+                <div
+                  style="width: 40px; height: 40px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--accent) 0%, #15803D 100%); display: grid; place-items: center; box-shadow: 0 0 12px var(--accent-glow); flex-shrink: 0;"
+                >
+                  <svg
+                    aria-hidden="true"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#052E16"
+                    stroke-width="2.5"
+                  >
+                    <circle cx="12" cy="12" r="9" />
+                    <circle cx="12" cy="12" r="3" fill="#052E16" />
+                  </svg>
+                </div>
+                <div style="flex: 1;">
+                  <div style="font-size: var(--text-base); font-weight: 600;">
+                    客厅的灯牌
+                  </div>
+                  <div
+                    style="font-size: var(--text-xs); color: var(--fg-2); margin-top: 2px; display: flex; align-items: center; gap: var(--space-2);"
+                  >
+                    <span class="signal strong"
+                      ><span></span><span></span><span></span
+                      ><span></span></span
+                    ><span style="color: var(--accent);">信号很强</span>
+                  </div>
+                </div>
+                <button type="button" class="btn primary sm">连接</button>
+              </div>
+              <div
+                class="card interactive"
+                style="display: flex; align-items: center; gap: var(--space-4);"
+              >
+                <div
+                  style="width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--muted); display: grid; place-items: center; flex-shrink: 0;"
+                >
+                  <svg
+                    aria-hidden="true"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    style="color: var(--fg-2);"
+                  >
+                    <circle cx="12" cy="12" r="9" />
+                    <circle cx="12" cy="12" r="3" fill="currentColor" />
+                  </svg>
+                </div>
+                <div style="flex: 1;">
+                  <div style="font-size: var(--text-base); font-weight: 600;">
+                    书房的灯牌
+                  </div>
+                  <div
+                    style="font-size: var(--text-xs); color: var(--fg-2); margin-top: 2px; display: flex; align-items: center; gap: var(--space-2);"
+                  >
+                    <span class="signal medium"
+                      ><span></span><span></span><span></span
+                      ><span></span></span
+                    ><span>信号一般</span>
+                  </div>
+                </div>
+                <button type="button" class="btn primary sm">连接</button>
+              </div>
+            </div>
           </div>
-          <div style="font-size: var(--text-sm); color: var(--fg-2); margin-bottom: var(--space-3);">通过 HTTP hook 直接上报，不需要写脚本。</div>
-          <details><summary style="cursor: pointer; font-size: var(--text-md); color: var(--accent); padding: var(--space-2) 0; list-style: none;">▸ 查看 JSON 配置</summary>
-            <div style="position: relative; margin-top: var(--space-2);">
-              <button class="btn sm" style="position: absolute; top: 8px; right: 8px; z-index: 1;">复制</button>
-              <pre style="background: var(--bg); border: 1px solid var(--border-soft); border-radius: var(--radius-md); padding: var(--space-4); overflow-x: auto; font-size: var(--text-xs); font-family: 'JetBrains Mono', monospace; color: var(--fg-2); line-height: 1.6;"><code>{
+        </section>
+
+        <!-- Integrations -->
+        <section class="page-section" id="page-integrations">
+          <div class="page-content stack" style="max-width: 920px;">
+            <div>
+              <h1>接入外部工具</h1>
+              <div
+                style="font-size: var(--text-md); color: var(--fg-2); margin-top: var(--space-1);"
+              >
+                把 AI 编程工具的状态自动同步到灯牌 · 配置一次，长期生效
+              </div>
+            </div>
+            <div class="card">
+              <div
+                class="between"
+                style="margin-bottom: var(--space-3); align-items: flex-start;"
+              >
+                <div class="hstack" style="gap: var(--space-3);">
+                  <div
+                    style="width: 40px; height: 40px; border-radius: var(--radius-md); background: linear-gradient(135deg, #D97706, #B45309); display: grid; place-items: center; color: white; font-weight: 700; font-size: var(--text-lg); flex-shrink: 0;"
+                  >
+                    C
+                  </div>
+                  <div>
+                    <div style="font-size: var(--text-lg); font-weight: 600;">
+                      Claude Code
+                    </div>
+                    <div
+                      style="font-size: var(--text-xs); color: var(--fg-2); margin-top: 2px; font-family: 'JetBrains Mono', monospace;"
+                    >
+                      ~/.claude/settings.json
+                    </div>
+                  </div>
+                </div>
+                <div class="hstack">
+                  <span class="tag accent"><span class="pip"></span>已配置</span
+                  ><button type="button" class="btn sm">测试连接</button>
+                </div>
+              </div>
+              <div
+                style="font-size: var(--text-sm); color: var(--fg-2); margin-bottom: var(--space-3);"
+              >
+                通过 HTTP hook 直接上报，不需要写脚本。
+              </div>
+              <details>
+                <summary
+                  style="cursor: pointer; font-size: var(--text-md); color: var(--accent); padding: var(--space-2) 0; list-style: none;"
+                >
+                  ▸ 查看 JSON 配置
+                </summary>
+                <div style="position: relative; margin-top: var(--space-2);">
+                  <button
+                    type="button"
+                    class="btn sm"
+                    style="position: absolute; top: 8px; right: 8px; z-index: 1;"
+                  >
+                    复制
+                  </button>
+                  <pre
+                    style="background: var(--bg); border: 1px solid var(--border-soft); border-radius: var(--radius-md); padding: var(--space-4); overflow-x: auto; font-size: var(--text-xs); font-family: 'JetBrains Mono', monospace; color: var(--fg-2); line-height: 1.6;"
+                  ><code>{
   "hooks": {
     "UserPromptSubmit": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:47800/hook", "body": "{\"source\":\"claude-code\",\"event\":\"state_change\",\"state\":\"WORKING\",\"session\":\"${session_id}\"}" }] }],
     "Stop":            [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:47800/hook", "body": "{\"source\":\"claude-code\",\"event\":\"state_change\",\"state\":\"SUCCESS\",\"session\":\"${session_id}\"}" }] }],
@@ -430,308 +1536,845 @@
     "Notification":    [{ "matcher": "idle_prompt|permission_prompt", "hooks": [{ "type": "http", "url": "http://127.0.0.1:47800/hook", "body": "{\"source\":\"claude-code\",\"event\":\"state_change\",\"state\":\"WAITING\",\"session\":\"${session_id}\"}" }] }]
   }
 }</code></pre>
+                </div>
+              </details>
             </div>
-          </details>
-        </div>
-        <div class="card">
-          <div class="between" style="margin-bottom: var(--space-3); align-items: flex-start;">
-            <div class="hstack" style="gap: var(--space-3);">
-              <div style="width: 40px; height: 40px; border-radius: var(--radius-md); background: linear-gradient(135deg, #10A37F, #0E7A60); display: grid; place-items: center; color: white; font-weight: 700; font-size: var(--text-lg); flex-shrink: 0;">X</div>
-              <div><div style="font-size: var(--text-lg); font-weight: 600;">Codex</div><div style="font-size: var(--text-xs); color: var(--fg-2); margin-top: 2px; font-family: 'JetBrains Mono', monospace;">~/.codex/hooks.json + config.toml</div></div>
-            </div>
-            <div class="hstack"><span class="tag warn"><span class="pip"></span>未配置</span><button class="btn sm">测试连接</button></div>
-          </div>
-          <div style="font-size: var(--text-sm); color: var(--fg-2); margin-bottom: var(--space-3);">需要同时配置 hooks 和 notify；Codex Desktop 会重写 notify。</div>
-          <details><summary style="cursor: pointer; font-size: var(--text-md); color: var(--accent); padding: var(--space-2) 0; list-style: none;">▸ 查看配置步骤</summary>
-            <div style="position: relative; margin-top: var(--space-2);">
-              <button class="btn sm" style="position: absolute; top: 8px; right: 8px; z-index: 1;">复制</button>
-              <pre style="background: var(--bg); border: 1px solid var(--border-soft); border-radius: var(--radius-md); padding: var(--space-4); overflow-x: auto; font-size: var(--text-xs); font-family: 'JetBrains Mono', monospace; color: var(--fg-2); line-height: 1.6;"><code>[
+            <div class="card">
+              <div
+                class="between"
+                style="margin-bottom: var(--space-3); align-items: flex-start;"
+              >
+                <div class="hstack" style="gap: var(--space-3);">
+                  <div
+                    style="width: 40px; height: 40px; border-radius: var(--radius-md); background: linear-gradient(135deg, #10A37F, #0E7A60); display: grid; place-items: center; color: white; font-weight: 700; font-size: var(--text-lg); flex-shrink: 0;"
+                  >
+                    X
+                  </div>
+                  <div>
+                    <div style="font-size: var(--text-lg); font-weight: 600;">
+                      Codex
+                    </div>
+                    <div
+                      style="font-size: var(--text-xs); color: var(--fg-2); margin-top: 2px; font-family: 'JetBrains Mono', monospace;"
+                    >
+                      ~/.codex/hooks.json + config.toml
+                    </div>
+                  </div>
+                </div>
+                <div class="hstack">
+                  <span class="tag warn"><span class="pip"></span>未配置</span
+                  ><button type="button" class="btn sm">测试连接</button>
+                </div>
+              </div>
+              <div
+                style="font-size: var(--text-sm); color: var(--fg-2); margin-bottom: var(--space-3);"
+              >
+                需要同时配置 hooks 和 notify；Codex Desktop 会重写 notify。
+              </div>
+              <details>
+                <summary
+                  style="cursor: pointer; font-size: var(--text-md); color: var(--accent); padding: var(--space-2) 0; list-style: none;"
+                >
+                  ▸ 查看配置步骤
+                </summary>
+                <div style="position: relative; margin-top: var(--space-2);">
+                  <button
+                    type="button"
+                    class="btn sm"
+                    style="position: absolute; top: 8px; right: 8px; z-index: 1;"
+                  >
+                    复制
+                  </button>
+                  <pre
+                    style="background: var(--bg); border: 1px solid var(--border-soft); border-radius: var(--radius-md); padding: var(--space-4); overflow-x: auto; font-size: var(--text-xs); font-family: 'JetBrains Mono', monospace; color: var(--fg-2); line-height: 1.6;"
+                  ><code>[
   { "event": "UserPromptSubmit", "command": "curl -s -X POST http://127.0.0.1:47800/hook -H 'Content-Type: application/json' -d '{\"source\":\"codex\",\"state\":\"WORKING\"}'" },
   { "event": "Stop", "command": "curl -s -X POST http://127.0.0.1:47800/hook -H 'Content-Type: application/json' -d '{\"source\":\"codex\",\"state\":\"SUCCESS\"}'" }
 ]</code></pre>
+                </div>
+              </details>
             </div>
-          </details>
-        </div>
-        <div class="card" style="opacity: 0.6;">
-          <div class="between" style="margin-bottom: var(--space-3); align-items: flex-start;">
-            <div class="hstack" style="gap: var(--space-3);">
-              <div style="width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--secondary); display: grid; place-items: center; color: var(--fg); font-weight: 700; font-size: var(--text-lg); flex-shrink: 0;">Q</div>
-              <div><div style="font-size: var(--text-lg); font-weight: 600;">Qoder</div><div style="font-size: var(--text-xs); color: var(--fg-2); margin-top: 2px;">事件与 Claude Code 同构，配置方式一致</div></div>
+            <div class="card" style="opacity: 0.6;">
+              <div
+                class="between"
+                style="margin-bottom: var(--space-3); align-items: flex-start;"
+              >
+                <div class="hstack" style="gap: var(--space-3);">
+                  <div
+                    style="width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--secondary); display: grid; place-items: center; color: var(--fg); font-weight: 700; font-size: var(--text-lg); flex-shrink: 0;"
+                  >
+                    Q
+                  </div>
+                  <div>
+                    <div style="font-size: var(--text-lg); font-weight: 600;">
+                      Qoder
+                    </div>
+                    <div
+                      style="font-size: var(--text-xs); color: var(--fg-2); margin-top: 2px;"
+                    >
+                      事件与 Claude Code 同构，配置方式一致
+                    </div>
+                  </div>
+                </div>
+                <span class="tag"><span class="pip"></span>预留</span>
+              </div>
             </div>
-            <span class="tag"><span class="pip"></span>预留</span>
+            <div class="card" style="background: var(--bg-2);">
+              <div
+                style="font-size: var(--text-sm); font-weight: 500; margin-bottom: var(--space-2);"
+              >
+                这些配置在做什么？
+              </div>
+              <div
+                style="font-size: var(--text-sm); color: var(--fg-2); line-height: 1.7;"
+              >
+                每个工具在自己的关键时刻（开始干活、完成任务、出错、等你回复）调用
+                AI-Light 的本地 HTTP 端点，把状态传过来。AI-Light
+                按当前主题映射到具体灯效，下发给灯牌。配置一次即可。
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Themes -->
+        <section class="page-section" id="page-themes">
+          <div class="page-content stack">
+            <div class="between">
+              <div>
+                <h1>主题</h1>
+                <div
+                  style="font-size: var(--text-md); color: var(--fg-2); margin-top: var(--space-1);"
+                >
+                  为不同心情切换灯效风格
+                </div>
+              </div>
+              <div class="hstack">
+                <button type="button" class="btn" id="openEditorBtn">
+                  <svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M12 20h9" />
+                    <path
+                      d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
+                    />
+                  </svg>编辑当前主题
+                </button>
+                <button type="button" class="btn">
+                  <svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>导入新主题
+                </button>
+              </div>
+            </div>
+            <div
+              style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5);"
+            >
+              <div class="card interactive" style="cursor: pointer;">
+                <div style="margin-bottom: var(--space-4);">
+                  <div style="font-size: var(--text-lg); font-weight: 600;">
+                    默认
+                  </div>
+                  <div
+                    style="font-size: var(--text-xs); color: var(--fg-2); margin-top: var(--space-1);"
+                  >
+                    简洁耐看，全场景通用
+                  </div>
+                </div>
+                <button type="button" class="btn sm" style="width: 100%;">
+                  使用此主题
+                </button>
+              </div>
+              <div
+                class="card"
+                style="border-color: var(--accent); position: relative; box-shadow: 0 0 0 1px var(--accent), var(--shadow-glow);"
+              >
+                <div
+                  style="position: absolute; top: -10px; left: var(--space-4);"
+                >
+                  <span class="tag accent">当前使用</span>
+                </div>
+                <div style="margin-bottom: var(--space-4);">
+                  <div
+                    style="font-size: var(--text-lg); font-weight: 600; color: var(--accent);"
+                  >
+                    霓虹
+                  </div>
+                  <div
+                    style="font-size: var(--text-xs); color: var(--fg-2); margin-top: var(--space-1);"
+                  >
+                    明亮多彩，适合白天编程
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="btn primary sm"
+                  style="width: 100%;"
+                  disabled
+                >
+                  正在使用
+                </button>
+              </div>
+              <div class="card interactive" style="cursor: pointer;">
+                <div style="margin-bottom: var(--space-4);">
+                  <div style="font-size: var(--text-lg); font-weight: 600;">
+                    极简
+                  </div>
+                  <div
+                    style="font-size: var(--text-xs); color: var(--fg-2); margin-top: var(--space-1);"
+                  >
+                    只保留必要信号，不打扰
+                  </div>
+                </div>
+                <button type="button" class="btn sm" style="width: 100%;">
+                  使用此主题
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Preview -->
+        <section class="page-section" id="page-preview">
+          <div class="page-content stack" style="max-width: 900px;">
+            <div>
+              <h1>试听</h1>
+              <div
+                style="font-size: var(--text-md); color: var(--fg-2); margin-top: var(--space-1);"
+              >
+                手动触发灯效，看看你设置的主题效果如何 · 当前主题
+                <span style="color: var(--accent); font-weight: 500;"
+                  >霓虹</span
+                >
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">试试看灯牌会怎么亮</div>
+              <div
+                style="display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-3);"
+              >
+                <button
+                  type="button"
+                  class="btn"
+                  style="flex-direction: column; gap: var(--space-3); padding: var(--space-5) var(--space-3); height: auto;"
+                >
+                  <div
+                    style="width: 14px; height: 14px; border-radius: 50%; background: var(--muted);"
+                  ></div>
+                  <span style="font-size: var(--text-md); font-weight: 500;"
+                    >空闲</span
+                  >
+                </button>
+                <button
+                  type="button"
+                  class="btn"
+                  style="flex-direction: column; gap: var(--space-3); padding: var(--space-5) var(--space-3); height: auto;"
+                >
+                  <div
+                    style="width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent-glow);"
+                  ></div>
+                  <span style="font-size: var(--text-md); font-weight: 500;"
+                    >工作中</span
+                  >
+                </button>
+                <button
+                  type="button"
+                  class="btn"
+                  style="flex-direction: column; gap: var(--space-3); padding: var(--space-5) var(--space-3); height: auto;"
+                >
+                  <div
+                    style="width: 14px; height: 14px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 8px rgba(245,158,11,0.5);"
+                  ></div>
+                  <span style="font-size: var(--text-md); font-weight: 500;"
+                    >等你回复</span
+                  >
+                </button>
+                <button
+                  type="button"
+                  class="btn"
+                  style="flex-direction: column; gap: var(--space-3); padding: var(--space-5) var(--space-3); height: auto;"
+                >
+                  <div
+                    style="width: 14px; height: 14px; border-radius: 50%; background: var(--accent);"
+                  ></div>
+                  <span style="font-size: var(--text-md); font-weight: 500;"
+                    >完成</span
+                  >
+                </button>
+                <button
+                  type="button"
+                  class="btn"
+                  style="flex-direction: column; gap: var(--space-3); padding: var(--space-5) var(--space-3); height: auto; background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.4); color: var(--destructive);"
+                >
+                  <div
+                    style="width: 14px; height: 14px; border-radius: 50%; background: var(--destructive); box-shadow: 0 0 8px rgba(239,68,68,0.5);"
+                  ></div>
+                  <span style="font-size: var(--text-md); font-weight: 500;"
+                    >出错</span
+                  >
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Settings -->
+        <section class="page-section" id="page-settings">
+          <div class="page-content stack" style="max-width: 820px;">
+            <div>
+              <h1>设置</h1>
+              <div
+                style="font-size: var(--text-md); color: var(--fg-2); margin-top: var(--space-1);"
+              >
+                调一调 AI-Light 的工作方式
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">界面外观</div>
+              <div class="between">
+                <div>
+                  <div style="font-size: var(--text-base); font-weight: 500;">
+                    主题模式
+                  </div>
+                  <div
+                    style="font-size: var(--text-sm); color: var(--fg-2); margin-top: var(--space-1);"
+                  >
+                    跟随系统切换，或手动指定暗色 / 浅色
+                  </div>
+                </div>
+                <div class="seg" id="themeSeg2">
+                  <button type="button" data-theme="dark" class="on">暗</button
+                  ><button type="button" data-theme="light">亮</button
+                  ><button type="button" data-theme="auto">自动</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- ====== 主题编辑器（默认简单模式） ====== -->
+    <div class="dialog-mask" id="themeDialog">
+      <div class="dialog">
+        <div class="dialog-header">
+          <div>
+            <h2 style="font-size: var(--text-xl);">编辑主题</h2>
+            <div
+              style="font-size: var(--text-sm); color: var(--fg-2); margin-top: var(--space-1);"
+            >
+              先选个状态，再调细节
+            </div>
+          </div>
+          <div class="hstack" style="gap: var(--space-3);">
+            <div class="mode-toggle" id="modeToggle">
+              <button type="button" data-mode="advanced">进阶</button>
+              <button type="button" data-mode="simple" class="on">简单</button>
+            </div>
+            <button type="button" class="icon-btn" id="closeDialog">
+              <svg
+                aria-hidden="true"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
           </div>
         </div>
-        <div class="card" style="background: var(--bg-2);">
-          <div style="font-size: var(--text-sm); font-weight: 500; margin-bottom: var(--space-2);">这些配置在做什么？</div>
-          <div style="font-size: var(--text-sm); color: var(--fg-2); line-height: 1.7;">每个工具在自己的关键时刻（开始干活、完成任务、出错、等你回复）调用 AI-Light 的本地 HTTP 端点，把状态传过来。AI-Light 按当前主题映射到具体灯效，下发给灯牌。配置一次即可。</div>
-        </div>
-      </div>
-    </section>
 
-    <!-- Themes -->
-    <section class="page-section" id="page-themes">
-      <div class="page-content stack">
-        <div class="between"><div><h1>主题</h1><div style="font-size: var(--text-md); color: var(--fg-2); margin-top: var(--space-1);">为不同心情切换灯效风格</div></div>
-        <div class="hstack">
-          <button class="btn" id="openEditorBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>编辑当前主题</button>
-          <button class="btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>导入新主题</button>
-        </div></div>
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5);">
-          <div class="card interactive" style="cursor: pointer;"><div style="margin-bottom: var(--space-4);"><div style="font-size: var(--text-lg); font-weight: 600;">默认</div><div style="font-size: var(--text-xs); color: var(--fg-2); margin-top: var(--space-1);">简洁耐看，全场景通用</div></div><button class="btn sm" style="width: 100%;">使用此主题</button></div>
-          <div class="card" style="border-color: var(--accent); position: relative; box-shadow: 0 0 0 1px var(--accent), var(--shadow-glow);"><div style="position: absolute; top: -10px; left: var(--space-4);"><span class="tag accent">当前使用</span></div><div style="margin-bottom: var(--space-4);"><div style="font-size: var(--text-lg); font-weight: 600; color: var(--accent);">霓虹</div><div style="font-size: var(--text-xs); color: var(--fg-2); margin-top: var(--space-1);">明亮多彩，适合白天编程</div></div><button class="btn primary sm" style="width: 100%;" disabled>正在使用</button></div>
-          <div class="card interactive" style="cursor: pointer;"><div style="margin-bottom: var(--space-4);"><div style="font-size: var(--text-lg); font-weight: 600;">极简</div><div style="font-size: var(--text-xs); color: var(--fg-2); margin-top: var(--space-1);">只保留必要信号，不打扰</div></div><button class="btn sm" style="width: 100%;">使用此主题</button></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Preview -->
-    <section class="page-section" id="page-preview">
-      <div class="page-content stack" style="max-width: 900px;">
-        <div><h1>试听</h1><div style="font-size: var(--text-md); color: var(--fg-2); margin-top: var(--space-1);">手动触发灯效，看看你设置的主题效果如何 · 当前主题 <span style="color: var(--accent); font-weight: 500;">霓虹</span></div></div>
-        <div class="card"><div class="card-title">试试看灯牌会怎么亮</div><div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-3);">
-          <button class="btn" style="flex-direction: column; gap: var(--space-3); padding: var(--space-5) var(--space-3); height: auto;"><div style="width: 14px; height: 14px; border-radius: 50%; background: var(--muted);"></div><span style="font-size: var(--text-md); font-weight: 500;">空闲</span></button>
-          <button class="btn" style="flex-direction: column; gap: var(--space-3); padding: var(--space-5) var(--space-3); height: auto;"><div style="width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent-glow);"></div><span style="font-size: var(--text-md); font-weight: 500;">工作中</span></button>
-          <button class="btn" style="flex-direction: column; gap: var(--space-3); padding: var(--space-5) var(--space-3); height: auto;"><div style="width: 14px; height: 14px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 8px rgba(245,158,11,0.5);"></div><span style="font-size: var(--text-md); font-weight: 500;">等你回复</span></button>
-          <button class="btn" style="flex-direction: column; gap: var(--space-3); padding: var(--space-5) var(--space-3); height: auto;"><div style="width: 14px; height: 14px; border-radius: 50%; background: var(--accent);"></div><span style="font-size: var(--text-md); font-weight: 500;">完成</span></button>
-          <button class="btn" style="flex-direction: column; gap: var(--space-3); padding: var(--space-5) var(--space-3); height: auto; background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.4); color: var(--destructive);"><div style="width: 14px; height: 14px; border-radius: 50%; background: var(--destructive); box-shadow: 0 0 8px rgba(239,68,68,0.5);"></div><span style="font-size: var(--text-md); font-weight: 500;">出错</span></button>
-        </div></div>
-      </div>
-    </section>
-
-    <!-- Settings -->
-    <section class="page-section" id="page-settings">
-      <div class="page-content stack" style="max-width: 820px;">
-        <div><h1>设置</h1><div style="font-size: var(--text-md); color: var(--fg-2); margin-top: var(--space-1);">调一调 AI-Light 的工作方式</div></div>
-        <div class="card"><div class="card-title">界面外观</div><div class="between"><div><div style="font-size: var(--text-base); font-weight: 500;">主题模式</div><div style="font-size: var(--text-sm); color: var(--fg-2); margin-top: var(--space-1);">跟随系统切换，或手动指定暗色 / 浅色</div></div><div class="seg" id="themeSeg2"><button data-theme="dark" class="on">暗</button><button data-theme="light">亮</button><button data-theme="auto">自动</button></div></div></div>
-      </div>
-    </section>
-
-  </main>
-</div>
-
-<!-- ====== 主题编辑器（默认简单模式） ====== -->
-<div class="dialog-mask" id="themeDialog">
-  <div class="dialog">
-    <div class="dialog-header">
-      <div>
-        <h2 style="font-size: var(--text-xl);">编辑主题</h2>
-        <div style="font-size: var(--text-sm); color: var(--fg-2); margin-top: var(--space-1);">先选个状态，再调细节</div>
-      </div>
-      <div class="hstack" style="gap: var(--space-3);">
-        <div class="mode-toggle" id="modeToggle">
-          <button data-mode="advanced">进阶</button>
-          <button data-mode="simple" class="on">简单</button>
-        </div>
-        <button class="icon-btn" id="closeDialog"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-      </div>
-    </div>
-
-    <div class="dialog-body stack" id="dialogBody">
-
-      <!-- 主题 meta -->
-      <div class="hstack" style="gap: var(--space-4);">
-        <div style="flex: 1;">
-          <div style="font-size: var(--text-sm); color: var(--fg-3); margin-bottom: var(--space-2);">主题名称</div>
-          <input type="text" value="我的霓虹" class="input" />
-        </div>
-        <div>
-          <div style="font-size: var(--text-sm); color: var(--fg-3); margin-bottom: var(--space-2);">正在编辑</div>
-          <div class="hstack" style="gap: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--bg-2); border-radius: var(--radius-md);">
-            <div class="state-tab-dots" id="editorPreviewDots">
-              <span style="background: var(--muted);"></span><span style="background: var(--muted);"></span><span style="background: var(--muted);"></span>
+        <div class="dialog-body stack" id="dialogBody">
+          <!-- 主题 meta -->
+          <div class="hstack" style="gap: var(--space-4);">
+            <div style="flex: 1;">
+              <div
+                style="font-size: var(--text-sm); color: var(--fg-3); margin-bottom: var(--space-2);"
+              >
+                主题名称
+              </div>
+              <input type="text" value="我的霓虹" class="input">
             </div>
-            <span class="state-tab-en" id="editorPreviewState">IDLE</span>
+            <div>
+              <div
+                style="font-size: var(--text-sm); color: var(--fg-3); margin-bottom: var(--space-2);"
+              >
+                正在编辑
+              </div>
+              <div
+                class="hstack"
+                style="gap: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--bg-2); border-radius: var(--radius-md);"
+              >
+                <div class="state-tab-dots" id="editorPreviewDots">
+                  <span style="background: var(--muted);"></span
+                  ><span style="background: var(--muted);"></span
+                  ><span style="background: var(--muted);"></span>
+                </div>
+                <span class="state-tab-en" id="editorPreviewState">IDLE</span>
+              </div>
+            </div>
           </div>
+
+          <!-- 5 状态 tab -->
+          <div
+            style="display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-2);"
+            id="stateTabs"
+          >
+            <button type="button" class="state-tab active" data-state="IDLE">
+              <span class="state-tab-name">空闲</span>
+              <span class="state-tab-en">IDLE</span>
+              <div class="state-tab-dots">
+                <span style="background: var(--muted);"></span
+                ><span style="background: var(--muted);"></span
+                ><span style="background: var(--muted);"></span>
+              </div>
+            </button>
+            <button type="button" class="state-tab" data-state="WORKING">
+              <span class="state-tab-name">工作中</span>
+              <span class="state-tab-en">WORKING</span>
+              <div class="state-tab-dots">
+                <span style="background: #22C55E;"></span
+                ><span style="background: #22C55E;"></span
+                ><span style="background: #22C55E;"></span>
+              </div>
+            </button>
+            <button type="button" class="state-tab" data-state="WAITING">
+              <span class="state-tab-name">等你回复</span>
+              <span class="state-tab-en">WAITING</span>
+              <div class="state-tab-dots">
+                <span style="background: #F59E0B;"></span
+                ><span style="background: #F59E0B;"></span
+                ><span style="background: #F59E0B;"></span>
+              </div>
+            </button>
+            <button type="button" class="state-tab" data-state="SUCCESS">
+              <span class="state-tab-name">完成</span>
+              <span class="state-tab-en">SUCCESS</span>
+              <div class="state-tab-dots">
+                <span style="background: #22C55E;"></span
+                ><span style="background: #22C55E;"></span
+                ><span style="background: #22C55E;"></span>
+              </div>
+            </button>
+            <button type="button" class="state-tab" data-state="ERROR">
+              <span class="state-tab-name">出错</span>
+              <span class="state-tab-en">ERROR</span>
+              <div class="state-tab-dots">
+                <span
+                  style="background: #EF4444; box-shadow: 0 0 6px #EF4444;"
+                ></span><span
+                  style="background: #EF4444; box-shadow: 0 0 6px #EF4444;"
+                ></span><span
+                  style="background: #EF4444; box-shadow: 0 0 6px #EF4444;"
+                ></span>
+              </div>
+            </button>
+          </div>
+
+          <!-- 当前状态编辑器（JS 渲染） -->
+          <div id="stateEditor"></div>
+        </div>
+
+        <div class="dialog-footer">
+          <button type="button" class="btn ghost" id="closeDialog2">
+            取消
+          </button>
+          <button type="button" class="btn">另存为新主题</button>
+          <button type="button" class="btn primary">保存修改</button>
         </div>
       </div>
-
-      <!-- 5 状态 tab -->
-      <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-2);" id="stateTabs">
-        <button class="state-tab active" data-state="IDLE">
-          <span class="state-tab-name">空闲</span>
-          <span class="state-tab-en">IDLE</span>
-          <div class="state-tab-dots"><span style="background: var(--muted);"></span><span style="background: var(--muted);"></span><span style="background: var(--muted);"></span></div>
-        </button>
-        <button class="state-tab" data-state="WORKING">
-          <span class="state-tab-name">工作中</span>
-          <span class="state-tab-en">WORKING</span>
-          <div class="state-tab-dots"><span style="background: #22C55E;"></span><span style="background: #22C55E;"></span><span style="background: #22C55E;"></span></div>
-        </button>
-        <button class="state-tab" data-state="WAITING">
-          <span class="state-tab-name">等你回复</span>
-          <span class="state-tab-en">WAITING</span>
-          <div class="state-tab-dots"><span style="background: #F59E0B;"></span><span style="background: #F59E0B;"></span><span style="background: #F59E0B;"></span></div>
-        </button>
-        <button class="state-tab" data-state="SUCCESS">
-          <span class="state-tab-name">完成</span>
-          <span class="state-tab-en">SUCCESS</span>
-          <div class="state-tab-dots"><span style="background: #22C55E;"></span><span style="background: #22C55E;"></span><span style="background: #22C55E;"></span></div>
-        </button>
-        <button class="state-tab" data-state="ERROR">
-          <span class="state-tab-name">出错</span>
-          <span class="state-tab-en">ERROR</span>
-          <div class="state-tab-dots"><span style="background: #EF4444; box-shadow: 0 0 6px #EF4444;"></span><span style="background: #EF4444; box-shadow: 0 0 6px #EF4444;"></span><span style="background: #EF4444; box-shadow: 0 0 6px #EF4444;"></span></div>
-        </button>
-      </div>
-
-      <!-- 当前状态编辑器（JS 渲染） -->
-      <div id="stateEditor"></div>
-
     </div>
 
-    <div class="dialog-footer">
-      <button class="btn ghost" id="closeDialog2">取消</button>
-      <button class="btn">另存为新主题</button>
-      <button class="btn primary">保存修改</button>
-    </div>
-  </div>
-</div>
-
-<script>
-  // ===== Tab 切换（5 个页面） =====
-  document.querySelectorAll('#navList .nav-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const target = item.dataset.target;
-      document.querySelectorAll('#navList .nav-item').forEach(n => n.classList.remove('active'));
-      item.classList.add('active');
-      document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
-      const el = document.getElementById('page-' + target);
-      if (el) el.classList.add('active');
-    });
-  });
-
-  // ===== 主题切换（暗 / 亮 / 自动） =====
-  const htmlEl = document.documentElement;
-  const themeSegs = document.querySelectorAll('#themeSeg2');
-  function applyTheme(mode) {
-    htmlEl.setAttribute('data-theme', mode);
-    themeSegs.forEach(seg => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.theme === mode)));
-  }
-  themeSegs.forEach(seg => seg.querySelectorAll('button').forEach(b => b.addEventListener('click', () => applyTheme(b.dataset.theme))));
-
-  // ===== 红绿灯（默认 IDLE + 横排；状态/朝向由其他入口改变） =====
-  let currentState = 'IDLE', currentOrient = 'h';
-  const stateNameEl = document.getElementById('stateName');
-  const stateSubtitleEl = document.getElementById('stateSubtitle');
-  const lightsH = document.getElementById('lightsH');
-  const lightsV = document.getElementById('lightsV');
-  const STATE_TEXT = {
-    IDLE:    { text: '空闲',  subtitle: '一切就绪，等待任务',  color: 'var(--fg)' },
-    WORKING: { text: '工作中', subtitle: 'AI 正在思考和执行',   color: 'var(--accent)' },
-    WAITING: { text: '等你回复', subtitle: '需要你确认或输入',   color: 'var(--warning)' },
-    SUCCESS: { text: '完成',   subtitle: '这次任务顺利收尾',     color: 'var(--accent)' },
-    ERROR:   { text: '出错',   subtitle: '任务没跑通，看一眼',   color: 'var(--destructive)' }
-  };
-  function updateLights() {
-    ['h', 'v'].forEach(o => {
-      ['L-red', 'L-yel', 'L-grn'].forEach(id => {
-        const el = document.getElementById(id + '-' + o);
-        if (el) el.className = 'light' + (o === 'v' ? ' v' : '');
+    <script>
+    "use strict";
+    // ===== Tab 切换（5 个页面） =====
+    for (const item of document.querySelectorAll("#navList .nav-item")) {
+      item.addEventListener("click", () => {
+        const target = item.dataset.target;
+        for (const n of document.querySelectorAll("#navList .nav-item")) {
+          n.classList.remove("active");
+        }
+        item.classList.add("active");
+        for (const s of document.querySelectorAll(".page-section")) {
+          s.classList.remove("active");
+        }
+        const el = document.getElementById(`page-${target}`);
+        if (el) {
+          el.classList.add("active");
+        }
       });
-    });
-    const s = currentOrient;
-    const red = document.getElementById('L-red-' + s);
-    const yel = document.getElementById('L-yel-' + s);
-    const grn = document.getElementById('L-grn-' + s);
-    if (currentState === 'WORKING') grn.classList.add('on', 'green', 'breath');
-    else if (currentState === 'WAITING') yel.classList.add('on', 'yellow');
-    else if (currentState === 'SUCCESS') grn.classList.add('on', 'green');
-    else if (currentState === 'ERROR') red.classList.add('on', 'red');
-    const t = STATE_TEXT[currentState];
-    stateNameEl.textContent = t.text;
-    stateNameEl.style.color = t.color;
-    stateSubtitleEl.textContent = t.subtitle;
-  }
-  // 灯组方向由用户设置（设置页 → 灯组显示）；状态由 hook/试听面板改变
-  function setOrient(o) { currentOrient = o; lightsH.style.display = o === 'h' ? 'flex' : 'none'; lightsV.style.display = o === 'v' ? 'flex' : 'none'; updateLights(); }
-  window.setOrient = setOrient;
-  window.setBusinessState = function(s) { currentState = s; updateLights(); };
-
-  // ===== Dialog 开关 =====
-  const dialog = document.getElementById('themeDialog');
-  const dialogBody = document.getElementById('dialogBody');
-  document.getElementById('openEditorBtn').addEventListener('click', () => dialog.classList.add('open'));
-  document.getElementById('closeDialog').addEventListener('click', () => dialog.classList.remove('open'));
-  document.getElementById('closeDialog2').addEventListener('click', () => dialog.classList.remove('open'));
-  dialog.addEventListener('click', e => { if (e.target === dialog) dialog.classList.remove('open'); });
-
-  // ===== 编辑器数据模型（5 个状态） =====
-  const STATE_DATA = {
-    IDLE: {
-      name: '空闲',
-      tracks: [
-        { curve: 'CONSTANT', low: '#000000', high: '#272F42', brightness: 0, period: 0, phase: 0, duty: 50, repeat: 0, endLevel: 'OFF' },
-        { curve: 'CONSTANT', low: '#000000', high: '#272F42', brightness: 0, period: 0, phase: 0, duty: 50, repeat: 0, endLevel: 'OFF' },
-        { curve: 'CONSTANT', low: '#000000', high: '#272F42', brightness: 0, period: 0, phase: 0, duty: 50, repeat: 0, endLevel: 'OFF' }
-      ],
-      buzzer: { on: false, segments: [], repeat: 0 },
-      transition: 0, hold: 0
-    },
-    WORKING: {
-      name: '工作中',
-      tracks: [
-        { curve: 'TRIANGLE', low: '#003D1A', high: '#22C55E', brightness: 80, period: 1200, phase: 0, duty: 50, repeat: 0, endLevel: 'OFF' },
-        { curve: 'TRIANGLE', low: '#003D1A', high: '#22C55E', brightness: 80, period: 1200, phase: 120, duty: 50, repeat: 0, endLevel: 'OFF' },
-        { curve: 'TRIANGLE', low: '#003D1A', high: '#22C55E', brightness: 80, period: 1200, phase: 240, duty: 50, repeat: 0, endLevel: 'OFF' }
-      ],
-      buzzer: { on: false, segments: [], repeat: 0 },
-      transition: 300, hold: 0
-    },
-    WAITING: {
-      name: '等你回复',
-      tracks: [
-        { curve: 'SQUARE', low: '#000000', high: '#F59E0B', brightness: 70, period: 600, phase: 0, duty: 50, repeat: 0, endLevel: 'OFF' },
-        { curve: 'SQUARE', low: '#000000', high: '#F59E0B', brightness: 70, period: 600, phase: 120, duty: 50, repeat: 0, endLevel: 'OFF' },
-        { curve: 'SQUARE', low: '#000000', high: '#F59E0B', brightness: 70, period: 600, phase: 240, duty: 50, repeat: 0, endLevel: 'OFF' }
-      ],
-      buzzer: { on: true, segments: [{ freq: 800, dur: 100, vol: 40 }], repeat: 0 },
-      transition: 0, hold: 0
-    },
-    SUCCESS: {
-      name: '完成',
-      tracks: [
-        { curve: 'CONSTANT', low: '#000000', high: '#22C55E', brightness: 90, period: 0, phase: 0, duty: 50, repeat: 0, endLevel: 'OFF' },
-        { curve: 'CONSTANT', low: '#000000', high: '#22C55E', brightness: 90, period: 0, phase: 0, duty: 50, repeat: 0, endLevel: 'OFF' },
-        { curve: 'CONSTANT', low: '#000000', high: '#22C55E', brightness: 90, period: 0, phase: 0, duty: 50, repeat: 0, endLevel: 'OFF' }
-      ],
-      buzzer: { on: true, segments: [{ freq: 1500, dur: 120, vol: 60 }], repeat: 2 },
-      transition: 300, hold: 5000
-    },
-    ERROR: {
-      name: '出错',
-      tracks: [
-        { curve: 'SQUARE', low: '#000000', high: '#EF4444', brightness: 100, period: 400, phase: 0, duty: 50, repeat: 5, endLevel: 'OFF' },
-        { curve: 'SQUARE', low: '#000000', high: '#EF4444', brightness: 100, period: 400, phase: 0, duty: 50, repeat: 5, endLevel: 'OFF' },
-        { curve: 'SQUARE', low: '#000000', high: '#EF4444', brightness: 100, period: 400, phase: 0, duty: 50, repeat: 5, endLevel: 'OFF' }
-      ],
-      buzzer: { on: true, segments: [{ freq: 2000, dur: 150, vol: 70 }, { freq: 0, dur: 150, vol: 0 }], repeat: 3 },
-      transition: 0, hold: 0
     }
-  };
 
-  const TRACK_LABELS = ['顶', '中', '底'];
-  const CURVE_PATHS = {
-    CONSTANT: 'M0 8 L56 8',
-    SQUARE: 'M0 1 L28 1 L28 15 L56 15',
-    TRIANGLE: 'M0 15 L28 1 L56 15',
-    SAW_UP: 'M0 15 L56 1',
-    SAW_DOWN: 'M0 1 L56 15'
-  };
-  function curveSVG(curve, color) {
-    return `<svg viewBox="0 0 56 16" preserveAspectRatio="none" style="stroke:${color};stroke-width:1.5;fill:none;stroke-linejoin:round;stroke-linecap:round"><path d="${CURVE_PATHS[curve]}"/></svg>`;
-  }
+    // ===== 主题切换（暗 / 亮 / 自动） =====
+    const htmlEl = document.documentElement;
+    const themeSegs = document.querySelectorAll("#themeSeg2");
+    function applyTheme(mode) {
+      htmlEl.setAttribute("data-theme", mode);
+      for (const seg of themeSegs) {
+        for (const b of seg.querySelectorAll("button")) {
+          b.classList.toggle("on", b.dataset.theme === mode);
+        }
+      }
+    }
+    for (const seg of themeSegs) {
+      for (const b of seg.querySelectorAll("button")) {
+        b.addEventListener("click", () => applyTheme(b.dataset.theme));
+      }
+    }
 
-  // ===== 简单模式编辑器 =====
-  function renderSimple(state) {
-    const d = STATE_DATA[state];
-    return `
-      <div class="state-edit-panel">
-        <div class="panel-head">
-          <h3>${d.name} <span class="state-tab-en" style="margin-left:8px">${state}</span></h3>
-          <span class="panel-tag">简单模式 · 改主色和蜂鸣开关</span>
-        </div>
-        <div class="track-color-row">
-          ${d.tracks.map((t, i) => `
+    // ===== 红绿灯（默认 IDLE + 横排；状态/朝向由其他入口改变） =====
+    let currentState = "IDLE",
+      currentOrient = "h";
+    const stateNameEl = document.getElementById("stateName");
+    const stateSubtitleEl = document.getElementById("stateSubtitle");
+    const lightsH = document.getElementById("lightsH");
+    const lightsV = document.getElementById("lightsV");
+    const STATE_TEXT = {
+      IDLE: {
+        text: "空闲",
+        subtitle: "一切就绪，等待任务",
+        color: "var(--fg)",
+      },
+      WORKING: {
+        text: "工作中",
+        subtitle: "AI 正在思考和执行",
+        color: "var(--accent)",
+      },
+      WAITING: {
+        text: "等你回复",
+        subtitle: "需要你确认或输入",
+        color: "var(--warning)",
+      },
+      SUCCESS: {
+        text: "完成",
+        subtitle: "这次任务顺利收尾",
+        color: "var(--accent)",
+      },
+      ERROR: {
+        text: "出错",
+        subtitle: "任务没跑通，看一眼",
+        color: "var(--destructive)",
+      },
+    };
+    function updateLights() {
+      for (const o of ["h", "v"]) {
+        for (const id of ["L-red", "L-yel", "L-grn"]) {
+          const el = document.getElementById(`${id}-${o}`);
+          if (el) {
+            el.className = `light${o === "v" ? " v" : ""}`;
+          }
+        }
+      }
+      const s = currentOrient;
+      const red = document.getElementById(`L-red-${s}`);
+      const yel = document.getElementById(`L-yel-${s}`);
+      const grn = document.getElementById(`L-grn-${s}`);
+      if (currentState === "WORKING") {
+        grn.classList.add("on", "green", "breath");
+      } else if (currentState === "WAITING") {
+        yel.classList.add("on", "yellow");
+      } else if (currentState === "SUCCESS") {
+        grn.classList.add("on", "green");
+      } else if (currentState === "ERROR") {
+        red.classList.add("on", "red");
+      }
+      const t = STATE_TEXT[currentState];
+      stateNameEl.textContent = t.text;
+      stateNameEl.style.color = t.color;
+      stateSubtitleEl.textContent = t.subtitle;
+    }
+    // 灯组方向由用户设置（设置页 → 灯组显示）；状态由 hook/试听面板改变
+    function setOrient(o) {
+      currentOrient = o;
+      lightsH.style.display = o === "h" ? "flex" : "none";
+      lightsV.style.display = o === "v" ? "flex" : "none";
+      updateLights();
+    }
+    window.setOrient = setOrient;
+    window.setBusinessState = (s) => {
+      currentState = s;
+      updateLights();
+    };
+
+    // ===== Dialog 开关 =====
+    const dialog = document.getElementById("themeDialog");
+    const dialogBody = document.getElementById("dialogBody");
+    document
+      .getElementById("openEditorBtn")
+      .addEventListener("click", () => dialog.classList.add("open"));
+    document
+      .getElementById("closeDialog")
+      .addEventListener("click", () => dialog.classList.remove("open"));
+    document
+      .getElementById("closeDialog2")
+      .addEventListener("click", () => dialog.classList.remove("open"));
+    dialog.addEventListener("click", (e) => {
+      if (e.target === dialog) {
+        dialog.classList.remove("open");
+      }
+    });
+
+    // ===== 编辑器数据模型（5 个状态） =====
+    const STATE_DATA = {
+      IDLE: {
+        name: "空闲",
+        tracks: [
+          {
+            curve: "CONSTANT",
+            low: "#000000",
+            high: "#272F42",
+            brightness: 0,
+            period: 0,
+            phase: 0,
+            duty: 50,
+            repeat: 0,
+            endLevel: "OFF",
+          },
+          {
+            curve: "CONSTANT",
+            low: "#000000",
+            high: "#272F42",
+            brightness: 0,
+            period: 0,
+            phase: 0,
+            duty: 50,
+            repeat: 0,
+            endLevel: "OFF",
+          },
+          {
+            curve: "CONSTANT",
+            low: "#000000",
+            high: "#272F42",
+            brightness: 0,
+            period: 0,
+            phase: 0,
+            duty: 50,
+            repeat: 0,
+            endLevel: "OFF",
+          },
+        ],
+        buzzer: { on: false, segments: [], repeat: 0 },
+        transition: 0,
+        hold: 0,
+      },
+      WORKING: {
+        name: "工作中",
+        tracks: [
+          {
+            curve: "TRIANGLE",
+            low: "#003D1A",
+            high: "#22C55E",
+            brightness: 80,
+            period: 1200,
+            phase: 0,
+            duty: 50,
+            repeat: 0,
+            endLevel: "OFF",
+          },
+          {
+            curve: "TRIANGLE",
+            low: "#003D1A",
+            high: "#22C55E",
+            brightness: 80,
+            period: 1200,
+            phase: 120,
+            duty: 50,
+            repeat: 0,
+            endLevel: "OFF",
+          },
+          {
+            curve: "TRIANGLE",
+            low: "#003D1A",
+            high: "#22C55E",
+            brightness: 80,
+            period: 1200,
+            phase: 240,
+            duty: 50,
+            repeat: 0,
+            endLevel: "OFF",
+          },
+        ],
+        buzzer: { on: false, segments: [], repeat: 0 },
+        transition: 300,
+        hold: 0,
+      },
+      WAITING: {
+        name: "等你回复",
+        tracks: [
+          {
+            curve: "SQUARE",
+            low: "#000000",
+            high: "#F59E0B",
+            brightness: 70,
+            period: 600,
+            phase: 0,
+            duty: 50,
+            repeat: 0,
+            endLevel: "OFF",
+          },
+          {
+            curve: "SQUARE",
+            low: "#000000",
+            high: "#F59E0B",
+            brightness: 70,
+            period: 600,
+            phase: 120,
+            duty: 50,
+            repeat: 0,
+            endLevel: "OFF",
+          },
+          {
+            curve: "SQUARE",
+            low: "#000000",
+            high: "#F59E0B",
+            brightness: 70,
+            period: 600,
+            phase: 240,
+            duty: 50,
+            repeat: 0,
+            endLevel: "OFF",
+          },
+        ],
+        buzzer: {
+          on: true,
+          segments: [{ freq: 800, dur: 100, vol: 40 }],
+          repeat: 0,
+        },
+        transition: 0,
+        hold: 0,
+      },
+      SUCCESS: {
+        name: "完成",
+        tracks: [
+          {
+            curve: "CONSTANT",
+            low: "#000000",
+            high: "#22C55E",
+            brightness: 90,
+            period: 0,
+            phase: 0,
+            duty: 50,
+            repeat: 0,
+            endLevel: "OFF",
+          },
+          {
+            curve: "CONSTANT",
+            low: "#000000",
+            high: "#22C55E",
+            brightness: 90,
+            period: 0,
+            phase: 0,
+            duty: 50,
+            repeat: 0,
+            endLevel: "OFF",
+          },
+          {
+            curve: "CONSTANT",
+            low: "#000000",
+            high: "#22C55E",
+            brightness: 90,
+            period: 0,
+            phase: 0,
+            duty: 50,
+            repeat: 0,
+            endLevel: "OFF",
+          },
+        ],
+        buzzer: {
+          on: true,
+          segments: [{ freq: 1500, dur: 120, vol: 60 }],
+          repeat: 2,
+        },
+        transition: 300,
+        hold: 5000,
+      },
+      ERROR: {
+        name: "出错",
+        tracks: [
+          {
+            curve: "SQUARE",
+            low: "#000000",
+            high: "#EF4444",
+            brightness: 100,
+            period: 400,
+            phase: 0,
+            duty: 50,
+            repeat: 5,
+            endLevel: "OFF",
+          },
+          {
+            curve: "SQUARE",
+            low: "#000000",
+            high: "#EF4444",
+            brightness: 100,
+            period: 400,
+            phase: 0,
+            duty: 50,
+            repeat: 5,
+            endLevel: "OFF",
+          },
+          {
+            curve: "SQUARE",
+            low: "#000000",
+            high: "#EF4444",
+            brightness: 100,
+            period: 400,
+            phase: 0,
+            duty: 50,
+            repeat: 5,
+            endLevel: "OFF",
+          },
+        ],
+        buzzer: {
+          on: true,
+          segments: [
+            { freq: 2000, dur: 150, vol: 70 },
+            { freq: 0, dur: 150, vol: 0 },
+          ],
+          repeat: 3,
+        },
+        transition: 0,
+        hold: 0,
+      },
+    };
+
+    const TRACK_LABELS = ["顶", "中", "底"];
+    const CURVE_PATHS = {
+      CONSTANT: "M0 8 L56 8",
+      SQUARE: "M0 1 L28 1 L28 15 L56 15",
+      TRIANGLE: "M0 15 L28 1 L56 15",
+      SAW_UP: "M0 15 L56 1",
+      SAW_DOWN: "M0 1 L56 15",
+    };
+    function curveSVG(curve, color) {
+      return `<svg aria-hidden="true" viewBox="0 0 56 16" preserveAspectRatio="none" style="stroke:${color};stroke-width:1.5;fill:none;stroke-linejoin:round;stroke-linecap:round"><path d="${CURVE_PATHS[curve]}"/></svg>`;
+    }
+
+    // ===== 简单模式编辑器 =====
+    function renderSimple(state) {
+      const d = STATE_DATA[state];
+      const tracksHTML = d.tracks
+        .map(
+          (t, i) => `
             <div>
               <span class="track-label">${TRACK_LABELS[i]}灯</span>
               <input type="color" value="${t.high}" title="主色">
@@ -740,44 +2383,47 @@
                 <input type="range" min="0" max="100" value="${t.brightness}">
                 <span class="slider-value">${t.brightness}%</span>
               </div>
-            </div>
-          `).join('')}
-        </div>
-        <div class="buzzer-compact" style="margin-top: var(--space-4)">
-          <span>蜂鸣</span>
-          <div class="switch ${d.buzzer.on ? 'on' : ''}"></div>
-          <span style="color:var(--fg-3);font-size:var(--text-xs)">${d.buzzer.on ? (d.buzzer.segments.length + ' 段已启用') : '静音'}</span>
-        </div>
-      </div>
-    `;
-  }
-
-  // ===== 进阶模式编辑器（分 6 步骤，形象化） =====
-  function renderAdvanced(state) {
-    const d = STATE_DATA[state];
-    const track0 = d.tracks[0];
-    return `
+            </div>`
+        )
+        .join("");
+      return `
       <div class="state-edit-panel">
         <div class="panel-head">
           <h3>${d.name} <span class="state-tab-en" style="margin-left:8px">${state}</span></h3>
-          <span class="panel-tag">进阶模式 · 6 步走完一个状态</span>
+          <span class="panel-tag">简单模式 · 改主色和蜂鸣开关</span>
         </div>
+        <div class="track-color-row">${tracksHTML}</div>
+        <div class="buzzer-compact" style="margin-top: var(--space-4)">
+          <span>蜂鸣</span>
+          <div class="switch ${d.buzzer.on ? "on" : ""}"></div>
+          <span style="color:var(--fg-3);font-size:var(--text-xs)">${d.buzzer.on ? `${d.buzzer.segments.length} 段已启用` : "静音"}</span>
+        </div>
+      </div>
+    `;
+    }
 
-        <div class="section">
-          <div class="section-title">1 · 选波形（三灯统一）</div>
-          <div class="curve-cards">
-            ${['CONSTANT','SQUARE','TRIANGLE','SAW_UP','SAW_DOWN'].map(c => `
-              <button class="curve-card ${track0.curve === c ? 'active' : ''}" data-curve="${c}">
+    // ===== 进阶模式编辑器（分 6 步骤，形象化） =====
+    function renderAdvanced(state) {
+      const d = STATE_DATA[state];
+      const track0 = d.tracks[0];
+      const curvesHTML = [
+        "CONSTANT",
+        "SQUARE",
+        "TRIANGLE",
+        "SAW_UP",
+        "SAW_DOWN",
+      ]
+        .map(
+          (c) => `
+              <button type="button" class="curve-card ${track0.curve === c ? "active" : ""}" data-curve="${c}">
                 ${curveSVG(c, track0.high)}
                 <span class="curve-name">${c}</span>
-              </button>
-            `).join('')}
-          </div>
-        </div>
-
-        <div class="section">
-          <div class="section-title">2 · 三灯颜色与亮度</div>
-          ${d.tracks.map((t, i) => `
+              </button>`
+        )
+        .join("");
+      const tracksHTML = d.tracks
+        .map(
+          (t, i) => `
             <div class="track-color-row">
               <span class="track-label">${TRACK_LABELS[i]}灯</span>
               <input type="color" value="${t.low}" title="低点色">
@@ -786,8 +2432,43 @@
                 <input type="range" min="0" max="100" value="${t.brightness}">
                 <span class="slider-value">${t.brightness}%</span>
               </div>
-            </div>
-          `).join('')}
+            </div>`
+        )
+        .join("");
+      const segsHTML = d.buzzer.on
+        ? d.buzzer.segments
+            .map(
+              (s, i) => `
+                <div class="seg">
+                  <span class="seg-num">#${i + 1}</span>
+                  <span class="seg-field">${s.freq}Hz</span>
+                  <span class="seg-field">${s.dur}ms</span>
+                  <span class="seg-field">${s.vol}%</span>
+                </div>`
+            )
+            .join("")
+        : "";
+      const buzzerSection = d.buzzer.on
+        ? `
+            <div class="seg-list">${segsHTML}
+              <button type="button" class="add-btn">+ 添加段</button>
+              <span class="seg-field" style="margin-left: auto; color: var(--fg-3);">整体重复 <strong style="color: var(--fg)">${d.buzzer.repeat || "∞"}</strong> 次</span>
+            </div>`
+        : "";
+      return `
+      <div class="state-edit-panel">
+        <div class="panel-head">
+          <h3>${d.name} <span class="state-tab-en" style="margin-left:8px">${state}</span></h3>
+          <span class="panel-tag">进阶模式 · 6 步走完一个状态</span>
+        </div>
+
+        <div class="section">
+          <div class="section-title">1 · 选波形（三灯统一）</div>
+          <div class="curve-cards">${curvesHTML}</div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">2 · 三灯颜色与亮度</div>${tracksHTML}
         </div>
 
         <div class="section">
@@ -803,33 +2484,19 @@
             <span class="slider-value">120°（跑马）</span>
           </div>
           <div class="relation-presets">
-            <button class="relation-preset">同步（0°）</button>
-            <button class="relation-preset active">120° 错相（跑马）</button>
-            <button class="relation-preset">240° 错相</button>
-            <button class="relation-preset">自定义</button>
+            <button type="button" class="relation-preset">同步（0°）</button>
+            <button type="button" class="relation-preset active">120° 错相（跑马）</button>
+            <button type="button" class="relation-preset">240° 错相</button>
+            <button type="button" class="relation-preset">自定义</button>
           </div>
         </div>
 
         <div class="section">
-          <div class="section-title">4 · 蜂鸣（${d.buzzer.on ? d.buzzer.segments.length + ' 段' : '静音'}）</div>
+          <div class="section-title">4 · 蜂鸣（${d.buzzer.on ? `${d.buzzer.segments.length} 段` : "静音"}）</div>
           <div class="buzzer-compact">
             <span>蜂鸣</span>
-            <div class="switch ${d.buzzer.on ? 'on' : ''}"></div>
-          </div>
-          ${d.buzzer.on ? `
-            <div class="seg-list">
-              ${d.buzzer.segments.map((s, i) => `
-                <div class="seg">
-                  <span class="seg-num">#${i+1}</span>
-                  <span class="seg-field">${s.freq}Hz</span>
-                  <span class="seg-field">${s.dur}ms</span>
-                  <span class="seg-field">${s.vol}%</span>
-                </div>
-              `).join('')}
-              <button class="add-btn">+ 添加段</button>
-              <span class="seg-field" style="margin-left: auto; color: var(--fg-3);">整体重复 <strong style="color: var(--fg)">${d.buzzer.repeat || '∞'}</strong> 次</span>
-            </div>
-          ` : ''}
+            <div class="switch ${d.buzzer.on ? "on" : ""}"></div>
+          </div>${buzzerSection}
         </div>
 
         <div class="section">
@@ -842,9 +2509,9 @@
           <div class="slider-row">
             <label>结束动作</label>
             <select>
-              <option ${track0.endLevel === 'OFF' ? 'selected' : ''}>OFF · 全灭</option>
-              <option ${track0.endLevel === 'LOW' ? 'selected' : ''}>LOW · 停在低点色</option>
-              <option ${track0.endLevel === 'HIGH' ? 'selected' : ''}>HIGH · 停在高点色</option>
+              <option ${track0.endLevel === "OFF" ? "selected" : ""}>OFF · 全灭</option>
+              <option ${track0.endLevel === "LOW" ? "selected" : ""}>LOW · 停在低点色</option>
+              <option ${track0.endLevel === "HIGH" ? "selected" : ""}>HIGH · 停在高点色</option>
             </select>
             <span></span>
           </div>
@@ -865,40 +2532,49 @@
         </div>
       </div>
     `;
-  }
+    }
 
-  let editingState = 'IDLE';
-  function renderEditor() {
-    const stateEditor = document.getElementById('stateEditor');
-    const mode = dialogBody.classList.contains('simple-mode') ? 'simple' : 'advanced';
-    stateEditor.innerHTML = mode === 'simple' ? renderSimple(editingState) : renderAdvanced(editingState);
-  }
+    let editingState = "IDLE";
+    function renderEditor() {
+      const stateEditor = document.getElementById("stateEditor");
+      const mode = dialogBody.classList.contains("simple-mode")
+        ? "simple"
+        : "advanced";
+      stateEditor.innerHTML =
+        mode === "simple"
+          ? renderSimple(editingState)
+          : renderAdvanced(editingState);
+    }
 
-  // ===== 状态 tab 切换 =====
-  document.querySelectorAll('#stateTabs .state-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('#stateTabs .state-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      editingState = tab.dataset.state;
-      document.getElementById('editorPreviewState').textContent = editingState;
-      renderEditor();
-    });
-  });
+    // ===== 状态 tab 切换 =====
+    for (const tab of document.querySelectorAll("#stateTabs .state-tab")) {
+      tab.addEventListener("click", () => {
+        for (const t of document.querySelectorAll("#stateTabs .state-tab")) {
+          t.classList.remove("active");
+        }
+        tab.classList.add("active");
+        editingState = tab.dataset.state;
+        document.getElementById("editorPreviewState").textContent =
+          editingState;
+        renderEditor();
+      });
+    }
 
-  // ===== 模式切换 =====
-  document.querySelectorAll('#modeToggle button').forEach(b => {
-    b.addEventListener('click', () => {
-      document.querySelectorAll('#modeToggle button').forEach(x => x.classList.toggle('on', x === b));
-      dialogBody.classList.toggle('simple-mode', b.dataset.mode === 'simple');
-      renderEditor();
-    });
-  });
+    // ===== 模式切换 =====
+    for (const b of document.querySelectorAll("#modeToggle button")) {
+      b.addEventListener("click", () => {
+        for (const x of document.querySelectorAll("#modeToggle button")) {
+          x.classList.toggle("on", x === b);
+        }
+        dialogBody.classList.toggle("simple-mode", b.dataset.mode === "simple");
+        renderEditor();
+      });
+    }
 
-  // ===== 初始化 =====
-  dialogBody.classList.add('simple-mode');
-  renderEditor();
-  updateLights();
-</script>
-
-</body>
+    // ===== 初始化 =====
+    dialogBody.classList.add("simple-mode");
+    renderEditor();
+    updateLights();
+    </script>
+  </body>
 </html>
