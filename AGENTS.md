@@ -41,6 +41,7 @@ pnpm typecheck        # tsc --noEmit
 1. **SET_SCENE 应答实际 3 字节 `[applied, digest_hi, digest_low]`**（协议 §8.5 文档写 4 字节含 result）——`parse_set_scene_response` 兼容两种布局，这是实测事实，不要改回单布局。
 2. **Biome/ultracite JSON 格式**：JSON 对象必须展开成多行（单行紧凑会 fail `pnpm check`）。提交时 lint-staged 自动跑 `ultracite fix`。
 3. **主题 include_str! 路径相对源文件**：`crates/ailight-core/src/theme.rs` 里是 `../../../docs/specs/themes/`（3 级上溯），不是相对 crate 根。
+4. **`tokio::spawn` 调用点必须在 Tokio runtime 上下文**（ADR-0003 / KAD-08）：Tauri 的 `.setup()` 回调运行在 macOS 主线程的 AppKit `did_finish_launching` 里，**不在**任何 Tokio runtime 上下文中——在 setup 内裸调 `tokio::spawn` 会直接 `there is no reactor running` panic，并因跨 `extern "C"` FFI 边界不可 unwind 触发 abort。`ailight-core` 不依赖 Tauri，runtime 上下文由 Tauri 侧用 `tauri::async_runtime::handle().inner().enter()` 的 guard 显式提供。`core` 的 `Transport::new` / `Engine::new` 已加 `debug_assert` 兜底。setup 内一律用 `tauri::async_runtime::spawn`，**禁止**裸 `tokio::spawn`。
 4. **btleplug 0.11 API**：`subscribe()` 返回 `Result<()>`，通知流用 `notifications()`（item 含 `.uuid`/`.value`）；`properties()` 是 async 方法；async fn in trait 不兼容 dyn 对象，必须 `#[async_trait]`。
 5. **hook 服务**：端口 47800，占用自动退避至 47810；只监听 127.0.0.1，不做局域网暴露。
 6. **内置主题编译进二进制**（`BUILTIN_THEMES`）；用户主题在 app config dir 的 `themes/`，内置同名不可覆盖。
@@ -67,5 +68,5 @@ pnpm typecheck        # tsc --noEmit
 | 主题文件格式 | `docs/specs/theme-format.md` |
 | 前端 ↔ Rust 契约 | `docs/specs/ipc-contract.md` |
 | 技术架构（KAD） | `docs/specs/architecture.md` |
-| 设计决策 | `docs/decisions/ADR-0001/0002` |
+| 设计决策 | `docs/decisions/ADR-0001/0002/0003` |
 | 内置主题 | `docs/specs/themes/README.md` |

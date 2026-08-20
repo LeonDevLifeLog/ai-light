@@ -6,7 +6,7 @@
 | 文档性质 | **技术方案决策日志**（非蓝图式设计文档）——记录"为什么这么设计" |
 | 方法论 | ADR（Nygard）+ Y-Statements 摘要 + MADR 备选记录 + RFC 2119 表述 |
 | 生效日期 | 2026-08-19 |
-| 上游 | `docs/requirements/product-boundary.md`（六层边界）、ADR-0001/0002、hook-api V1.0、theme-format V1.0 |
+| 上游 | `docs/requirements/product-boundary.md`（六层边界）、ADR-0001/0002/0003、hook-api V1.0、theme-format V1.0 |
 
 > **写给谁**：未来接手开发的工程师、以及未来的自己。本文不描述系统现状（那是代码的事），只回答"每个技术决策为什么这么做、考虑过什么、后果是什么"。
 > **未定稿处**：标 ⚠️ 的决策/假设需实现期或实测验证后回填结论。
@@ -17,7 +17,7 @@
 
 - **目的**：把六层边界（L1~L6）落地为 Tauri 代码结构时，需要做的**实现级架构决策**，逐条记录背景、决定、备选、后果
 - **读者**：前端开发者（React 侧）、后端/协议开发者（Rust 侧）、适配器开发者、主题作者、维护者
-- **不包含**：接口细节（见 hook-api.md / theme-format.md）、协议细节（见硬件 V0.4）、已定业务决策（见 ADR-0001/0002）
+- **不包含**：接口细节（见 hook-api.md / theme-format.md）、协议细节（见硬件 V0.4）、已定业务决策（见 ADR-0001/0002/0003）
 
 ## 2. 架构图景（六层 → 代码结构）
 
@@ -149,6 +149,20 @@
 - **后果**：协议合规✅；背压（设备无应答时队列堆积）需限长策略⚠️（超时丢弃旧事务，保留最新业务意图）。
 - **验证**：粘包/分包、重试幂等、断连对账（协议 §18.2 验收项）。状态：✅ 设计确定。
 
+### KAD-08 Async 执行模型边界：core 不绑 runtime，setup 契约显式化
+
+> **【摘要】** 在 `ailight-core` 仅依赖 `tokio` 而不引入 Tauri 的前提下，由调用方（Tauri 侧 setup 回调）显式保证 `tokio::spawn` 调用点位于 runtime 上下文内；core 在 `Transport::new` / `Engine::new` 内做 `debug_assert` 兜底，把"必须有 runtime"从注释约定提升为调试期可验证事实。
+
+- **背景**：启动期 macOS 上 `there is no reactor running` panic 触发 abort（详见 ADR-0003）；根因是 Tauri `setup` 回调运行在 AppKit 主线程（不在 Tokio runtime），而 `core` 在构造期裸用 `tokio::spawn` 启动 writer 任务。
+- **决策**：
+  - `ailight-core` **不引入 Tauri 依赖**，runtime 上下文契约由调用方负责（MUST）
+  - `src-tauri/src/lib.rs` 在 `Engine::new` 之前用 `tauri::async_runtime::handle().inner().enter()` 的 guard 进入 runtime 上下文（MUST，ADR-0003 D-02）
+  - `core` 的 `Transport::new` / `Engine::new` 加 `debug_assert!(tokio::runtime::Handle::try_current().is_ok(), ...)` 并在文档注释中显式声明契约（MUST，ADR-0003 D-03）
+  - `setup` 回调里**禁止**裸调 `tokio::spawn`，新增常驻任务一律走 `tauri::async_runtime::spawn`（MUST，ADR-0003 D-04）
+- **备选方案**：core 内置自起 runtime——行为不可预测，否决；改 `Transport::new` 签名为返回 future pair——更彻底但牵动测试，留作 V1.1+ 候选（ADR-0003 备选 B）。
+- **后果**：启动 panic 解决；core 保持分层独立；契约调试期可见；新增 setup 任务的"裸 spawn"风险被长期禁止规则覆盖✅。
+- **验证**：跨平台启动冒烟（mac / win / linux 三套 setup 路径）。状态：✅ 设计确定。
+
 ---
 
 ## 4. 不确定性清单（open questions）
@@ -160,7 +174,7 @@
 | U-03 | Claude Code HTTP hook 真实请求格式（变量占位/时序） | Q6 实测 | hook-api 示例回填 `docs/specs/adapters/` |
 | U-04 | Codex Desktop notify 重写冲突规避 | Q6 实测 | 实测后定适配模板 |
 | U-05 | 托盘图标三平台差异（mac 菜单栏/win 通知区/linux DE） | KAD-06 | 开发期逐平台适配 |
-| U-06 | Tauri async command 与 btleplug 事件循环线程模型整合 | KAD-01/03 | spike 先行 |
+| U-06 | Tauri async command 与 btleplug 事件循环线程模型整合 | KAD-01/03 | ✅ 已落地：见 KAD-08 + ADR-0003（setup 侧已通过 `enter()` guard 解决；BLE 线程侧始终在 async fn 内部，原本安全） |
 | U-07 | token 明文存储风险 | KAD-04 | 改进项：系统钥匙串（mac Keychain/win Credential Manager/linux secret-service），V2 |
 
 ## 5. 影响（对他人的影响）
@@ -170,7 +184,7 @@
 | **前端开发者** | 状态流只读（events）+ 配置操作（invoke）；主题编辑器数据模型 = theme-format V1.0；不持有业务状态 |
 | **适配器开发者** | 对接 hook-api V1.0（POST /hook），source 注册；🟢 配置模板在 `docs/specs/adapters/`（待实测回填） |
 | **主题作者** | 格式 = theme-format V1.0（`.ailight-theme.json`），整体校验 + 默认主题兜底 |
-| **维护者** | 决策追溯链：本文档 ← ADR-0001/0002 ← product-boundary.md；新决策追加 KAD-N 或新 ADR，不改写历史 |
+| **维护者** | 决策追溯链：本文档 ← ADR-0001/0002/0003 ← product-boundary.md；新决策追加 KAD-N 或新 ADR，不改写历史 |
 
 ---
 
@@ -185,5 +199,6 @@
 | KAD-05 日志 = tracing 生态 + 协议 DEBUG 编译开关 | ✅ 设计确定 |
 | KAD-06 托盘常驻 + 关窗隐藏 + 单实例 | ✅ 设计确定 |
 | KAD-07 单 writer 队列 + 事务状态机 | ✅ 设计确定 |
+| KAD-08 core 不绑 runtime + setup 契约显式化（ADR-0003） | ✅ 设计确定 |
 
 *本文档随开发推进回填 ⚠️ 项；已定决策如需变更，追加新 KAD 说明变更原因，不改写旧记录。*
