@@ -208,13 +208,11 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 | 配置变更 | 目标组件 | 同步字段 | 同步方式 |
 |---|---|---|---|
-| `themeMode: 'dark'\|'light'\|'auto'` | 全局 `html[data-theme]` | — | full |
-| `themeMode` 变更 | `Settings.themeSeg` 按钮高亮 | `on` class | patch |
 | `badgeOrientation: 'horizontal'\|'vertical'` | `TrafficBadge.layout` | — | patch |
 | `badgeOrientation` 变更 | `Sidebar.trayMenu` 单选 | — | patch |
 | `arbitrationMode` 变更 | `Settings.arbitrationSelect` 当前值 | — | patch |
-| `autostart` 变更 | `Settings.autostartSwitch` `on` class | — | patch |
-| `portPreference` 变更 | Toast "服务重启中..." → "端口已切换" / "回滚" | — | emit |
+
+> `themeMode` / `autostart` 真实切换 / `portPreference` 热重启均为 P2；P1 不发出这些 patch。
 
 ### 3.7 蓝牙主动事件（来自协议 V0.4 §11）
 
@@ -255,7 +253,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `THEME_BUILTIN` | 尝试删除内置主题 | Dialog "内置主题不可删除" | 关闭 |
 | `BAD_REQUEST` | 参数非法（如 trigger_state 状态名含非法字符） | Toast "请求参数非法：`<reason>`" | 修正输入 |
 | `DEVICE_NOT_CONNECTED` | preview_scene / trigger_state 时未连接 | Toast "请先连接设备" | 跳转 `/devices` |
-| 内部错误（INTERNAL_ERROR） | Rust 侧异常 | Toast "服务异常，请查看日志" | 打开日志目录 |
+| `INTERNAL` | Rust 侧异常（含 BLE 下发失败） | Toast "服务异常，请查看日志" | 打开日志目录 |
 
 ### 4.2 蓝牙协议 result code → UI 反馈（V0.4 §3.6）
 
@@ -438,7 +436,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | Source Event | 字段 | 同步方式 |
 |---|---|---|
 | `device-connection-changed` | `Sidebar.statusDot.color` | patch |
-| `update_config.themeMode` | (none, P1) | — |
+| Dark OLED（P1 固定） | (none) | — |
 | 用户点击 nav-item | `currentRoute` | full |
 
 **6.1.5 边界条件**
@@ -812,15 +810,11 @@ Settings 页分组内的单行设置项：左 label + 描述，右控件（Switc
 ┌─────────────────────────┐
 │  标题                    │
 ├─────────────────────────┤
-│ SettingGroup: 外观       │ themeMode
+│ SettingGroup: 服务       │ port（只读）+ arbitrationMode + 接入保护状态
 ├─────────────────────────┤
-│ SettingGroup: 灯组显示   │ badgeOrientation
+│ SettingGroup: 显示       │ badgeOrientation + 当前主题
 ├─────────────────────────┤
-│ SettingGroup: 主题       │ 当前激活主题名
-├─────────────────────────�
-│ SettingGroup: 设备       │ 记住的设备
-├─────────────────────────┤
-│ SettingGroup: 系统       │ autostart + 日志
+│ SettingGroup: 系统       │ autostart（P1 禁用态）
 └─────────────────────────┘
 ```
 
@@ -1207,7 +1201,7 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 
 | Source Event | 字段 | 同步方式 |
 |---|---|---|
-| `update_config.themeMode` | 当前 value | patch |
+| `update_config.badgeOrientation` | 当前 value | patch |
 
 **8.11.5 边界条件**
 - N >= 2；典型 3 个
@@ -1746,3 +1740,4 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 | V1.1 | 2026-08-20 | 增量：§9 组件生命周期与资源清理（mount/update/unmount 三阶段 + 资源清理检查清单 + 6 个常见模式 + 内存泄漏自检清单） |
 | V1.2 | 2026-08-20 | 增量：AGENTS.md 新增"触发式双文档审计"条款——ipc-contract / theme-format / 蓝牙 V0.4 / ADR 变更前必须强制对齐 ui-interactions.md 与 ui-interaction-spec.md |
 | V1.3 | 2026-08-20 | 重构：废除"季度 + 触发式"双条款，改为单一"内容驱动审计"——5 个内容信号触发（会话入口 / 变更前 / 变更后自动 / 用户触发 / 漂移信号），无时间边界 |
+| V1.4 | 2026-08-20 | 对齐报告：前端实现后完成 5 项语义硬检查。§3 Source Events 全部存在于 ipc-contract §5；§4.1 AppError.code 全部存在于 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 一致；ADR / KAD 引用均可解析。修复 `badgeOrientation` IPC、`INTERNAL` 错误码与导航计数漂移。 |

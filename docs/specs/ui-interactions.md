@@ -334,10 +334,8 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 
 ### 9.1 界面外观
 
-- 主题模式（`themeMode`）：[暗] [亮] [自动]
-  - `auto` 跟随系统：`@media (prefers-color-scheme: light)` 触发浅色 token
-  - 切换即时生效（CSS 变量 + DOM 属性 `data-theme`）
-  - 持久化到 `config.json`
+- P1 固定使用 Dark OLED，不展示 `themeMode` 控件。
+- 浅色 / 跟随系统模式为 P2 候选；启用前需先把 `themeMode` 加入 ipc-contract Config schema 与 `update_config` 允许字段。
 
 ### 9.2 灯组显示
 
@@ -354,8 +352,8 @@ V2 评估何时重新加上：用户使用安全意识提升 / 设备被滥用 /
 
 ### 9.4 系统
 
-- 开机自启（Switch）：调用 `tauri-plugin-autostart`，即时生效
-- 查看日志：[打开日志] → 系统文件管理器打开 app log dir
+- 开机自启：P1 展示禁用态 +「待平台支持」，不伪造已生效；接入 `tauri-plugin-autostart` 后于 P2 开放。
+- 查看日志：P2 接入系统目录打开能力后开放。
 
 ---
 
@@ -632,7 +630,7 @@ V2 实施时补充：
 
 **输入校验**：
 - trim 后必须匹配 `[a-zA-Z0-9_-]+`
-- 长度 1~16
+- 长度 1~64（展示超过 16 字符时按组件契约截断并提供完整 tooltip）
 - 校验失败 → Input 显示 destructive 边框 + 错误文字
 
 **最近 5 个（FIFO）**：
@@ -697,6 +695,14 @@ V2 实施时补充：
 ---
 
 *附录结束。完整组件契约见 [ui-interaction-spec.md](./ui-interaction-spec.md)。*
+
+---
+
+## 14. 变更日志
+
+| 版本 | 日期 | 变更 |
+|---|---|---|
+| V1.4 | 2026-08-20 | 对齐报告：完成前端实现后的 5 项语义硬检查。Source Events 与 ipc-contract §5 一致；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题编辑字段与 theme-format 字段表一致；ADR-0001 / KAD-03 / KAD-06 引用有效。同步确认 5 个主业务导航 + 设置入口，并补齐 `badgeOrientation` IPC 持久化。 |
 
 ---
 

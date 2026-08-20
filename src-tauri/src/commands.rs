@@ -39,6 +39,7 @@ fn shared(app: &AppHandle) -> std::sync::Arc<SharedState> {
 // ---- 状态查询 ----
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppStateSnapshot {
     pub service: ServiceSnapshot,
     pub device: DeviceSnapshot,
@@ -86,6 +87,7 @@ pub fn get_app_state(app: AppHandle) -> CmdResult<AppStateSnapshot> {
 // ---- 主题域 ----
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ThemeMeta {
     pub name: String,
     pub builtin: bool,
@@ -101,10 +103,12 @@ pub fn get_themes(app: AppHandle) -> CmdResult<Vec<ThemeMeta>> {
         if let Ok(entries) = std::fs::read_dir(dir) {
             for e in entries.flatten() {
                 let path = e.path();
-                if path.extension().and_then(|x| x.to_str()) == Some("ailight-theme") {
-                    if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
-                        names.push(ThemeMeta { name: name.to_string(), builtin: false });
-                    }
+                if let Some(name) = path
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .and_then(|value| value.strip_suffix(".ailight-theme.json"))
+                {
+                    names.push(ThemeMeta { name: name.to_string(), builtin: false });
                 }
             }
         }
@@ -211,8 +215,7 @@ pub(crate) async fn connect_device_internal(
 
 #[tauri::command]
 pub async fn connect_device(app: AppHandle, address: String) -> CmdResult<()> {
-    let name = address.clone();
-    connect_device_internal(&app, &address, &name).await.map_err(internal)
+    connect_device_internal(&app, &address, "").await.map_err(internal)
 }
 
 // ---- 控制域 ----
@@ -251,10 +254,12 @@ pub fn get_config(app: AppHandle) -> CmdResult<AppConfig> {
 }
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConfigPatch {
     pub arbitration_mode: Option<String>,
     pub token: Option<String>,
     pub autostart: Option<bool>,
+    pub badge_orientation: Option<String>,
 }
 
 #[tauri::command]
@@ -277,6 +282,12 @@ pub fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppConfig>
     }
     if let Some(autostart) = patch.autostart {
         cfg.autostart = autostart;
+    }
+    if let Some(orientation) = &patch.badge_orientation {
+        if orientation != "horizontal" && orientation != "vertical" {
+            return Err(err("BAD_REQUEST", format!("badgeOrientation 非法: {orientation}")));
+        }
+        cfg.badge_orientation = orientation.clone();
     }
     persist_config(&app, &cfg)?;
     Ok(cfg.clone())

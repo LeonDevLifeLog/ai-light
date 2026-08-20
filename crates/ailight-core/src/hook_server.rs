@@ -35,6 +35,7 @@ pub fn valid_name(s: &str) -> bool {
 // ---- 对外快照结构（ipc-contract get_app_state / hook-api /api/status） ----
 
 #[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct DeviceSnapshot {
     pub connected: bool,
     pub address: Option<String>,
@@ -47,6 +48,7 @@ pub struct DeviceSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BusinessSnapshot {
     pub state: String,
     pub source: Option<String>,
@@ -56,6 +58,7 @@ pub struct BusinessSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServiceSnapshot {
     pub version: String,
     pub port: u16,

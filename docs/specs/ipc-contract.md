@@ -53,8 +53,8 @@
 |---|---|---|---|---|
 | `get_themes()` | — | `[{ "name": "default", "builtin": true }, …]`（不含内容） | — | P1 |
 | `get_theme(name)` | name: string | 主题完整 JSON（theme-format V1.0） | `NOT_FOUND` | P1 |
-| `set_active_theme(name)` | name: string | `{ "ok": true }` | `NOT_FOUND` / `THEME_INVALID` | P1 |
-| `import_theme(content)` | content: 主题 JSON 字符串 | `{ "name": "<主题名>" }` | `THEME_INVALID` / `CONFLICT`（与内置同名） | P1 |
+| `set_active_theme(name)` | name: string | `()` | `NOT_FOUND` / `THEME_INVALID` | P1 |
+| `import_theme(content)` | content: 主题 JSON 字符串 | 主题名 string | `THEME_INVALID` / `CONFLICT`（与内置同名） | P1 |
 | `export_theme(name)` | name: string | `{ "content": "<JSON 字符串>" }` | `NOT_FOUND` | P2 |
 | `delete_theme(name)` | name: string | `{ "ok": true }` | `NOT_FOUND` / `THEME_BUILTIN`（内置不可删） | P2 |
 
@@ -65,7 +65,7 @@
 | Command | 请求 | 响应 | 错误码 | 优先级 |
 |---|---|---|---|---|
 | `scan_devices()` | — | `[{ "name": "ACLight-1A2B", "address": "AA:BB:…", "rssi": -55, "recognized": true }]` | — | P1 |
-| `connect_device(address)` | address: string | `{ "ok": true }`（连接异步，结果走 events） | `NOT_FOUND` | P1 |
+| `connect_device(address)` | address: string | `()`（连接结果同时走 events） | `NOT_FOUND` | P1 |
 | `disconnect_device()` | — | `{ "ok": true }` | — | P2 |
 | `forget_device()` | — | `{ "ok": true }` | — | P2 |
 
@@ -77,9 +77,9 @@
 
 | Command | 请求 | 响应 | 错误码 | 优先级 |
 |---|---|---|---|---|
-| `trigger_state(state, meta?)` | state: string, meta?: object | `{ "applied": boolean }` | `BAD_REQUEST` | P1 |
-| `preview_scene(state, theme?)` | state: string, theme?: string | `{ "ok": true }` | `NOT_FOUND` / `THEME_INVALID` / `DEVICE_NOT_CONNECTED` | P1 |
-| `reset_outputs()` | — | `{ "ok": true }` | — | P1 |
+| `trigger_state(state, meta?)` | state: string, meta?: object | boolean（是否生效） | `BAD_REQUEST` | P1 |
+| `preview_scene(state, theme?)` | state: string, theme?: string | `()` | `NOT_FOUND` / `THEME_INVALID` / `DEVICE_NOT_CONNECTED` | P1 |
+| `reset_outputs()` | — | `()` | — | P1 |
 
 - **`trigger_state`**：`source` 固定 `"manual"`，走仲裁器（与 hook-api 同语义），`applied` 幂等对账
 - **`preview_scene`**：用主题的 state 映射编译 SCENE，以 **RESTART_SCENE** 语义下发试听；**不改变业务状态**；设备未连接返回 `DEVICE_NOT_CONNECTED`
@@ -92,7 +92,7 @@
 | `get_config()` | — | Config（§3） | — | P1 |
 | `update_config(patch)` | patch: Partial\<Config> | 更新后完整 Config | `BAD_REQUEST` | P1 |
 
-**`update_config` 允许字段**：`arbitrationMode` / `token` / `autostart`。`portPreference` 变更**需要重启 HTTP 服务**，P1 实现为：立即重启（成功则返回新 Config；失败回滚旧值）。`rememberedDevice` 由连接流程管理，不接受用户 patch。
+**`update_config` 允许字段**：`arbitrationMode` / `token` / `autostart` / `badgeOrientation`。`portPreference` P1 只读，变更与 HTTP 服务热重启留待 P2；`rememberedDevice` 由连接流程管理，不接受用户 patch。
 
 ## 3. config.json Schema
 
@@ -108,7 +108,8 @@
     "name": "ACLight-1A2B"
   },
   "token": "",                     // 空字符串 = 不校验（hook-api §7）；非空 = 启用 Bearer 校验
-  "autostart": false               // 开机自启（KAD-06 SHOULD）
+  "autostart": false,              // 开机自启（KAD-06 SHOULD）
+  "badgeOrientation": "horizontal" // "horizontal"（默认）| "vertical"
 }
 ```
 
