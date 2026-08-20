@@ -111,8 +111,20 @@ pub struct Engine {
 
 impl Engine {
     /// 创建引擎并启动 outbound 消费任务。
-    /// `io` 为底层传输（BLE 实现或 mock）；`mode` 为初始仲裁模式。
+    /// `io` 为底层传输（BLE 实现或 mock）。
+    ///
+    /// **Precondition**: 必须在 Tokio runtime 上下文中调用（内部使用 `tokio::spawn`）。
+    /// Tauri `.setup()` 回调运行在 AppKit 主线程（不在 runtime），调用前需用
+    /// `tauri::async_runtime::handle().inner().enter()` 的 guard 包住。
+    /// 详见 `docs/decisions/ADR-0003-async-执行模型边界与setup契约.md` D-02 / D-03
+    /// 与 `docs/specs/architecture.md` KAD-08。
     pub fn new(shared: Arc<SharedState>, io: Arc<dyn crate::transport::TransportIo>) -> Self {
+        // 开发期防御：未来若有人从 sync 上下文误调，debug 构建立刻可见（KAD-08 D-03）。
+        debug_assert!(
+            tokio::runtime::Handle::try_current().is_ok(),
+            "Engine::new 必须在 Tokio runtime 上下文中调用（内部使用 tokio::spawn）。\
+             见 docs/decisions/ADR-0003 / KAD-08。"
+        );
         let transport = Transport::new(io, None);
         let task_transport = transport.clone();
         let mut rx = shared.outbound_rx();
@@ -420,5 +432,39 @@ mod tests {
         assert_eq!(parsed.cmd, crate::protocol::CMD_SET_SCENE);
         let scene = OutputScene::decode_data(&parsed.data).unwrap();
         assert_eq!(scene, OutputScene::none()); // IDLE → 全灭
+    }
+
+    /// 反向测试：复现 macOS 启动期 abort 路径（KAD-08 / ADR-0003）。
+    ///
+    /// `Engine::new` 在新线程（无 runtime 上下文）里构造，等价于生产环境
+    /// Tauri `.setup()` 回调（AppKit 主线程）直接构造 Engine 的失败路径。
+    /// `debug_assert!` 应触发并被 `catch_unwind` 接住。
+    ///
+    /// 仅在 debug 构建有意义（release 下 `debug_assert!` 被消除）。
+    #[test]
+    #[cfg(debug_assertions)]
+    fn engine_new_requires_tokio_runtime() {
+        let shared = SharedState::new("test", ArbitrationMode::Priority, || 1000);
+        *shared.theme.write().unwrap() = Some(load_default_theme());
+        let io = MockIo::new();
+
+        let handle = std::thread::Builder::new()
+            .spawn(|| {
+                // 双重确认：在新线程里 try_current() 必返回 Err（生产事故路径）。
+                assert!(
+                    tokio::runtime::Handle::try_current().is_err(),
+                    "新线程不应自带 runtime 上下文"
+                );
+                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let _ = Engine::new(shared, io);
+                }));
+                assert!(
+                    outcome.is_err(),
+                    "Engine::new 在非 runtime 上下文应触发 debug_assert；\
+                     若此处通过，说明 KAD-08 / ADR-0003 的防御被悄悄关掉了。"
+                );
+            })
+            .expect("spawn 测试线程");
+        handle.join().expect("join 测试线程");
     }
 }

@@ -63,7 +63,22 @@ pub struct Transport {
 
 impl Transport {
     /// 创建传输；`timeout_ms` 应答超时（0 = 默认 500ms）
+    ///
+    /// **Precondition**: 必须在 Tokio runtime 上下文中调用（内部使用 `tokio::spawn`
+    /// 启动 writer 任务；该函数依赖 thread-local runtime handle）。
+    /// Tauri 的 `.setup()` 回调运行在 AppKit 主线程、**不在** runtime 上下文中，
+    /// 调用前需用 `tauri::async_runtime::handle().inner().enter()` 的 guard 包住。
+    /// 详见 `docs/decisions/ADR-0003-async-执行模型边界与setup契约.md` D-02 / D-03
+    /// 与 `docs/specs/architecture.md` KAD-08。
     pub fn new(io: Arc<dyn TransportIo>, timeout_ms: Option<u64>) -> Self {
+        // 开发期防御：未来若有人从 sync 上下文（特别是 Tauri setup 回调）误调，
+        // 在 debug 构建立刻可见，避免线上 abort（KAD-08 D-03）。
+        debug_assert!(
+            tokio::runtime::Handle::try_current().is_ok(),
+            "Transport::new 必须在 Tokio runtime 上下文中调用（内部使用 tokio::spawn）。\
+             Tauri setup 回调请用 tauri::async_runtime::handle().inner().enter() 的 guard 包住调用。\
+             见 docs/decisions/ADR-0003 / KAD-08。"
+        );
         let (tx, rx) = mpsc::channel(64);
         let timeout_ms = timeout_ms.unwrap_or(RESPONSE_TIMEOUT_MS);
         tokio::spawn(writer_task(io, rx, timeout_ms));
@@ -322,5 +337,36 @@ mod tests {
         // 严格串行：两个 write 已按序发出
         let writes = h.io.writes();
         assert_eq!(writes.len(), 2);
+    }
+
+    /// 反向测试：复现 macOS 启动期 abort 路径（KAD-08 / ADR-0003）。
+    ///
+    /// 在新线程里构造 `Transport`（thread-local runtime 上下文为空），等价于
+    /// 生产环境 Tauri `.setup()` 回调在 AppKit 主线程（非 runtime）构造 Engine 的
+    /// 失败路径。`debug_assert!` 应触发并被 `catch_unwind` 接住。
+    ///
+    /// 仅在 debug 构建有意义（release 下 `debug_assert!` 被消除）。
+    #[test]
+    #[cfg(debug_assertions)]
+    fn transport_new_requires_tokio_runtime() {
+        let io = MockIo::new();
+        let handle = std::thread::Builder::new()
+            .spawn(|| {
+                // 双重确认：在新线程里 try_current() 必返回 Err（生产事故路径）。
+                assert!(
+                    tokio::runtime::Handle::try_current().is_err(),
+                    "新线程不应自带 runtime 上下文"
+                );
+                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let _ = Transport::new(io, None);
+                }));
+                assert!(
+                    outcome.is_err(),
+                    "Transport::new 在非 runtime 上下文应触发 debug_assert；\
+                     若此处通过，说明 KAD-08 / ADR-0003 的防御被悄悄关掉了。"
+                );
+            })
+            .expect("spawn 测试线程");
+        handle.join().expect("join 测试线程");
     }
 }

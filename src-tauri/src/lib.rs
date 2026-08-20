@@ -73,7 +73,13 @@ pub fn run() {
 
             // 设备代理 + 引擎
             let device_io = DeviceIo::new();
-            let engine = Engine::new(shared.clone(), device_io.clone());
+            // Engine::new 内部使用 tokio::spawn，必须处于 runtime 上下文；
+            // setup 回调运行在 AppKit 主线程（不在 runtime 上下文），故显式 enter。
+            // 见 docs/decisions/ADR-0003 / docs/specs/architecture.md KAD-08。
+            let engine = {
+                let _guard = tauri::async_runtime::handle().inner().enter();
+                Engine::new(shared.clone(), device_io.clone())
+            };
 
             // L1 HTTP 接入服务
             let hs_shared = shared.clone();
