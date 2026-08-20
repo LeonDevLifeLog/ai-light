@@ -521,4 +521,183 @@ V2 实施时补充：
 
 ---
 
+## 附录 A：中粒度补充（与 [ui-interaction-spec.md](./ui-interaction-spec.md) 对齐）
+
+> 本附录是 ui-interactions.md 的中粒度补充章节，对原 §2~§13 中颗粒不足处做扩展。
+> 完整组件级行为契约见姊妹文档 [ui-interaction-spec.md](./ui-interaction-spec.md)（L4 组件层 + L5 关键控件 + 联动矩阵 + 失败路径）。
+
+### A.1 §2.3 扩展：组件视觉态全集（8 态）
+
+| 态 | 触发条件 | 视觉（由 ui-design.md 代币落地） |
+|---|---|---|
+| `default` | 初始 / 数据就绪 | bg-elev + border-soft |
+| `hover` | 鼠标悬停 / 触控长按 | border + shadow-md 提升 |
+| `focus` | Tab 聚焦 / 编程聚焦 | 2px ring（颜色 = `--ring`） |
+| `active` | 鼠标按下 / 触发中 | bg-secondary + `scale(0.98)` 150ms |
+| `disabled` | 不可用 | opacity 0.5 + cursor not-allowed |
+| `loading` | 异步进行中 | 内嵌 pulse 动画 + 占位骨架 |
+| `error` | 校验失败 / 操作失败 | border-destructive + 抖动 200ms 一次 |
+| `empty` | 无数据 | 纯文字提示 + 主操作按钮 |
+
+每个可交互组件必须支持上述 8 态。具体每个组件的态全集见 [ui-interaction-spec.md §6~§8](./ui-interaction-spec.md)。
+
+---
+
+### A.2 §3.1 扩展：红绿灯徽章微交互
+
+**朝向切换**：CSS transition 250ms ease-out（横→纵、纵→横过渡平滑）。
+
+**状态切换动画**：
+- 颜色变化：fade 200ms
+- 呼吸（WORKING）：2s 周期 ease-in-out infinite
+- 闪烁（ERROR）：1Hz 0/49%-50/100%）
+- 切换生效：`prefers-reduced-motion: reduce` 时关闭呼吸/闪烁动画（仅颜色与文字标识）
+
+**离线态**：设备断开时，3 灯全暗 + opacity 0.4 + 文字提示 "设备离线"。
+
+**联动**：`business-state-changed` → 立即更新；`device-connection-changed` → 切换离线态。
+
+---
+
+### A.3 §3.3 扩展：设备卡 7 种态
+
+| 态 | 触发条件 | 视觉 | 可点击 |
+|---|---|---|---|
+| `disconnected` | `!connected` | 占位卡 + 虚线边框 + "未连接" tag | [去连接] → `/devices` |
+| `connecting` | 蓝牙握手进行中 | spinner + "连接中..." | 禁用 |
+| `connected` | 握手完成 | 完整字段 + "已连接" tag（accent） | hover → [断开] P2 |
+| `reconnecting` | 链路异常退避重连 | spinner + "重连中...(N/M)" | 禁用 |
+| `lowBattery` | `batteryPercent < 20` | 电池格 warning 色 + Toast 警告 | 同 connected |
+| `charging` / `full` | `chargeState` 变化 | 电池格 + ⚡ / ✓ 图标 | 同 connected |
+| `fault` | 收到 `device-fault` | 红色故障指示条 + tooltip 显示 source/code | 同 connected |
+
+**边界条件**：
+- 无电池版：`batteryPercent = null` → "无电池"
+- `batteryPercent == 0xFF`（未标定） → `--`
+- `rssi` 不可用 → 信号条 0 格 + "信号未知"
+- `sinceTs > 30s` 未更新 → "30+ 秒前"（warning 色）
+
+---
+
+### A.4 §4.x 新增：蓝牙交互各阶段 UI 反馈（V0.4 §5）
+
+| 阶段 | 后端动作 | UI 反馈 | 失败 Toast |
+|---|---|---|---|
+| 1. BLE 连接 | `btleplug.connect` | 设备卡 `Connecting` + spinner | "连接失败：`<reason>`" |
+| 2. DIS 读取 | `read DIS 0x2A26` | （silent） | （日志） |
+| 3. CCC 使能 | `subscribe TX CCC` | （silent） | "无法使能通知通道" + 断开 |
+| 4. DEVICE_READY | 等设备主动事件（≤3s） | （silent） | "设备无应答" + 断开 |
+| 5. GET_DEVICE_INFO | `0x02` | 设备卡显示 fw/hardwareVariant | "读取设备信息失败" + 断开 |
+| 6. GET_CAPABILITIES | `0x04` | 设备卡"就绪"，触发引擎 resync | "读取设备能力失败" + 断开 |
+| 7. BAS 订阅（可选） | `subscribe BAS 0x2A19/0x2BED` | 设备卡出现电量字段 | （日志；无电池版正常） |
+| 8. GET_POWER_STATUS | `0x50` | 设备卡电源/电量字段填入 | "读取电源状态失败" + 断开 |
+
+**任一阶段失败** → 设备卡回滚到 `Disconnected` + 触发 `device-connection-changed{connected: false, reason}`。
+
+**断连宽限期**（V0.4 §13）：
+
+| 时间窗口 | 设备侧行为 | UI 反馈 |
+|---|---|---|
+| 断开瞬间 | 当前 SCENE 继续运行 | Toast "设备已断开" + 设备卡 `Reconnecting` 态 |
+| 0~60s | 等重连 | Toast "重连中..."（可关闭） |
+| 60s 内重连成功 | 无感恢复 | Toast "设备已重新连接" + 设备卡恢复 |
+| 60s 超时 | 设备自动 RESET_OUTPUTS | Toast "设备已离线" + 设备卡 `Disconnected` + [去连接] 高亮 |
+| 重连失败 N 次 | 退避后停止 | Toast "重连失败，请检查设备" |
+
+---
+
+### A.5 §6.7 新增：主题导入的 UI 细化
+
+**文件选择器**：
+- 扩展名过滤：仅 `.ailight-theme.json`
+- 文件大小限制：1 MB（> 则拒绝）
+- 解析过程：显示 Progress（< 100ms 通常瞬切）
+
+**失败类型 → UI 反馈**：
+
+| 失败类型 | UI 反馈 |
+|---|---|
+| 文件 > 1MB | Dialog "文件过大（>1MB）" |
+| JSON 解析失败 | Dialog "JSON 解析失败：第 X 行 Y 列 `<reason>`" |
+| 顶层多键 / 缺键 | Dialog "校验失败：缺少/多余键 `<key>`" |
+| SCENE 引用不存在 | Dialog "校验失败：states[`<state>`].scene 引用 `<scene>` 不存在" |
+| 字段非法 | Dialog "校验失败：`<field>` 值非法：`<value>`"（如 brightness=0、duration_ms=0） |
+| 与内置同名 | Dialog "导入失败：与内置主题 `<name>` 同名" |
+
+**成功**：网格新增卡 + Toast "导入成功：`<name>`"。
+
+---
+
+### A.6 §8.2 新增：自定义状态行为细化
+
+**输入校验**：
+- trim 后必须匹配 `[a-zA-Z0-9_-]+`
+- 长度 1~16
+- 校验失败 → Input 显示 destructive 边框 + 错误文字
+
+**最近 5 个（FIFO）**：
+- 来源：CustomStateInput 提交成功的状态名
+- 持久化：localStorage 或 config（待定）
+- 去重：相同名不重复入栈
+- 排序：最近使用在前
+- 容量超出：移除最旧
+
+**主题映射失败**：
+- 全灭（fallback IDLE）
+- Toast "该状态未在主题中映射"
+
+**与 5 标准状态同名**：仍按 5 标准状态处理（不视为自定义）。
+
+---
+
+### A.7 §11 扩展：错误处理矩阵细化（错误码精确映射）
+
+**ipc-contract §4**：
+
+| 错误码 | UI 反馈 |
+|---|---|
+| `NOT_FOUND` | Toast "`<对象>` 不存在" |
+| `THEME_INVALID` | Dialog "主题校验失败：`<details>`" |
+| `CONFLICT` | Dialog "与内置主题 `<X>` 同名" |
+| `THEME_BUILTIN` | Dialog "内置主题不可删除" |
+| `BAD_REQUEST` | Toast "请求参数非法：`<reason>`" |
+| `DEVICE_NOT_CONNECTED` | Toast "请先连接设备" + 跳转 `/devices` |
+
+**蓝牙 V0.4 §3.6**：
+
+| Result code | UI 反馈 |
+|---|---|
+| `0x06 VERSION_MISMATCH` | Toast "设备协议版本不兼容，请升级固件" + 断开 |
+| `0x09 LOW_BATTERY` | Toast "电量过低，灯效已停止" + 设备卡 lowBatteryBadge 高亮 |
+| `0x0B NOT_SUPPORTED` | Toast "设备不支持此操作" |
+| `0x07 NOT_READY` | Toast "设备未就绪" |
+| `0x02 INVALID_PARAMETER` | Toast "灯效参数非法：`<field>`" |
+| `0x04 BUSY` | Toast "设备忙，请稍后" |
+| `0x05 INVALID_STATE` | Toast "设备当前不允许此操作" |
+| `0x0A INTERNAL_ERROR` | Toast "设备内部异常" + 触发 `device-fault` |
+
+---
+
+### A.8 §13 扩展：键盘焦点流
+
+| 页面 | Tab 顺序 | 快捷键 |
+|---|---|---|
+| Dashboard | （无可交互元素，焦点默认 body） | — |
+| Devices | 重新查找 → 扫描结果 [连接] × N | Cmd/Ctrl+R = 重新查找 |
+| Integrations | 客户端卡 × 4：[测试连接] → [查看 JSON] → [复制] | — |
+| Themes | 编辑当前主题 → 导入新主题 → 主题卡 [使用此主题] × N | Cmd/Ctrl+I = 导入 |
+| Preview | 5 标准按钮 → 自定义输入 → [触发] → 最近 N → [全部重置] | `1`~`5` = 标准状态；`0` = 全部重置 |
+| Settings | 按视觉顺序 Tab | Esc 关闭 Dialog |
+| 全局 | — | Esc 关闭最上层 Dialog；Enter 提交当前焦点表单 |
+
+**焦点环**：所有可交互元素 `focus` 状态显示 2-4px 焦点环（`outline`），颜色 `var(--ring)`。
+
+**焦点陷阱**：Dialog 打开时焦点移到第一个可交互元素；Tab 在 Dialog 内循环；关闭时焦点回到触发元素。
+
+---
+
+*附录结束。完整组件契约见 [ui-interaction-spec.md](./ui-interaction-spec.md)。*
+
+---
+
 *文档结束。修改交互流程请同步更新本文与 [ui-design.md](./ui-design.md)。*

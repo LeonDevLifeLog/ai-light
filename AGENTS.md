@@ -52,6 +52,23 @@ pnpm typecheck        # tsc --noEmit
 - 协议层改动：golden tests 在 `protocol.rs`（对照协议文档 §17 全部帧示例，逐字节断言）。
 - `ble.rs` 的连接/发现路径依赖真硬件，无法单测——保持编译通过，实机验证（文档 U-01）。
 - 覆盖率基线：核心逻辑行覆盖 ~87%（排除硬件层），见 `cargo llvm-cov`。
+- **双文档内容驱动审计**（V1.3 替换原"季度审计 + 触发式审计"双条款）：作为 AI agent，**没有时间概念**，审计边界基于**内容信号**而非日历时间。触发条件 = 下列 5 个内容信号任一出现即立即执行审计，不留漂移窗口：
+  1. **会话入口触发**：每个新会话加载上下文时，自动 Read `ui-interactions.md` 与 `ui-interaction-spec.md` 章节标题与关键术语；发现章节缺失、引用断裂（指向不存在的文件 / 章节）、命名漂移（如视觉态全集 8 态名称不一致）立即在对话中告警。
+  2. **变更前触发**：本会话即将 Edit / Write `ui-interactions.md` 或 `ui-interaction-spec.md` 的任何章节前，先 Read 两份文档对应章节 + 上游 4 个文档（ipc-contract / theme-format / 蓝牙 V0.4 / architecture.md）的相关章节，标注本次修改可能影响 spec.md §3 / §4 / §5 / §6~§8 的哪些条目。
+  3. **变更后触发（自动）**：本次会话的 Edit / Write 落地后，在用户关闭会话或切到下一任务前自动跑一次"语义对齐检查"——5 项硬检查：
+     - spec.md §3 联动矩阵的 Source Event 名称是否仍在 ipc-contract.md §5 events 清单
+     - spec.md §4.1 失败路径的错误码是否仍在 ipc-contract.md §4 AppError.code 清单
+     - spec.md §4.2 蓝牙 result code 是否仍在蓝牙 V0.4 §3.6 清单
+     - spec.md §6 / §7 / §8 引用的 theme 字段名是否仍在 theme-format.md 字段表
+     - spec.md 引用的 ADR / KAD 编号是否仍在 `docs/decisions/ADR-*` 或 `docs/specs/architecture.md`
+     发现漂移 → 当前会话立即修复，不留到下次。
+  4. **用户触发**：用户输入"对齐" / "审计" / "audit" / "检查漂移" / "一致性" 等关键词立即执行。
+  5. **漂移信号触发**：发现以下任一情况立即审计：
+     - spec.md 引用的术语在原文档中已不存在（grep 不到）
+     - 上游文档新增字段但 spec.md 未引用
+     - spec.md 内部两个章节描述同一行为不一致
+     - ui-interactions.md 与 ui-interaction-spec.md 对同一概念描述矛盾
+  审计产出："对齐报告"追加到两份文档变更日志；严重漂移阻塞 PR。
 
 ## CI
 
@@ -67,6 +84,7 @@ pnpm typecheck        # tsc --noEmit
 | 接入层 HTTP 协议 | `docs/specs/hook-api.md` |
 | 主题文件格式 | `docs/specs/theme-format.md` |
 | 前端 ↔ Rust 契约 | `docs/specs/ipc-contract.md` |
+| L5 展示层组件契约（V1.0）| `docs/specs/ui-interaction-spec.md` |
 | 技术架构（KAD） | `docs/specs/architecture.md` |
 | 设计决策 | `docs/decisions/ADR-0001/0002/0003` |
 | 内置主题 | `docs/specs/themes/README.md` |
