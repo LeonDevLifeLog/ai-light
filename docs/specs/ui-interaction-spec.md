@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.13 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.13，2026-08-21） |
+| 文档版本 | V1.14 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.14，2026-08-21） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -218,7 +218,8 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `badgeOrientation` 变更 | `Sidebar.trayMenu` 单选 | — | patch |
 | `arbitrationMode` 变更 | `Settings.arbitrationCards` 选中卡片 | — | patch（ModeOption 卡片，见 §7.6.1） |
 | `autostart` 变更 | `Settings.autostartSwitch` | — | patch（先 OS 后 config，失败 `AUTOSTART_FAILED` 回滚） |
-| `config-changed`（Rust 事件） | 全组件 | `config.badgeOrientation` 等完整 Config | full sync |
+| `themeMode` 变更 | `html[data-theme]` + `Settings.themeModeCards` 选中卡片 | — | patch（亮/暗/跟随系统；system 实时响应 `prefers-color-scheme`） |
+| `config-changed`（Rust 事件） | 全组件 | `config.badgeOrientation` / `themeMode` 等完整 Config | full sync |
 
 > `portPreference` 热重启为 P2；`autostart` 真实切换已实装（2026-08-21，KAD-09），不再属于 P2。
 >
@@ -836,7 +837,7 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 ├─────────────────────────┤
 │ SettingGroup: 服务       │ port（只读）+ arbitrationMode + 接入保护状态
 ├─────────────────────────┤
-│ SettingGroup: 显示       │ badgeOrientation + 当前主题
+│ SettingGroup: 显示       │ themeMode + badgeOrientation + 当前主题
 ├─────────────────────────┤
 │ SettingGroup: 系统       │ autostart（✅ 可切换）
 └─────────────────────────┘
@@ -846,7 +847,7 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 
 **7.6.1 服务组**：服务端口（只读数值）；仲裁模式 = 两张 ModeOption 卡片（整行铺开，单选圆点 + 效果说明 + 「默认」标签）；接入保护 = 状态标签（"仅限本机" / "Token 已启用"）。
 
-**7.6.2 显示组**：灯组朝向（SegControl 横排/纵向）；当前主题 = 主题预览入口（Link → /themes）：3 个灯色圆点（取当前主题 WORKING/SUCCESS/ERROR 场景实际 `leds.high`/`low` 色）+ 主题名 + 可选「提示音」标记 + ChevronRight。预览随 `config.activeTheme` 变化刷新；主题读取失败回退为纯名称。
+**7.6.2 显示组**：外观模式 = 三张 ModeOption 卡片（亮色 / 暗色 / 跟随系统，图标 + 一句说明），切换经 `update_config(themeMode)` 持久化，`html[data-theme]` 即时更新；"跟随系统"下 `data-theme` 随 `prefers-color-scheme` 变化。灯组朝向（SegControl 横排/纵向）；当前主题 = 主题预览入口（Link → /themes）：3 个灯色圆点（取当前主题 WORKING/SUCCESS/ERROR 场景实际 `leds.high`/`low` 色）+ 主题名 + 可选「提示音」标记 + ChevronRight。预览随 `config.activeTheme` 变化刷新；主题读取失败回退为纯名称。
 
 **7.6.3 系统组**：开机自启 Switch（`aria-checked` + 开启态视觉 = 品牌绿底 + 滑块右移 16px）。
 
@@ -1209,7 +1210,7 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 ### 8.11 `SegControl`（segment control）
 
 **8.11.1 用途**
-分段单选控件（themeMode 暗/亮/自动 等）。
+分段单选控件（灯组朝向横排/纵向等）。外观模式（亮/暗/跟随系统）已实装为三张 ModeOption 卡片（见 §7.6.2），不使用本控件。
 
 **8.11.2 对外契约**
 
@@ -1768,6 +1769,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.14 | 2026-08-21 | 外观模式实装（亮/暗/跟随系统，用户触发）：§3.6 配置层联动表新增 `themeMode` 行（`html[data-theme]` + Settings 卡片选中态）；§7.6 Settings 区域显示组加入 themeMode；§7.6.2 补充三张 ModeOption 卡片契约（`update_config(themeMode)` 持久化 + `prefers-color-scheme` 实时响应）；§8.11 SegControl 用途示例更新（外观模式改用卡片）。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4（沿用 `BAD_REQUEST`）；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
 | V1.13 | 2026-08-21 | 设置页 UI 对账（以代码为事实源，用户触发审计）：§3.6 `arbitrationMode` 联动目标更新为选项卡片；§6.6 `SettingRow` 契约改为 `icon/title/description?/stacked?/children`；§7.6 Settings 区域补充仲裁模式选项卡片（ModeOption）与当前主题预览入口；§8.12 Switch 补开启态视觉；§8.13 Select 注明仲裁模式已改用卡片；§7.5 快捷键引用从失效的 §13.8 修正为附录 A.8。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5（含新增 `open-config`）；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003/0004、KAD-04/06/08/09 引用有效。 |
 | V1.12 | 2026-08-21 | G-06 开机自启实装对账（KAD-09 / ADR-0004）：§3.6 配置层联动表新增 `autostart` 行并移除 P2 标注；§6.6.5 边界条件改为真实切换 + `AUTOSTART_FAILED` 失败路径；§7 Settings 组 autostart 由禁用态改为可切换。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4（含新增 `AUTOSTART_FAILED`）；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003/0004、KAD-04/06/08/09 引用有效。同步修正版本头漂移（V1.10 → V1.12）。 |
 | V1.11 | 2026-08-21 | 断连 UX 闭环：§3.2 payload 增加 `reconnecting` / `reason`（值域 `link_lost` / `reconnect_failed`，由 Rust 侧 emit）；§4.4、§5.2 更新为前端 `Reconnecting` 视觉态与 Toast 已实装。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |

@@ -69,6 +69,7 @@ export interface AppConfig {
   badgeOrientation: "horizontal" | "vertical";
   portPreference: number;
   rememberedDevice: RememberedDevice | null;
+  themeMode: "light" | "dark" | "system";
   token: string;
   version: number;
 }
@@ -149,6 +150,7 @@ const mockConfig: AppConfig = {
   token: "",
   autostart: false,
   badgeOrientation: "horizontal",
+  themeMode: "dark",
 };
 
 const mockTheme: ThemeFile = {

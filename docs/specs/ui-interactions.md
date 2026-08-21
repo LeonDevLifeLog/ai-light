@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.14 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.14，2026-08-21） |
+| 文档版本 | V1.15 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.15，2026-08-21） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -23,7 +23,7 @@
 | `/integrations` | 接入外部工具 | 配置 Claude Code / Codex 等的 hook |
 | `/themes` | 主题中心 | 浏览 / 切换 / 编辑主题 |
 | `/preview` | 试听 | 手动触发任意状态以验证灯效 |
-| `/settings` | 设置 | 服务（端口 / 仲裁模式 / 接入保护）+ 显示（灯组朝向 / 当前主题）+ 系统（开机自启） |
+| `/settings` | 设置 | 服务（端口 / 仲裁模式 / 接入保护）+ 显示（外观模式 / 灯组朝向 / 当前主题）+ 系统（开机自启） |
 
 切换：单击 sidebar 任意项 → 对应 page-section 激活（其余隐藏）。
 
@@ -53,7 +53,7 @@
 
 ### 2.2 配置写入
 
-任何"修改后立即生效"的设置（灯组朝向、自启动、仲裁模式、主题名、主题编辑）走：
+任何"修改后立即生效"的设置（外观模式、灯组朝向、自启动、仲裁模式、主题名、主题编辑）走：
 
 ```
 前端 invoke `update_*` 或对应 command
@@ -356,6 +356,11 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 
 ### 9.2 显示
 
+- 外观模式（`themeMode`）：三张选项卡片（亮色 / 暗色 / 跟随系统），各带图标 + 一句说明；选中态同仲裁模式卡片（绿描边 + 淡绿底 + 圆点填充）。切换即时生效：
+  - 亮色：`<html data-theme="light">`，slate 浅底 + 深绿链接色
+  - 暗色：`<html data-theme="dark">`（默认，既有体验不变）
+  - 跟随系统：`data-theme` 随 `prefers-color-scheme` 实时切换（含 OS 运行中变更）
+  - 持久化经 `update_config(themeMode)` → config.json；重启首帧由 localStorage 引导缓存恢复（config 为事实源）
 - 灯组朝向（`badgeOrientation`）：[横排] [纵向] 分段控件，切换即时生效（红绿灯布局直接变）。
 - 当前主题：主题入口（Link → /themes）——三个灯色预览点（取当前主题 WORKING/SUCCESS/ERROR 场景实际灯色）+ 主题名 + 「提示音」标记（任一代表场景含蜂鸣时显示）+ 箭头。预览随 `config.activeTheme` 变化刷新，读取失败时回退为纯主题名。
 
@@ -363,7 +368,7 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 
 - 开机自启：✅ 已实装（2026-08-21，KAD-09 / ADR-0004）。Switch 真实切换：`update_config` 先 OS 后 config（OS 登录项为唯一事实源，config 为启动校准缓存）；失败返回 `AUTOSTART_FAILED` → Toast + 回滚到原值；重启时 `is_enabled()` 校准写回。
 
-> 未展示项：`themeMode`（P2 候选，P1 固定 Dark）、日志查看（P2）、portPreference 修改（P2 热重启）——页面不渲染，仅本文档记录。
+> 未展示项：日志查看（P2）、portPreference 修改（P2 热重启）——页面不渲染，仅本文档记录。
 
 ---
 
@@ -724,6 +729,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.15 | 2026-08-21 | 外观模式实装（亮/暗/跟随系统，用户触发）：§1.1 `/settings` 导航摘要与 §2.2 配置写入加入外观模式；§9.2 新增外观模式卡片（三选项 + `data-theme` 切换 + `update_config(themeMode)` 持久化 + localStorage 首帧引导），`themeMode` 从"未展示项"移除。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（沿用 `BAD_REQUEST`）；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（本次未触碰蓝牙章节）；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
 | V1.14 | 2026-08-21 | 设置页 UI 对账（以代码为事实源，用户触发审计）：§1.1 `/settings` 导航摘要更新；§9 按当前页面结构重写（服务/显示/系统三组，仲裁模式选项卡片 + 主题预览入口 + 接入保护标签）；§2.2 移除不存在的 `themeMode`；§14 补 U-08。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5（含新增 `open-config`）；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003/0004、KAD-03/06/08/09 引用有效。 |
 | V1.13 | 2026-08-21 | G-06 开机自启实装对账（KAD-09 / ADR-0004）：§9.4 系统设置由"P1 禁用态"改为真实切换（`update_config` 先 OS 后 config、`AUTOSTART_FAILED` 失败路径、启动校准）；§14 G-06 标记完成。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致（含新增 `AUTOSTART_FAILED`）；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003/0004、KAD-03/06/08/09 引用有效。同步修正版本头漂移（V1.10 → V1.13）。 |
 | V1.12 | 2026-08-21 | 断连 UX 闭环：§2.1 `device-connection-changed` payload 扩展 `reason` / `reconnecting`（值域 `link_lost` / `reconnect_failed`）；A.4 断连宽限标注前端 `Reconnecting` 视觉态与 Toast 已实装。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003、KAD-03/06/08 引用有效。 |

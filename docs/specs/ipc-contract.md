@@ -92,7 +92,7 @@
 | `get_config()` | — | Config（§3） | — | P1 |
 | `update_config(patch)` | patch: Partial\<Config> | 更新后完整 Config | `BAD_REQUEST` / `AUTOSTART_FAILED` | P1 |
 
-**`update_config` 允许字段**：`arbitrationMode` / `token` / `autostart` / `badgeOrientation`。`autostart` 采用"先 OS 后 config"：OS 登录项操作成功才写缓存，失败返回 `AUTOSTART_FAILED` 且 config 不变（KAD-09）。`portPreference` P1 只读，变更与 HTTP 服务热重启留待 P2；`rememberedDevice` 由连接流程管理，不接受用户 patch。
+**`update_config` 允许字段**：`arbitrationMode` / `token` / `autostart` / `badgeOrientation` / `themeMode`（`"light" | "dark" | "system"`，非法值返回 `BAD_REQUEST`）。`autostart` 采用"先 OS 后 config"：OS 登录项操作成功才写缓存，失败返回 `AUTOSTART_FAILED` 且 config 不变（KAD-09）。`portPreference` P1 只读，变更与 HTTP 服务热重启留待 P2；`rememberedDevice` 由连接流程管理，不接受用户 patch。
 
 ## 3. config.json Schema
 
@@ -109,12 +109,13 @@
   },
   "token": "",                     // 空字符串 = 不校验（hook-api §7）；非空 = 启用 Bearer 校验
   "autostart": false,              // 开机自启（OS 登录项为唯一事实源，config 为启动校准缓存；KAD-09）
-  "badgeOrientation": "horizontal" // "horizontal"（默认）| "vertical"
+  "badgeOrientation": "horizontal", // "horizontal"（默认）| "vertical"
+  "themeMode": "dark"              // "dark"（默认）| "light" | "system"（外观模式；system = 跟随系统）
 }
 ```
 
 - 未知字段：加载时忽略并记日志（向前兼容）
-- 非法值：回退默认值 + 记日志，不拒绝启动
+- 非法值：回退默认值 + 记日志，不拒绝启动（`themeMode` 非法回退 `"dark"`）
 - `token` 明文存储为已知风险（KAD-04 后果，V2 迁系统钥匙串）
 
 ## 4. 错误码（AppError.code）
@@ -171,6 +172,6 @@
 - **P2 commands / event（5 个）**：❌ 全部未实现。
 - **错误码映射偏差**：`preview_scene` 在设备未连接时实际返回 `INTERNAL`（commands 层统一 `internal()` 映射），契约要求 `DEVICE_NOT_CONNECTED`——待修正；`THEME_BUILTIN` 依赖 P2 `delete_theme`，当前无代码路径。
 - **开机自启（G-06）**：✅ 已实装（2026-08-21）。`update_config` 先 OS 后 config（新增 `AUTOSTART_FAILED`）；setup 启动校准 `is_enabled()` 写回 config；平台 = macOS LaunchAgent / Windows Run key / Linux XDG autostart（tauri-plugin-autostart 2.5.1）；三平台实机待验证（U-08）。
-- **配置项**：`arbitrationMode` / `token`（服务端 Bearer 校验已实现）/ `badgeOrientation` / `rememberedDevice` 已生效；`autostart` 已接 `tauri-plugin-autostart`（OS 登录项为事实源，config 为校准缓存）；`portPreference` 已持久化但 `hook_server::serve` 未读取。
+- **配置项**：`arbitrationMode` / `token`（服务端 Bearer 校验已实现）/ `badgeOrientation` / `themeMode` / `rememberedDevice` 已生效；`autostart` 已接 `tauri-plugin-autostart`（OS 登录项为事实源，config 为校准缓存）；`portPreference` 已持久化但 `hook_server::serve` 未读取。
 
 *本文随实现推进修订；修改须同步更新 UI 设计与 Rust 实现双方。*

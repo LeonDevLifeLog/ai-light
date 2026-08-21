@@ -84,6 +84,7 @@ fn set_orientation(app: &AppHandle, orientation: &str) {
         token: None,
         autostart: None,
         badge_orientation: Some(orientation.to_string()),
+        theme_mode: None,
     };
     if let Err(e) = crate::commands::update_config(app.clone(), patch) {
         tracing::warn!("托盘切换徽章朝向失败: {e:?}");

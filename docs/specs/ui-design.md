@@ -2,11 +2,11 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V0.9 |
-| 文档状态 | ⏸ 设计阶段，待用户审阅后定稿 |
+| 文档版本 | V1.0 |
+| 文档状态 | ✅ 已定稿（2026-08-21：双主题 + 外观模式切换落地） |
 | 范围 | L5 展示层（前端 UI + 托盘 + 窗口生命周期） |
 | 上游 | [docs/specs/ipc-contract.md V1.0](./ipc-contract.md)、[theme-format.md V1.0](./theme-format.md)、[architecture.md](./architecture.md) KAD-06 |
-| 设计方法 | ui-ux-pro-max skill（Dark OLED 基线 + Inter 字体 + 代码深/运行绿调色板） |
+| 设计方法 | ui-ux-pro-max skill（Dark OLED 基线 + Light 可切换 + Inter 字体 + 代码深/运行绿调色板） |
 | 决策人 | 李昻 / 小艺 |
 | 关联 | [docs/requirements/product-boundary.md L5](../requirements/product-boundary.md) |
 
@@ -34,13 +34,14 @@
 
 ## 3. 设计基线 ✅
 
-### 3.1 Style — Dark Mode (OLED) 优先
+### 3.1 Style — 双主题（Dark 基线 + Light 可切换）✅
 
-- **Dark 优先**：开发者工具，弱光环境常用；OLED 屏省电护眼
-- 浅色模式作为可选项（P2 暂缓）
-- 调色板语义：代码深 + 运行绿（与"指示灯亮起"的视觉隐喻一致）
+- **Dark 基线**：开发者工具，弱光环境常用；OLED 屏省电护眼。`themeMode` 默认 `"dark"`（config 缺省值），既有用户升级后外观不变
+- **Light 模式**：slate 中性浅底 + 运行绿品牌色；正文对比度 ≥ 7:1、次级文字 ≥ 4.5:1、链接/激活文字 ≥ 4.5:1（WCAG AA，见 §9.3）
+- **外观模式设置**（`/settings` → 显示 → 外观模式）：**亮色 / 暗色 / 跟随系统** 三选项卡片；"跟随系统"通过 `prefers-color-scheme` 实时响应 OS 外观
+- 调色板语义：代码深 + 运行绿（与"指示灯亮起"的视觉隐喻一致）；两套主题共享同一语义 token 集，亮色只覆盖值、不改角色（§3.2 / §10.1）
 
-### 3.2 调色板（采纳 ui-ux-pro-max 推荐）
+### 3.2 调色板 — 暗色基线（采纳 ui-ux-pro-max 推荐）
 
 | 角色 | Hex | CSS Variable | 用途 |
 |---|---|---|---|
@@ -54,6 +55,24 @@
 | Border | `#475569` | `--color-border` | 分割线 / 边框 |
 | Destructive | `#EF4444` | `--color-destructive` | ERROR 状态 / 危险操作 |
 | Ring | `#1E293B` | `--color-ring` | 焦点环 |
+
+#### 3.2.1 亮色主题调色板（V1.0 新增 ✅）
+
+| 角色 | Hex | CSS Variable | 用途 |
+|---|---|---|---|
+| Primary | `#1E293B` | `--color-primary` | 主要文字 / 实色边界 |
+| Accent / CTA | `#22C55E` | `--color-accent` | 主强调（运行中绿，按钮底色） |
+| Accent Text | `#15803D` | `--color-accent-text` | 链接 / 激活导航 / 高亮小字（对白底 ≥ 4.5:1） |
+| Background | `#F8FAFC` | `--color-background` | 页面背景 |
+| Background Secondary | `#F1F5F9` | `--color-background-secondary` | 侧栏 / 次级表面 |
+| Surface | `#FFFFFF` | `--color-surface` | 卡片 / 对话框 |
+| Foreground | `#0F172A` | `--color-foreground` | 主要文字（对白底 17.8:1） |
+| Muted | `#E2E8F0` | `--color-muted` | 暗化表面 / 未激活灯位 |
+| Border | `#94A3B8` | `--color-border` | 分割线 / 边框（非文字 ≥ 3:1） |
+| Destructive | `#DC2626` | `--color-destructive` | ERROR / 危险操作文字 |
+| Ring | `#16A34A` | `--color-ring` | 焦点环 |
+
+**亮色状态语义色**（在 token 之上叠加）：SUCCESS/WORKING 文字 `#15803D`、WAITING 文字 `#B45309`、ERROR 文字 `#B91C1C`、信息文字 `#0369A1`；状态标签底色沿用语义色 10~14% alpha 淡底。
 
 **业务状态语义色（在 token 之上叠加）**：
 
@@ -76,6 +95,7 @@
 
 - 极简 glow（box-shadow / text-shadow `0 0 10px`）—— 用于状态变化时
 - 主题切换：**瞬切**（用户决策 ✅）
+- 外观（亮/暗）切换：**瞬切**；首帧由 `<html data-theme>` + localStorage 引导缓存避免闪白/闪黑（config.json 仍是唯一事实源）
 - 其他过渡：150-300ms ease-out
 - 严格遵循 `prefers-reduced-motion`（reduced 时关闭呼吸/闪烁）
 
@@ -304,6 +324,8 @@
   - 仲裁模式（**两张选项卡片**：优先级抢占[默认] / 最近活跃，各带效果说明；选中 = 绿描边 + 淡绿底 + 圆点）
   - 接入保护（状态标签："仅限本机" / "Token 已启用"；第一版不开放 Token 编辑，V2 再评估）
 - **显示**：
+  - **外观模式**（单选卡片 ×3，各带图标 + 一句说明）：亮色（"明亮底色，适合白天环境"）/ 暗色（"OLED 深色，弱光下更护眼"，默认）/ 跟随系统（"自动匹配操作系统外观"）
+    - 持久化：`update_config({ themeMode })` → config.json；重启恢复顺序 = config（事实源）→ localStorage 首帧缓存 → 系统外观兜底
   - **徽章朝向**（单选：横向 / 纵向）— 5.1.1 红绿灯徽章
   - **当前主题**（主题预览入口 → /themes：3 个灯色圆点取主题实际灯色 + 主题名 + 可选「提示音」标记）
 - **系统**：
@@ -466,7 +488,7 @@ persisted to config.json via update_config
 ### 9.3 颜色对比 ✅
 
 - 暗色模式 4.5:1（WCAG AA 正文）
-- 亮色模式 4.5:1（WCAG AA 正文，V2 启用）
+- 亮色模式 4.5:1（WCAG AA 正文，✅ 已实装 2026-08-21）：正文 `#0F172A` 对白底 17.8:1、次级 `#475569` 7.6:1、链接绿 `#15803D` 5.0:1
 - 红绿灯激活灯位 vs `#0F172A`：≥ 4.5:1
 - 未激活灯位 vs 背景：≥ 3:1（次要信息）
 
@@ -517,6 +539,22 @@ status/working     = color/accent      (#22C55E)
 status/waiting     = #F59E0B           (amber-500)
 status/success     = color/accent      (#22C55E)
 status/error       = color/destructive (#EF4444)
+
+/* 外观模式（config.themeMode）："dark"（默认）| "light" | "system" */
+theme/mode          = "dark" | "light" | "system"
+```
+
+**亮色覆盖值**（同一 token 角色，值随 `[data-theme="light"]` 切换；未列出的 token 与暗色共用）：
+
+```text
+color/accent-text   #15803D   /* 链接 / 激活导航 / 高亮小字 */
+color/destructive   #DC2626
+color/status-text/success  #15803D
+color/status-text/waiting  #B45309
+color/status-text/error    #B91C1C
+color/status-text/info     #0369A1
+shadow/sm          0 1px 2px rgba(15,23,42,0.06)
+shadow/md          0 8px 24px rgba(15,23,42,0.10)
 ```
 
 ### 10.2 字体 token
@@ -610,7 +648,7 @@ z/tooltip    = 300
 - **token 系统钥匙串**：❌ V2 未实现（U-07，迁 mac Keychain / win Credential Manager / linux secret-service）
 - **Tauri updater 在线升级**：❌ V2 未实现（需签名，L6 V2）
 - **多设备并发**：❌ V2 未实现（当前注册表只预留单灯）
-- **浅色模式**：❌ P2 未实现（用户决策 ⏸ #4）
+- **浅色模式 + 外观切换**：✅ 已实装（2026-08-21：亮/暗/跟随系统三选项，默认暗色；设计见 §3.1 / §3.2.1 / §5.5）
 
 ### 11.4 三平台实测（影响 release 阻塞）
 
@@ -687,7 +725,7 @@ z/tooltip    = 300
 | 1 | ~~状态徽章视觉~~ | ~~纯色块 / 呼吸 / 静态灯效~~ | **红绿灯式**（详见 5.1.1） | ✅ 已定 |
 | 2 | ~~主题切换过渡~~ | ~~瞬切 / 渐变~~ | **瞬切** | ✅ 已定 |
 | 3 | 试听面板自定义状态 | 是否加"最近 5 个自定义状态"快捷按钮组 | ✅ 已实装 | 对账：preview.tsx 已实现最近 5 个快捷按钮（本地会话内） |
-| 4 | 浅色模式 | P1 不做 / P2 启用 | ⏸ 建议 P2 暂缓 | 设计代币已为亮色预留 |
+| 4 | 浅色模式 | P1 不做 / P2 启用 | ✅ 已定并实装（2026-08-21） | 亮/暗/跟随系统三选项；默认暗色保留 Dark 基线；亮色代币见 §3.2.1 / §10.1 |
 | 5 | 主题编辑器 UI | P1 仅 JSON 导入 / P2 出 UI 编辑器 | ✅ 已实装（P1） | 对账：themes.tsx 已实现快速创作 + 轨道工作台（V1.5 重构），本行"P1 不做"作废 |
 
 ---
@@ -696,6 +734,7 @@ z/tooltip    = 300
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.0 | 2026-08-21 | 双主题落地（用户触发）：§3.1 由"Dark 优先、浅色 P2 暂缓"改为双主题基线；新增 §3.2.1 亮色调色板（WCAG AA 对比度实测）；§5.5 显示组新增「外观模式」（亮/暗/跟随系统三选项卡片，`update_config({ themeMode })` 持久化）；§9.3 亮色对比度标注已实装；§10.1 新增 themeMode token 与亮色覆盖值；§11.3 / §13 #4 浅色模式标记完成。 |
 | V0.1 | 2026-08-20 | 首版设计文档：信息架构 + 5 页面 + 红绿灯徽章方案 + 设计代币 + 路线图 + 验收剧本 |
 | V0.2 | 2026-08-21 | 实现状态对账（以代码为事实源）：§11 路线图逐项标注 ✅/⚠️/❌；§12 验收剧本标注未实现步骤；§13 决策表 #3（最近 5 个自定义状态）与 #5（主题编辑器）改为已实装；同步修正预览 SCENE 状态 |
 | V0.3 | 2026-08-21 | G-01~G-03 闭环对账：P1 events 5/5 全部 emit（断连双向 / `device-power-changed` / `device-fault`）；§12.5 断连重连后端链路已实现，前端 Toast/Reconnecting 视觉态与实机验证待办 |

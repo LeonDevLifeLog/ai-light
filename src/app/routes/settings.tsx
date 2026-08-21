@@ -1,10 +1,13 @@
 import {
   ChevronRight,
   Monitor,
+  Moon,
   Palette,
   Radio,
   Server,
   ShieldCheck,
+  Sun,
+  SunMoon,
   Volume2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -65,6 +68,32 @@ function themePreview(file: ThemeFile): {
   }
   return { swatches, hasSound };
 }
+
+const themeModeOptions: Array<{
+  value: AppConfig["themeMode"];
+  icon: typeof Sun;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "light",
+    icon: Sun,
+    label: "亮色",
+    description: "明亮底色，适合白天环境",
+  },
+  {
+    value: "dark",
+    icon: Moon,
+    label: "暗色",
+    description: "OLED 深色，弱光下更护眼",
+  },
+  {
+    value: "system",
+    icon: SunMoon,
+    label: "跟随系统",
+    description: "自动匹配操作系统外观",
+  },
+];
 
 export function SettingsPage() {
   const { snapshot, config, patchConfig, notify } = useAppState();
@@ -219,6 +248,47 @@ export function SettingsPage() {
           显示
         </h2>
         <Card className="settings-card">
+          <SettingRow
+            description="界面亮暗主题：亮色 / 暗色 / 跟随系统"
+            icon={<SunMoon />}
+            stacked
+            title="外观模式"
+          >
+            <fieldset
+              aria-label="外观模式"
+              className="mode-options mode-options--tri"
+            >
+              {themeModeOptions.map(
+                ({ value, icon: Icon, label, description }) => (
+                  <button
+                    aria-pressed={config.themeMode === value}
+                    className={cn(
+                      "mode-option",
+                      config.themeMode === value && "mode-option--active"
+                    )}
+                    disabled={saving === "themeMode"}
+                    key={value}
+                    onClick={() =>
+                      runAsync(update("themeMode", { themeMode: value }))
+                    }
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="mode-option__icon">
+                      <Icon size={17} />
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="mode-option__indicator"
+                    />
+                    <span className="mode-option__body">
+                      <span className="mode-option__name">{label}</span>
+                      <span className="mode-option__desc">{description}</span>
+                    </span>
+                  </button>
+                )
+              )}
+            </fieldset>
+          </SettingRow>
           <SettingRow
             description="状态总览中红绿灯的排列方向"
             icon={<Monitor />}

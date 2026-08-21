@@ -426,6 +426,7 @@ pub struct ConfigPatch {
     pub token: Option<String>,
     pub autostart: Option<bool>,
     pub badge_orientation: Option<String>,
+    pub theme_mode: Option<String>,
 }
 
 #[tauri::command]
@@ -466,6 +467,12 @@ pub fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppConfig>
         }
         cfg.badge_orientation = orientation.clone();
         crate::tray::update_orientation(&app, orientation);
+    }
+    if let Some(mode) = &patch.theme_mode {
+        if mode != "light" && mode != "dark" && mode != "system" {
+            return Err(err("BAD_REQUEST", format!("themeMode 非法: {mode}")));
+        }
+        cfg.theme_mode = mode.clone();
     }
     persist_config(&app, &cfg)?;
     let _ = app.emit("config-changed", &*cfg);
