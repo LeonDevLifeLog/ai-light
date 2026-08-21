@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.13 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.13，2026-08-21） |
+| 文档版本 | V1.14 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.14，2026-08-21） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -23,7 +23,7 @@
 | `/integrations` | 接入外部工具 | 配置 Claude Code / Codex 等的 hook |
 | `/themes` | 主题中心 | 浏览 / 切换 / 编辑主题 |
 | `/preview` | 试听 | 手动触发任意状态以验证灯效 |
-| `/settings` | 设置 | 主题模式 / 朝向 / 自启动 / 日志 |
+| `/settings` | 设置 | 服务（端口 / 仲裁模式 / 接入保护）+ 显示（灯组朝向 / 当前主题）+ 系统（开机自启） |
 
 切换：单击 sidebar 任意项 → 对应 page-section 激活（其余隐藏）。
 
@@ -53,7 +53,7 @@
 
 ### 2.2 配置写入
 
-任何"修改后立即生效"的设置（主题模式、灯组朝向、自启动、仲裁模式、主题名、主题编辑）走：
+任何"修改后立即生效"的设置（灯组朝向、自启动、仲裁模式、主题名、主题编辑）走：
 
 ```
 前端 invoke `update_*` 或对应 command
@@ -343,28 +343,27 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 
 ## 9. 设置（`/settings`）
 
-### 9.1 界面外观
+页面分三组卡片（服务 / 显示 / 系统），每行 = 图标 + 名称 + 一行用户友好说明 + 控件；页脚提示"所有设置即时生效并自动保存"。**不含任何开发者向文案**（P1/P2、明文存储、第一版不开放等均不出现）。
 
-- P1 固定使用 Dark OLED，不展示 `themeMode` 控件。
-- 浅色 / 跟随系统模式为 P2 候选；启用前需先把 `themeMode` 加入 ipc-contract Config schema 与 `update_config` 允许字段。
+### 9.1 服务
 
-### 9.2 灯组显示
+- 服务端口：只读显示当前监听端口（"智能体工具连接本机服务的端口，一般无需修改"）。
+- 仲裁模式：两张选项卡片（独占选择），选中态 = 绿色描边 + 淡绿底 + 圆点填充；「优先级抢占」带「默认」标签。选项与效果：
+  - 优先级抢占：重要状态优先——错误 > 完成 > 进行中 > 等待 > 空闲
+  - 最近活跃：最后上报状态的工具接管灯效
+  - 切换经 `update_config(arbitrationMode)` 即时生效（引擎热切换）。
+- 接入保护：状态标签（"仅限本机" / "Token 已启用"）；第一版 UI 不开放 Token 编辑入口（服务端 Bearer 校验见 hook-api §7）。
 
-- 灯组朝向（`badgeOrientation`）：[横排] [纵向]
-  - 横排（默认）：3 灯横排，灯径 40px
-  - 纵向：3 灯竖排，灯径 28px
-  - 切换即时生效（红绿灯布局直接变）
+### 9.2 显示
 
-### 9.3 接入密码
+- 灯组朝向（`badgeOrientation`）：[横排] [纵向] 分段控件，切换即时生效（红绿灯布局直接变）。
+- 当前主题：主题入口（Link → /themes）——三个灯色预览点（取当前主题 WORKING/SUCCESS/ERROR 场景实际灯色）+ 主题名 + 「提示音」标记（任一代表场景含蜂鸣时显示）+ 箭头。预览随 `config.activeTheme` 变化刷新，读取失败时回退为纯主题名。
 
-**第一版 UI 不开放**。服务端按 hook-api V1.0 §7 支持 `Authorization: Bearer <token>`， 但 Settings 页无入口。
+### 9.3 系统
 
-V2 评估何时重新加上：用户使用安全意识提升 / 设备被滥用 / 多用户共用同一台电脑等场景触发。
+- 开机自启：✅ 已实装（2026-08-21，KAD-09 / ADR-0004）。Switch 真实切换：`update_config` 先 OS 后 config（OS 登录项为唯一事实源，config 为启动校准缓存）；失败返回 `AUTOSTART_FAILED` → Toast + 回滚到原值；重启时 `is_enabled()` 校准写回。
 
-### 9.4 系统
-
-- 开机自启：✅ 已实装（2026-08-21，KAD-09 / ADR-0004）。Settings 页 Switch 真实切换：`update_config` 先 OS 后 config（OS 登录项为唯一事实源，config 为启动校准缓存）；失败返回 `AUTOSTART_FAILED` → Toast + 回滚到原值；重启时 `is_enabled()` 校准写回。
-- 查看日志：❌ P2 未实现（接入系统目录打开能力后开放）。
+> 未展示项：`themeMode`（P2 候选，P1 固定 Dark）、日志查看（P2）、portPreference 修改（P2 热重启）——页面不渲染，仅本文档记录。
 
 ---
 
@@ -531,6 +530,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | U-01 | btleplug 三平台冒烟（mac/win/linux） | P1 阻塞 release |
 | U-02 | axum 编译/启动验证 | P1 |
 | U-05 | 托盘图标三平台差异 | P1（托盘实装后） |
+| U-08 | 开机自启三平台实机（mac LaunchAgent / win Run key / linux XDG） | P1（自启实装后） |
 | V2-2 | 接入密码 UI 重新评估 | V2 |
 | V2-3 | 主题编辑器加入波形实时动画预览 | V2 |
 | V2-4 | 设备详情页（电量历史 / 固件升级）| V2 |
@@ -724,6 +724,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.14 | 2026-08-21 | 设置页 UI 对账（以代码为事实源，用户触发审计）：§1.1 `/settings` 导航摘要更新；§9 按当前页面结构重写（服务/显示/系统三组，仲裁模式选项卡片 + 主题预览入口 + 接入保护标签）；§2.2 移除不存在的 `themeMode`；§14 补 U-08。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5（含新增 `open-config`）；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003/0004、KAD-03/06/08/09 引用有效。 |
 | V1.13 | 2026-08-21 | G-06 开机自启实装对账（KAD-09 / ADR-0004）：§9.4 系统设置由"P1 禁用态"改为真实切换（`update_config` 先 OS 后 config、`AUTOSTART_FAILED` 失败路径、启动校准）；§14 G-06 标记完成。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致（含新增 `AUTOSTART_FAILED`）；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003/0004、KAD-03/06/08/09 引用有效。同步修正版本头漂移（V1.10 → V1.13）。 |
 | V1.12 | 2026-08-21 | 断连 UX 闭环：§2.1 `device-connection-changed` payload 扩展 `reason` / `reconnecting`（值域 `link_lost` / `reconnect_failed`）；A.4 断连宽限标注前端 `Reconnecting` 视觉态与 Toast 已实装。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003、KAD-03/06/08 引用有效。 |
 | V1.11 | 2026-08-21 | 产品形态调整：§10.1 首次启动改为"托盘常驻 + 启动即显示主窗口"（RunEvent::Ready → show + focus；macOS Dock 不显示），关窗后由托盘唤回。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003、KAD-03/06/08 引用有效。 |

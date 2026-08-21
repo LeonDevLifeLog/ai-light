@@ -125,8 +125,8 @@
 | `NOT_FOUND` | 对象不存在 | get_theme/set_active_theme/export/delete、connect_device 地址未扫到 |
 | `CONFLICT` | 冲突 | import_theme 与内置主题同名 |
 | `THEME_INVALID` | 主题校验失败 | import/set_active_theme/preview_scene（含校验失败原因于 message） |
-| `THEME_BUILTIN` | 内置主题不可操作 | delete_theme(内置) |
-| `DEVICE_NOT_CONNECTED` | 设备未连接 | preview_scene |
+| `THEME_BUILTIN` | 内置主题不可操作 | delete_theme(内置)——P2 未实现，当前无代码路径产生该码（预留） |
+| `DEVICE_NOT_CONNECTED` | 设备未连接 | preview_scene——契约目标；当前 preview_scene 未连接时实际返回 `INTERNAL`（待修正，见 §8） |
 | `AUTOSTART_FAILED` | 开机自启 OS 登录项操作失败 | update_config(autostart) 时 enable/disable 抛错（权限、路径失效、平台异常等） |
 | `INTERNAL` | 内部异常 | 兜底（含 BLE 下发失败） |
 
@@ -134,12 +134,13 @@
 
 | 事件名 | 触发时机 | payload | 实现状态（2026-08-21） |
 |---|---|---|---|
-| `business-state-changed` | 仲裁结果变化（含 hold 回落） | `{ state, source, session, sinceTs, theme }` | ✅ 已 emit |
+| `business-state-changed` | 仲裁结果变化（含 hold 回落） | `{ state, source, session, sinceTs, theme }`（`reset_outputs` 复位时仅携带 `state`，其余字段保持前端现值） | ✅ 已 emit |
 | `device-connection-changed` | 连接/断开（含断连宽限开始） | `{ connected, address, name, reason?, reconnecting? }`（`reason`：`link_lost` / `reconnect_failed`；`reconnecting`：断连后是否处于自动重连） | ✅ 连接 / 断连 / 重连放弃均已 emit |
 | `device-power-changed` | POWER_CHANGED / 握手后首次查询 | `{ batteryPercent, powerSource, chargeState, powerFlags }` | ✅ 握手 + 主动事件均已 emit |
 | `device-fault` | FAULT_EVENT | `{ source, code, context }` | ✅ 已 emit |
 | `theme-changed` | 主题切换生效 | `{ name }` | ✅ 已 emit |
 | `config-changed` | 配置更新成功（设置页 / 托盘徽章朝向） | 更新后完整 Config | ✅ 已 emit |
+| `open-config` | 托盘「打开配置」点击 | —（UI 导航事件） | ✅ 托盘已 emit，前端跳转 /devices |
 | `hook-log`（P2） | 每次 hook 事件受理 | `{ source, state, session, applied, ts }`（排障日志面板用） | ❌ P2 未实现 |
 
 **订阅约定**：前端启动时订阅全部事件；`get_app_state` 快照 + 事件增量构成完整视图。Rust 侧不关心前端是否在监听（事件可丢弃，前端可随时用快照自愈）。
@@ -166,8 +167,9 @@
 
 - **P1 commands（12 个）**：✅ 全部已注册（`src-tauri/src/commands.rs`）并由前端 `api` 层对接。
 - **P1 events（5 个）**：✅ 全部已 emit。`device-connection-changed` 覆盖连接与断连双向；`device-power-changed` 由握手 GET_POWER_STATUS 与 POWER_CHANGED 主动事件触发；`device-fault` 由 FAULT_EVENT 触发。
+- **UI 导航事件**：`open-config`（托盘「打开配置」）✅ 已 emit，前端订阅跳转 /devices。
 - **P2 commands / event（5 个）**：❌ 全部未实现。
-- **错误码映射偏差**：`preview_scene` 在设备未连接时实际返回 `INTERNAL`（commands 层统一 `internal()` 映射），契约要求 `DEVICE_NOT_CONNECTED`——待修正。
+- **错误码映射偏差**：`preview_scene` 在设备未连接时实际返回 `INTERNAL`（commands 层统一 `internal()` 映射），契约要求 `DEVICE_NOT_CONNECTED`——待修正；`THEME_BUILTIN` 依赖 P2 `delete_theme`，当前无代码路径。
 - **开机自启（G-06）**：✅ 已实装（2026-08-21）。`update_config` 先 OS 后 config（新增 `AUTOSTART_FAILED`）；setup 启动校准 `is_enabled()` 写回 config；平台 = macOS LaunchAgent / Windows Run key / Linux XDG autostart（tauri-plugin-autostart 2.5.1）；三平台实机待验证（U-08）。
 - **配置项**：`arbitrationMode` / `token`（服务端 Bearer 校验已实现）/ `badgeOrientation` / `rememberedDevice` 已生效；`autostart` 已接 `tauri-plugin-autostart`（OS 登录项为事实源，config 为校准缓存）；`portPreference` 已持久化但 `hook_server::serve` 未读取。
 

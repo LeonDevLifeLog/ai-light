@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.12 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.12，2026-08-21） |
+| 文档版本 | V1.13 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.13，2026-08-21） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -216,7 +216,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 |---|---|---|---|
 | `badgeOrientation: 'horizontal'\|'vertical'` | `TrafficBadge.layout` | — | patch |
 | `badgeOrientation` 变更 | `Sidebar.trayMenu` 单选 | — | patch |
-| `arbitrationMode` 变更 | `Settings.arbitrationSelect` 当前值 | — | patch |
+| `arbitrationMode` 变更 | `Settings.arbitrationCards` 选中卡片 | — | patch（ModeOption 卡片，见 §7.6.1） |
 | `autostart` 变更 | `Settings.autostartSwitch` | — | patch（先 OS 后 config，失败 `AUTOSTART_FAILED` 回滚） |
 | `config-changed`（Rust 事件） | 全组件 | `config.badgeOrientation` 等完整 Config | full sync |
 
@@ -658,16 +658,17 @@ Integrations 页的客户端配置卡（Claude Code / Codex / Qoder / Cursor）�
 ### 6.6 `SettingRow`
 
 **6.6.1 用途**
-Settings 页分组内的单行设置项：左 label + 描述，右控件（Switch / Select / SegControl / Input）。
+Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，右控件（Switch / SegControl / ModeOption 卡片 / StatusTag / 主题预览入口等）。
 
 **6.6.2 对外契约**
 
 | 类别 | 项 | 说明 |
 |---|---|---|
-| Props | `label` | string |
-| Props | `description` | string |
-| Props | `control` | React 子节点（Switch / Select / 等） |
-| Props | `disabled` | boolean |
+| Props | `icon` | Lucide 图标 |
+| Props | `title` | string（行名称） |
+| Props | `description?` | string（用户友好说明，可省略） |
+| Props | `stacked?` | boolean（控件改为整行铺开，仲裁模式卡片用） |
+| Props | `children` | React 子节点（控件） |
 | Emit | 由 control 触发 | — |
 | Invoke | `update_config(patch)` | 由控件 change 触发 |
 
@@ -690,10 +691,11 @@ Settings 页分组内的单行设置项：左 label + 描述，右控件（Switc
 **6.6.5 边界条件**
 - 端口切换：需重启服务 → Toast "服务重启中..." → 成功后 Toast "端口已切换"
 - 自启动：✅ 已实装（tauri-plugin-autostart 2.5.1，KAD-09）；失败路径 `AUTOSTART_FAILED` → Toast + 控件回滚到原值；OS 登录项为唯一事实源，config 为启动校准缓存
+- 仲裁模式：ModeOption 卡片独占选择（`aria-pressed`）；「优先级抢占」带「默认」标签；切换经 `update_config(arbitrationMode)` 即时生效
 
 **6.6.6 无障碍**
-- label = `<label for>` 关联控件
-- 描述 = `<p id>`
+- 行名 = 可见 `<strong>`；控件自带 `aria-label`（如"仲裁模式""开机自启"）
+- 说明为纯展示文本，不承担控件命名职责
 
 ---
 
@@ -814,7 +816,7 @@ Settings 页分组内的单行设置项：左 label + 描述，右控件（Switc
 - CustomStateQuickList 点击 → 同上 + 同时把名字加入最近列表（FIFO）
 - ResetOutputsButton → `reset_outputs` → 全停 + 业务复位 IDLE
 
-**快捷键**（详见 [ui-interactions.md §13.8](./ui-interactions.md)）：
+**快捷键**（详见 [ui-interactions.md 附录 A.8](./ui-interactions.md)）：
 - `1`~`5`：标准状态
 - `0`：全部重置
 - `Esc`：清空输入框 focus
@@ -841,6 +843,12 @@ Settings 页分组内的单行设置项：左 label + 描述，右控件（Switc
 ```
 
 **联动**：每 SettingGroup 内的 SettingRow 互不联动；Group 间独立。
+
+**7.6.1 服务组**：服务端口（只读数值）；仲裁模式 = 两张 ModeOption 卡片（整行铺开，单选圆点 + 效果说明 + 「默认」标签）；接入保护 = 状态标签（"仅限本机" / "Token 已启用"）。
+
+**7.6.2 显示组**：灯组朝向（SegControl 横排/纵向）；当前主题 = 主题预览入口（Link → /themes）：3 个灯色圆点（取当前主题 WORKING/SUCCESS/ERROR 场景实际 `leds.high`/`low` 色）+ 主题名 + 可选「提示音」标记 + ChevronRight。预览随 `config.activeTheme` 变化刷新；主题读取失败回退为纯名称。
+
+**7.6.3 系统组**：开机自启 Switch（`aria-checked` + 开启态视觉 = 品牌绿底 + 滑块右移 16px）。
 
 ---
 
@@ -1250,6 +1258,8 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 
 **8.12.3 视觉态全集**：同 BuzzerSwitch
 
+> ✅ 已落地：开启态 = `background: var(--accent)` + 滑块 `translateX(16px)`（`.switch[aria-checked="true"]`）；保存中 `disabled` 半透明。
+
 **8.12.4 联动矩阵**
 
 | Source Event | 字段 | 同步方式 |
@@ -1268,7 +1278,7 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 ### 8.13 `Select`（通用选择器）
 
 **8.13.1 用途**
-下拉选择器（end_level / arbitrationMode 等）。
+下拉选择器（主题编辑器 end_level / 场景选择等）。仲裁模式已改用 ModeOption 卡片（见 §7.6.1），不再使用 Select。
 
 **8.13.2 对外契约**
 
@@ -1758,6 +1768,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.13 | 2026-08-21 | 设置页 UI 对账（以代码为事实源，用户触发审计）：§3.6 `arbitrationMode` 联动目标更新为选项卡片；§6.6 `SettingRow` 契约改为 `icon/title/description?/stacked?/children`；§7.6 Settings 区域补充仲裁模式选项卡片（ModeOption）与当前主题预览入口；§8.12 Switch 补开启态视觉；§8.13 Select 注明仲裁模式已改用卡片；§7.5 快捷键引用从失效的 §13.8 修正为附录 A.8。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5（含新增 `open-config`）；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003/0004、KAD-04/06/08/09 引用有效。 |
 | V1.12 | 2026-08-21 | G-06 开机自启实装对账（KAD-09 / ADR-0004）：§3.6 配置层联动表新增 `autostart` 行并移除 P2 标注；§6.6.5 边界条件改为真实切换 + `AUTOSTART_FAILED` 失败路径；§7 Settings 组 autostart 由禁用态改为可切换。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4（含新增 `AUTOSTART_FAILED`）；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003/0004、KAD-04/06/08/09 引用有效。同步修正版本头漂移（V1.10 → V1.12）。 |
 | V1.11 | 2026-08-21 | 断连 UX 闭环：§3.2 payload 增加 `reconnecting` / `reason`（值域 `link_lost` / `reconnect_failed`，由 Rust 侧 emit）；§4.4、§5.2 更新为前端 `Reconnecting` 视觉态与 Toast 已实装。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |
 | V1.10 | 2026-08-21 | G-04 托盘实装对账：§3.6 新增 `config-changed` 事件联动（✅，设置页与托盘共用 update_config 路径）；§5.1 窗口可见性状态机标注已实装（托盘「显示窗口」/「退出」/关窗隐藏/单实例聚焦）。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |

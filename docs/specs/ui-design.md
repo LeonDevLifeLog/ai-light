@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V0.8 |
+| 文档版本 | V0.9 |
 | 文档状态 | ⏸ 设计阶段，待用户审阅后定稿 |
 | 范围 | L5 展示层（前端 UI + 托盘 + 窗口生命周期） |
 | 上游 | [docs/specs/ipc-contract.md V1.0](./ipc-contract.md)、[theme-format.md V1.0](./theme-format.md)、[architecture.md](./architecture.md) KAD-06 |
@@ -300,23 +300,20 @@
 **布局**（分组卡片）：
 
 - **服务**：
-  - 端口（显示当前值；修改需重启 → P2 支持 portPreference 修改重启，P1 仅展示）
-  - 接入密码（**第一版 UI 不开放**；服务端支持 token 校验，但用户面板无开关，V2 再开放）
-  - 仲裁模式（Select：`priority` 默认 / `last_active`）
-- **设备**：
-  - 记住的设备（显示 address/name；[忘记设备] P2）
-- **主题**：
-  - 当前激活主题名（点击 → 跳转 /themes）
+  - 服务端口（只读显示当前值；修改需重启 → P2 支持 portPreference 修改重启）
+  - 仲裁模式（**两张选项卡片**：优先级抢占[默认] / 最近活跃，各带效果说明；选中 = 绿描边 + 淡绿底 + 圆点）
+  - 接入保护（状态标签："仅限本机" / "Token 已启用"；第一版不开放 Token 编辑，V2 再评估）
 - **显示**：
   - **徽章朝向**（单选：横向 / 纵向）— 5.1.1 红绿灯徽章
-- **其他**：
+  - **当前主题**（主题预览入口 → /themes：3 个灯色圆点取主题实际灯色 + 主题名 + 可选「提示音」标记）
+- **系统**：
   - 开机自启（Switch；✅ 已实装——`tauri-plugin-autostart` 已接入，KAD-09）
-  - 日志目录（只读 + [打开目录] 按钮）
 
 **关键交互**：
 
-- 任意 Switch / Select 变化 → `update_config({ field: value })` → 实时持久化
+- 任意 Switch / 选项卡片 / 分段控件变化 → `update_config({ field: value })` → 实时持久化
 - 失败回滚：UI 显示原值 + Toast 错误
+- 每行一行用户友好说明（见 ui-interactions §9）；页面不出现开发者向文案；页脚"所有设置即时生效并自动保存"
 
 ---
 
@@ -425,6 +422,8 @@ persisted to config.json via update_config
 
 ## 8. 组件选型清单（shadcn/ui 待补）
 
+> **存档说明**：本表为设计期（V0.1）的组件选型清单，实际实现已转为自绘 CSS 组件（global.css），不逐项跟进；仅保留作历史参考。
+
 | 组件 | 用途 | 状态 |
 |---|---|---|
 | Button | 全局 | ✅ 已装 |
@@ -434,7 +433,7 @@ persisted to config.json via update_config
 | Toast (Sonner) | events 提示 / 操作反馈 | P1 需新增 |
 | Dialog | 导入主题确认 / 断开确认 / 主题详情 | P1 需新增 |
 | Badge | builtin/user 徽章 / 状态标签 | P1 需新增 |
-| Switch | 自启动 / 仲裁模式切换 | P1 需新增 |
+| Switch | 开机自启开关 | ✅ 已实现（自绘 `.switch`：关闭灰底 / 开启 `--accent` 绿底 + 滑块右移） |
 | Select | 仲裁模式 / 主题选择 / 朝向选择 | P1 需新增 |
 | Input | 自定义状态名 / 主题名 | P1 需新增 |
 | ScrollArea | 扫描结果列表 / 主题网格 | P1 需新增 |
@@ -705,3 +704,4 @@ z/tooltip    = 300
 | V0.6 | 2026-08-21 | 产品形态调整：启动时主窗口同时打开（RunEvent::Ready → show + focus），不再是"仅托盘出现"；关窗后仍由托盘唤回；同步 §2 / §12.1 验收剧本 |
 | V0.7 | 2026-08-21 | 断连 UX 闭环：§12.5 全链路已实现（断连事件 + 前端 Reconnecting 视觉态 + 断连/重连 Toast + 5 次退避重连）；`device-connection-changed` payload 增加 `reason` / `reconnecting` |
 | V0.8 | 2026-08-21 | G-06 开机自启实装（KAD-09 / ADR-0004）：§2 产品形态、§3.1 设置页、§11.2 路线图对账更新；Settings 自启动 Switch 从禁用态改为真实切换（OS 登录项为事实源，config 为校准缓存）；新增 `AUTOSTART_FAILED` 错误码。同步修正文档版本头漂移（V0.1 → V0.8）。 |
+| V0.9 | 2026-08-21 | 设置页 UI 对账（以代码为事实源，用户触发审计）：§5.5 布局按当前页面重写（服务[端口/仲裁卡片/接入保护] + 显示[朝向/主题预览] + 系统[自启]）；§8 组件选型清单标记为设计期存档并更新 Switch 行。 |
