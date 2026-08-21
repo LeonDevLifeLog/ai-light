@@ -16,7 +16,9 @@ pub fn init(file_dir: Option<&std::path::Path>, level: &str) -> Result<(), Strin
     let filter = EnvFilter::try_new(level).unwrap_or_else(|_| EnvFilter::new("info"));
     let stderr_layer = fmt::Layer::new().with_writer(std::io::stderr);
 
-    let subscriber = tracing_subscriber::registry().with(filter).with(stderr_layer);
+    let subscriber = tracing_subscriber::registry()
+        .with(filter)
+        .with(stderr_layer);
 
     match file_dir {
         Some(dir) => {

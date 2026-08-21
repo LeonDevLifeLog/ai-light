@@ -92,14 +92,24 @@ impl AppConfig {
                 if !theme::builtin_theme_names().contains(&cfg.active_theme.as_str()) {
                     // 主题名非法或不存在：回退 default（用户主题可能未加载，这里只做静态检查）
                     if cfg.active_theme.is_empty() || cfg.active_theme.len() > 64 {
-                        warn.push(format!("active_theme 非法({}), 回退 default", cfg.active_theme));
+                        warn.push(format!(
+                            "active_theme 非法({}), 回退 default",
+                            cfg.active_theme
+                        ));
                         cfg.active_theme = "default".into();
                     }
                 }
-                let warn = if warn.is_empty() { None } else { Some(warn.join("; ")) };
+                let warn = if warn.is_empty() {
+                    None
+                } else {
+                    Some(warn.join("; "))
+                };
                 (cfg, warn)
             }
-            Err(e) => (Self::default(), Some(format!("config 解析失败回退默认: {e}"))),
+            Err(e) => (
+                Self::default(),
+                Some(format!("config 解析失败回退默认: {e}")),
+            ),
         }
     }
 
@@ -143,9 +153,8 @@ mod tests {
         assert!(warn.is_some());
         assert_eq!(cfg, AppConfig::default());
         // 字段非法 → 字段级回退
-        let (cfg, warn) = AppConfig::load(
-            r#"{"version":9,"arbitration_mode":"weird","port_preference":99999}"#,
-        );
+        let (cfg, warn) =
+            AppConfig::load(r#"{"version":9,"arbitration_mode":"weird","port_preference":99999}"#);
         assert!(warn.is_some());
         assert_eq!(cfg.version, 1);
         assert_eq!(cfg.arbitration_mode, "priority");

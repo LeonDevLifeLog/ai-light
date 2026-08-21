@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.3（重构：双文档审计改为内容驱动边界，废除时间边界） |
+| 文档版本 | V1.7 |
 | 文档状态 | 生效（待用户审阅后定稿） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
@@ -1744,3 +1744,5 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 | V1.3 | 2026-08-20 | 重构：废除"季度 + 触发式"双条款，改为单一"内容驱动审计"——5 个内容信号触发（会话入口 / 变更前 / 变更后自动 / 用户触发 / 漂移信号），无时间边界 |
 | V1.4 | 2026-08-20 | 对齐报告：前端实现后完成 5 项语义硬检查。§3 Source Events 全部存在于 ipc-contract §5；§4.1 AppError.code 全部存在于 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 一致；ADR / KAD 引用均可解析。修复 `badgeOrientation` IPC、`INTERNAL` 错误码与导航计数漂移。 |
 | V1.5 | 2026-08-21 | 主题创作器重构：快速创作隐藏协议术语，以运动、速度、灯序和声音预设生成 SCENE；轨道工作台将相位改述为出场时间；状态 tab 支持自定义状态。对齐报告：§3 Source Events、§4.1 AppError、§4.2 result code、§6~§8 theme-format 字段和 ADR/KAD 引用五项均通过；`brightness` / `volume` 统一为 0~100。 |
+| V1.6 | 2026-08-21 | 对齐报告：Theme JSON Schema 与主题指南落地后完成 5 项语义硬检查。§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 与 ipc-contract §4 一致；§4.2 result code 与蓝牙 V0.4 §3.6 一致（保留值 0x08 无 UI 行为）；§6~§8 使用的主题字段均存在于 theme-format 与 Theme Schema；ADR-0001/0003、KAD-04 引用有效。同步修正文档版本头漂移。 |
+| V1.7 | 2026-08-21 | 对齐报告：主题定义迁移为 Rust DTO + JsonSchema 单一来源后完成 5 项语义硬检查。§3 Source Events、§4.1 AppError.code、§4.2 蓝牙 result code 均与上游契约一致；§6~§8 使用的字段完整存在于 DTO 生成的 Theme Schema；ADR/KAD 引用有效。强类型 `Curve` / `EndLevel` 的序列化值与现有 UI 一致，`LedTrackDef oneOf` 未改变交互契约。 |
