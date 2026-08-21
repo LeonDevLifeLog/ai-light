@@ -25,7 +25,7 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
 
 interface PageHeaderProps {
   actions?: ReactNode;
-  description: ReactNode;
+  description?: ReactNode;
   title: string;
 }
 
@@ -34,7 +34,7 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
     <header className="page-header">
       <div>
         <h1>{title}</h1>
-        <p>{description}</p>
+        {description ? <p>{description}</p> : null}
       </div>
       {actions ? <div className="page-actions">{actions}</div> : null}
     </header>
