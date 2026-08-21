@@ -1,6 +1,7 @@
 //! AI-Light Tauri 应用入口：装配 core 模块、注册 commands/events
 
 mod commands;
+mod tray;
 
 use std::sync::{Arc, RwLock};
 
@@ -40,6 +41,11 @@ pub fn run() {
             }
         }))
         .setup(|app| {
+            // macOS：仅菜单栏常驻（Accessory），Dock 不显示图标——关窗 = 隐藏、退出只经托盘
+            // （KAD-06：托盘常驻与窗口生命周期解耦，避免从 Dock 退出连带终止托盘）
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             // 日志（KAD-05）
             let _ = logging::init(app.path().app_log_dir().ok().as_deref(), "info");
 
@@ -102,12 +108,24 @@ pub fn run() {
                     if cur.is_some() && cur != last {
                         let c = cur.clone().unwrap();
                         let _ = handle.emit("business-state-changed", &c);
+                        crate::tray::update_status(&handle, &c.state);
                         last = cur;
                     }
                 }
             });
 
             app.manage(AppState { shared, engine, device_io, config: RwLock::new(config) });
+
+            // 托盘常驻（KAD-06）：图标 + 菜单 + 动态状态文字
+            let tray_state = tray::init(app.handle())?;
+            app.manage(tray_state);
+            {
+                let app_state = app.state::<AppState>();
+                let cfg = app_state.config.read().unwrap();
+                let handle = app.handle();
+                crate::tray::update_theme(handle, &cfg.active_theme);
+                crate::tray::update_orientation(handle, &cfg.badge_orientation);
+            }
 
             // 启动后自动连接记住的设备
             let auto_handle = app.handle().clone();
@@ -154,6 +172,15 @@ pub fn run() {
             commands::get_config,
             commands::update_config,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // 启动即显示主窗口（产品形态：打开程序时窗口同时打开）
+            if let tauri::RunEvent::Ready = event {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        });
 }

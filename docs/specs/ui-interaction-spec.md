@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.9 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.9，2026-08-21） |
+| 文档版本 | V1.10 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.10，2026-08-21） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -159,10 +159,10 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 **Payload**：
 ```typescript
-{ connected: boolean, address: string|null, name: string|null, reason?: string }
+{ connected: boolean, address: string|null, name: string|null, reconnecting?: boolean, reason?: string }
 ```
 
-> ✅ 实现状态：连接成功与运行中断连均已 emit；`reason` 字段暂无来源（断连事件不携带原因）。
+> ✅ 实现状态：连接成功（`reconnecting: false`）与断连（`reason: "link_lost"`、`reconnecting: true`）均已 emit；重连放弃时 emit `reason: "reconnect_failed"`、`reconnecting: false`。`reason` 值域当前为 `link_lost` / `reconnect_failed`。
 
 ### 3.3 设备电源层（`device-power-changed`）
 
@@ -217,8 +217,11 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `badgeOrientation: 'horizontal'\|'vertical'` | `TrafficBadge.layout` | — | patch |
 | `badgeOrientation` 变更 | `Sidebar.trayMenu` 单选 | — | patch |
 | `arbitrationMode` 变更 | `Settings.arbitrationSelect` 当前值 | — | patch |
+| `config-changed`（Rust 事件） | 全组件 | `config.badgeOrientation` 等完整 Config | full sync |
 
 > `themeMode` / `autostart` 真实切换 / `portPreference` 热重启均为 P2；P1 不发出这些 patch。
+>
+> ✅ 实现状态：`update_config`（设置页与托盘徽章朝向共用）成功后 emit `config-changed`，前端订阅整包同步。
 
 ### 3.7 蓝牙主动事件（来自协议 V0.4 §11）
 
@@ -306,7 +309,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | 60s 超时 | 设备自动 RESET_OUTPUTS | Toast "设备已离线，请手动重连" + 设备卡 `Disconnected` + [去连接] 按钮高亮 |
 | 重连失败 N 次 | 退避后停止 | Toast "重连失败，请检查设备" + 设备卡保持 `Disconnected` |
 
-> ✅ 实现状态：断连监听与客户端退避重连（5 次，约 75s 窗口，期间已手动连接则放弃）已实现；前端 `Reconnecting` 视觉态与重连 Toast 尚未实装（保持待办）。
+> ✅ 实现状态：断连监听与客户端退避重连（5 次，约 75s 窗口，期间已手动连接则放弃）已实现；前端 `Reconnecting` 视觉态（Devices 页重连中卡 + Dashboard 摘要）与断连/重连 Toast 已实装（2026-08-21）。
 
 ### 4.5 主题相关失败路径
 
@@ -341,6 +344,8 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 [任意]     --(托盘"退出")-->         [Terminating]
 [Visible]  --(单实例新启动)-->        [Visible]   // 聚焦
 ```
+
+> ✅ 实现状态：托盘「显示窗口」/「退出」、关窗 = 隐藏、单实例聚焦均已在 Rust 侧落地（`src-tauri/src/tray.rs` + `on_window_event`）。
 
 ### 5.2 设备生命周期
 
@@ -378,7 +383,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `Connected` | 完整字段 | "已连接"（accent） | [断开] P2 |
 | `Reconnecting` | spinner + "重连中...（3/5）" | "重连中"（warn） | 禁用 |
 
-> ✅ 实现状态：`Connected ↔ Disconnected` 双向已实现（断连由事件驱动）；`Reconnecting` 视觉态未实装（后端重连成功前快照保持 Disconnected）；`Connected` 下的 [断开] 为 P2 未实装。
+> ✅ 实现状态：`Connected ↔ Disconnected` 双向已实现（断连由事件驱动）；`Reconnecting` 视觉态已实装（由 `device.reconnecting` 驱动）；`Connected` 下的 [断开] 为 P2 未实装。
 
 ### 5.3 业务状态（来自仲裁，[ADR-0001](../decisions/ADR-0001)）
 
@@ -1752,6 +1757,8 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.11 | 2026-08-21 | 断连 UX 闭环：§3.2 payload 增加 `reconnecting` / `reason`（值域 `link_lost` / `reconnect_failed`，由 Rust 侧 emit）；§4.4、§5.2 更新为前端 `Reconnecting` 视觉态与 Toast 已实装。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |
+| V1.10 | 2026-08-21 | G-04 托盘实装对账：§3.6 新增 `config-changed` 事件联动（✅，设置页与托盘共用 update_config 路径）；§5.1 窗口可见性状态机标注已实装（托盘「显示窗口」/「退出」/关窗隐藏/单实例聚焦）。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |
 | V1.9 | 2026-08-21 | 实现状态对账（G-01~G-03 闭环）：§3.2~§3.4 事件实现状态更新为 ✅；§3.7 协议主动事件全部接线（BUTTON_EVENT 仅日志）；§4.3 握手阶段 1~8 已实现；§4.4 断连监听与退避重连已实现（前端 Reconnecting 视觉态待办）；§5.2 `Connected ↔ Disconnected` 双向已实现。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |
 | V1.8 | 2026-08-21 | 实现状态对账（以代码为事实源，用户触发审计）：§3.2~§3.4、§3.7 标注事件未接线（`device-connection-changed` 仅连接方向；`device-power-changed` / `device-fault` / 协议主动事件未 emit）；§4.3 握手失败路径标注部分实现；§4.4 断连宽限、§5.2 `Reconnecting` 标注未实现。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |
 | V1.0 | 2026-08-20 | 首版：6 层金字塔 + 全局联动矩阵 + 失败路径矩阵 + 4 状态机 + L2/L3/L4 共 33 个组件详表 |

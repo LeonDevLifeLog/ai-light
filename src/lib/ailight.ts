@@ -25,6 +25,8 @@ export interface DeviceState {
   name: string | null;
   powerFlags: number | null;
   powerSource: number | null;
+  /** 断连后是否处于自动重连中（device-connection-changed 事件字段） */
+  reconnecting: boolean;
 }
 
 export interface BusinessState {
@@ -125,6 +127,7 @@ const mockSnapshot: AppSnapshot = {
     powerFlags: null,
     powerSource: null,
     chargeState: null,
+    reconnecting: false,
   },
   business: {
     state: "IDLE",

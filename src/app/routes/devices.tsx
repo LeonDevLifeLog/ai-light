@@ -1,5 +1,5 @@
 import { Bluetooth, Radio, RefreshCw, Signal, WifiOff } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { useAppState } from "@/app/app-context";
 import {
   ActionButton,
@@ -71,6 +71,53 @@ export function DevicesPage() {
     }
   };
 
+  let connectionSection: ReactNode = null;
+  if (snapshot?.device.connected) {
+    connectionSection = (
+      <section aria-labelledby="connected-title">
+        <h2 className="section-title" id="connected-title">
+          已连接
+        </h2>
+        <Card className="connected-device">
+          <div className="device-orb is-connected">
+            <Radio aria-hidden="true" />
+          </div>
+          <div className="connected-device__name">
+            <strong>{snapshot.device.name ?? "AgentCore-Light"}</strong>
+            <span className="mono">{snapshot.device.address}</span>
+          </div>
+          <dl className="device-stats">
+            <div>
+              <dt>电量</dt>
+              <dd>{snapshot.device.batteryPercent ?? "—"}%</dd>
+            </div>
+            <div>
+              <dt>固件</dt>
+              <dd>{snapshot.device.fwVersion ?? "—"}</dd>
+            </div>
+            <div>
+              <dt>硬件</dt>
+              <dd>{snapshot.device.hardwareVariant ?? "—"}</dd>
+            </div>
+          </dl>
+          <StatusTag tone="success">已连接</StatusTag>
+        </Card>
+      </section>
+    );
+  } else if (snapshot?.device.reconnecting) {
+    connectionSection = (
+      <section aria-labelledby="reconnecting-title">
+        <h2 className="section-title" id="reconnecting-title">
+          设备状态
+        </h2>
+        <Card className="scan-status" role="status">
+          <span className="scan-pip" />
+          <span>设备已断开，正在自动重连…（最多尝试 5 次）</span>
+        </Card>
+      </section>
+    );
+  }
+
   return (
     <div className="page-stack">
       <PageHeader
@@ -114,37 +161,7 @@ export function DevicesPage() {
         </InlineAlert>
       ) : null}
 
-      {snapshot?.device.connected ? (
-        <section aria-labelledby="connected-title">
-          <h2 className="section-title" id="connected-title">
-            已连接
-          </h2>
-          <Card className="connected-device">
-            <div className="device-orb is-connected">
-              <Radio aria-hidden="true" />
-            </div>
-            <div className="connected-device__name">
-              <strong>{snapshot.device.name ?? "AgentCore-Light"}</strong>
-              <span className="mono">{snapshot.device.address}</span>
-            </div>
-            <dl className="device-stats">
-              <div>
-                <dt>电量</dt>
-                <dd>{snapshot.device.batteryPercent ?? "—"}%</dd>
-              </div>
-              <div>
-                <dt>固件</dt>
-                <dd>{snapshot.device.fwVersion ?? "—"}</dd>
-              </div>
-              <div>
-                <dt>硬件</dt>
-                <dd>{snapshot.device.hardwareVariant ?? "—"}</dd>
-              </div>
-            </dl>
-            <StatusTag tone="success">已连接</StatusTag>
-          </Card>
-        </section>
-      ) : null}
+      {connectionSection}
 
       <section aria-labelledby="nearby-title">
         <h2 className="section-title" id="nearby-title">

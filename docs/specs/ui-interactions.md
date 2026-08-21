@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.9 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.9，2026-08-21） |
+| 文档版本 | V1.10 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.10，2026-08-21） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -42,10 +42,12 @@
 | Event | Payload | 受影响的 UI | 实现状态 |
 |---|---|---|---|
 | `business-state-changed` | `{ state, source, session, sinceTs, theme }` | Dashboard 红绿灯徽章 + 状态名 + 副标题 | ✅ Rust 已 emit |
-| `device-connection-changed` | `{ connected, address, name }` | Dashboard 设备卡 + Sidebar 底部「已连接」状态 | ✅ 连接 / 断连均已 emit（断连时清空电源字段） |
+| `device-connection-changed` | `{ connected, address, name, reason?, reconnecting? }` | Dashboard 设备卡 + Sidebar 底部「已连接」状态 + Devices 页重连中卡 | ✅ 连接 / 断连 / 重连放弃均已 emit（断连时清空电源字段） |
 | `device-power-changed` | `{ batteryPercent, powerSource, chargeState, powerFlags }` | Dashboard 设备卡电量格 | ✅ 握手 GET_POWER_STATUS + POWER_CHANGED 主动事件均已 emit |
 | `device-fault` | `{ source, code, context }` | Devices 页告警卡 | ✅ FAULT_EVENT 已接线并 emit |
 | `theme-changed` | `{ name }` | Dashboard 主题卡 + Sidebar 底部「当前主题」 | ✅ Rust 已 emit |
+| `config-changed` | 更新后完整 Config | 全局配置同步（含托盘徽章朝向单选勾选） | ✅ 设置 / 托盘修改后 emit |
+| `open-config` | — | AppShell 跳转 /devices | ✅ 托盘「打开配置」emit（UI 导航事件） |
 
 **初始化流程**：打开主窗口 → 自动调 `get_app_state()` 拉全量快照 → 订阅 events 接收增量。
 
@@ -384,13 +386,15 @@ Tauri Builder.setup()：
 Tauri Builder.on_window_event()：
   - 窗口关闭 → api.prevent_close() + hide()
   ↓
-不显示主窗口（托盘常驻）
+托盘常驻（图标 + 菜单，macOS Dock 不显示）
   ↓
-用户点击托盘"显示窗口" → 主窗口出现
+启动即显示主窗口（RunEvent::Ready → show + focus，/ Dashboard）
   ↓
 前端 invoke get_app_state() 拉快照
   ↓
 订阅 events，进入 Dashboard 视图
+  ↓
+（关窗后）用户点击托盘"显示窗口" → 主窗口重新出现
 ```
 
 ### 10.2 hook 触发闭环
@@ -466,9 +470,9 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 ## 12. 托盘（图标 + 菜单）
 
-**实现状态（2026-08-21 对账）：托盘本体与菜单均未实装**——`src-tauri` 无 TrayIconBuilder、tauri.conf.json 无 trayIcon；单实例插件与「关窗 = 隐藏」已落地。
+**实现状态（2026-08-21）：✅ 已实装**——图标 + 菜单（显示窗口 / 当前状态 / 当前主题 / 设备 / 徽章朝向单选 / 打开配置 / 退出）由 `src-tauri/src/tray.rs` 构建，动态文字经业务事件更新。优先级已按 ui-design §11.1 口径确认为 P1（本文原 V2 标注作废）。
 
-> ⚠️ 优先级口径冲突：ui-design.md §11.1 将「托盘常驻服务」列为 MVP 必做（P1），本文原标 V2——需产品确认后统一，再排入里程碑。
+> 托盘图标当前复用应用图标占位（mac 模板图单色），正式素材待替换；三平台行为验证（U-05）待实机。
 
 设计要点（来自 ui-design.md §5.1.1）：
 
@@ -483,10 +487,10 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 │ 退出 ───────────────┘
 ```
 
-实施时补充：
-- 单实例保证（已有 `tauri-plugin-single-instance`）
-- 关窗 = 隐藏，菜单"退出"才是真退出（关窗隐藏已落地，退出入口待托盘）
-- mac 菜单栏 / win 通知区 / linux DE 三平台适配
+落地情况：
+- 单实例保证（`tauri-plugin-single-instance`）✅
+- 关窗 = 隐藏，菜单"退出"才是真退出 ✅（托盘退出入口已实现）
+- mac 菜单栏 / win 通知区 / linux DE 三平台适配：⏳ 待实机验证（U-05）
 
 ---
 
@@ -521,7 +525,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | G-01 | BLE 断连监听 + `device-connection-changed{false}` + 退避重连（5 次，约 75s 窗口） | ✅ 已实现（2026-08-21；实机冒烟 U-01 待完成） |
 | G-02 | 握手信息读取（DEVICE_READY / GET_DEVICE_INFO / GET_CAPABILITIES / GET_POWER_STATUS）→ `device-power-changed` | ✅ 已实现（2026-08-21；实机冒烟 U-01 待完成） |
 | G-03 | FAULT_EVENT 接线 → `device-fault` | ✅ 已实现（2026-08-21；实机冒烟 U-01 待完成） |
-| G-04 | 托盘实装（图标 + 菜单；先统一 P1/V2 口径） | P1/V2 ⚠️ |
+| G-04 | 托盘实装（图标 + 菜单；口径已定 P1） | ✅ 已实现（2026-08-21；图标占位待替换，U-05 待实机） |
 | G-05 | `portPreference` 读取与热重启 | P1 |
 | G-06 | `autostart` 接入 tauri-plugin-autostart | P2 |
 | U-01 | btleplug 三平台冒烟（mac/win/linux） | P1 阻塞 release |
@@ -610,7 +614,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 **任一阶段失败** → 设备卡回滚到 `Disconnected` + 触发 `device-connection-changed{connected: false, reason}`。
 
-**断连宽限期**（V0.4 §13）：✅ 客户端链路已实现（断连监听 → `device-connection-changed{false}` → 5 次退避重连，约 75s 窗口，期间已手动连接则放弃）；前端 `Reconnecting` 视觉态与重连 Toast 尚未实装。
+**断连宽限期**（V0.4 §13）：✅ 客户端链路已实现（断连监听 → `device-connection-changed{false, reason:"link_lost", reconnecting:true}` → 5 次退避重连，约 75s 窗口，期间已手动连接则放弃；放弃时 emit `reason:"reconnect_failed"`）；前端 `Reconnecting` 视觉态与断连/重连 Toast 已实装（2026-08-21）。
 
 | 时间窗口 | 设备侧行为 | UI 反馈 |
 |---|---|---|
@@ -720,6 +724,9 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.12 | 2026-08-21 | 断连 UX 闭环：§2.1 `device-connection-changed` payload 扩展 `reason` / `reconnecting`（值域 `link_lost` / `reconnect_failed`）；A.4 断连宽限标注前端 `Reconnecting` 视觉态与 Toast 已实装。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003、KAD-03/06/08 引用有效。 |
+| V1.11 | 2026-08-21 | 产品形态调整：§10.1 首次启动改为"托盘常驻 + 启动即显示主窗口"（RunEvent::Ready → show + focus；macOS Dock 不显示），关窗后由托盘唤回。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003、KAD-03/06/08 引用有效。 |
+| V1.10 | 2026-08-21 | G-04 托盘实装对账：§2.1 新增 `config-changed` / `open-config` 事件（均 ✅）；§12 托盘更新为已实装（P1 口径确认，原 V2 标注作废），图标占位待替换、U-05 待实机；§14 G-04 标记完成。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003、KAD-03/06/08 引用有效。 |
 | V1.9 | 2026-08-21 | 实现状态对账（G-01~G-03 闭环）：§2.1 事件表 `device-connection-changed` / `device-power-changed` / `device-fault` 全部改为 ✅；§4.2 握手流程标注已实现；§4.4 故障告警链路已接线；§14 G-01~G-03 标记完成；A.4 阶段 1~8 已实现，断连宽限客户端链路已实现（前端 Reconnecting 视觉态待办）。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003、KAD-03/06/08 引用有效。 |
 | V1.8 | 2026-08-21 | 实现状态对账（以代码为事实源，用户触发审计）：§2.1 事件表新增实现状态列（`device-power-changed` / `device-fault` 未 emit）；§4.2 握手流程按实际修正（DEVICE_READY 等信息读取未接线）；§4.4 / A.4 标注未实现链路；§12 托盘修正为"本体与菜单均未实装"并记录 P1/V2 口径冲突；§14 待办表新增 G-01~G-06 实现缺口。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003、KAD-03/06/08 引用有效。 |
 | V1.7 | 2026-08-21 | 对齐报告：主题定义迁移为 Rust DTO + JsonSchema 单一来源后完成 5 项语义硬检查。Source Events、AppError.code、蓝牙 result code 均与上游契约一致；主题编辑字段完整存在于 DTO 生成的 Theme Schema；ADR/KAD 引用有效。强类型 `Curve` / `EndLevel` 保持既有 JSON 字符串，`LedTrackDef` 条件约束由 `oneOf` 表达，因此 UI 契约无需变更。 |

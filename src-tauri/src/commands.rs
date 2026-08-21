@@ -137,6 +137,7 @@ pub fn set_active_theme(app: AppHandle, name: String) -> CmdResult<()> {
     // 持久化
     persist_active_theme(&app, &name)?;
     let _ = app.emit("theme-changed", serde_json::json!({ "name": name }));
+    crate::tray::update_theme(&app, &name);
     // 当前业务非 IDLE → 用新主题重放（幂等对齐，ipc-contract §2.2 副作用）
     let state_now = s.arbiter.read().map(|g| g.current().state.clone()).unwrap_or_default();
     if state_now != ST_IDLE {
@@ -221,8 +222,14 @@ pub(crate) async fn attach_device(
     }
     let _ = app.emit(
         "device-connection-changed",
-        serde_json::json!({ "connected": true, "address": address, "name": name }),
+        serde_json::json!({
+            "connected": true,
+            "reconnecting": false,
+            "address": address,
+            "name": name,
+        }),
     );
+    crate::tray::update_device(app, true, Some(&name));
     if let Some(p) = &handshake.power {
         let _ = app.emit(
             "device-power-changed",
@@ -309,8 +316,15 @@ fn spawn_device_event_loop(
                     state.device_io.set(None).await;
                     let _ = app.emit(
                         "device-connection-changed",
-                        serde_json::json!({ "connected": false, "address": address, "name": name }),
+                        serde_json::json!({
+                            "connected": false,
+                            "reconnecting": true,
+                            "reason": "link_lost",
+                            "address": address,
+                            "name": name,
+                        }),
                     );
+                    crate::tray::update_device(&app, false, None);
                     spawn_reconnect(app, address, name, 1);
                     return;
                 }
@@ -324,6 +338,16 @@ pub(crate) fn spawn_reconnect(app: AppHandle, address: String, name: String, att
     const MAX_RECONNECT_ATTEMPTS: u32 = 5;
     if attempt > MAX_RECONNECT_ATTEMPTS {
         tracing::warn!("设备 {name} 重连达到上限，停止自动重连");
+        let _ = app.emit(
+            "device-connection-changed",
+            serde_json::json!({
+                "connected": false,
+                "reconnecting": false,
+                "reason": "reconnect_failed",
+                "address": address,
+                "name": name,
+            }),
+        );
         return;
     }
     tauri::async_runtime::spawn(async move {
@@ -429,8 +453,10 @@ pub fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppConfig>
             return Err(err("BAD_REQUEST", format!("badgeOrientation 非法: {orientation}")));
         }
         cfg.badge_orientation = orientation.clone();
+        crate::tray::update_orientation(&app, orientation);
     }
     persist_config(&app, &cfg)?;
+    let _ = app.emit("config-changed", &*cfg);
     Ok(cfg.clone())
 }
 

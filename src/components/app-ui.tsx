@@ -161,11 +161,22 @@ export function DeviceSummary({
   connected,
   name,
   battery,
+  reconnecting,
 }: {
   connected: boolean;
   name?: string | null;
   battery?: number | null;
+  reconnecting?: boolean;
 }) {
+  let title = "尚未连接设备";
+  let subtitle = "前往设备页查找附近灯牌";
+  if (connected) {
+    title = name || "AgentCore-Light";
+    subtitle = "蓝牙连接正常";
+  } else if (reconnecting) {
+    title = "正在重连…";
+    subtitle = "设备断开，自动重连中";
+  }
   return (
     <div className="device-summary">
       <div className={cn("device-orb", connected && "is-connected")}>
@@ -176,10 +187,8 @@ export function DeviceSummary({
         )}
       </div>
       <div className="device-summary__copy">
-        <strong>
-          {connected ? name || "AgentCore-Light" : "尚未连接设备"}
-        </strong>
-        <span>{connected ? "蓝牙连接正常" : "前往设备页查找附近灯牌"}</span>
+        <strong>{title}</strong>
+        <span>{subtitle}</span>
       </div>
       {connected && battery != null ? (
         <span className="battery-value">

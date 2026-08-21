@@ -7,9 +7,11 @@ import {
   RefreshCw,
   Settings,
 } from "lucide-react";
-import { NavLink, Outlet } from "react-router";
+import { useEffect } from "react";
+import { NavLink, Outlet, useNavigate } from "react-router";
 import { useAppState } from "@/app/app-context";
 import { ActionButton, InlineAlert, Skeleton } from "@/components/app-ui";
+import { subscribe } from "@/lib/ailight";
 import { cn, runAsync } from "@/lib/utils";
 
 const navigation = [
@@ -24,6 +26,19 @@ const navigation = [
 export function AppShell() {
   const { snapshot, loading, fatalError, refresh, toasts, dismissToast } =
     useAppState();
+  const navigate = useNavigate();
+
+  // 托盘「打开配置」→ 跳转 /devices（Rust 侧 emit open-config）
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    subscribe("open-config", () => navigate("/devices")).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, [navigate]);
+
   return (
     <div className="app-frame">
       <a className="skip-link" href="#main-content">

@@ -133,7 +133,7 @@
   - 开机自启（tauri-plugin-autostart）作为设置项（SHOULD，第一期可暂缓）
 - **备选方案**：窗口常驻不隐藏——违背 Q2，否决；无托盘——无法后台，否决。
 - **后果**：服务与 UI 解耦✅；mac 菜单栏 / win 通知区 / linux 各 DE 的托盘行为需逐平台适配⚠️。
-- **验证**：三平台托盘菜单与关闭行为冒烟。状态：✅ 设计确定。
+- **验证**：三平台托盘菜单与关闭行为冒烟。状态：✅ 已实现（`tray.rs`：图标 / 菜单 / 动态联动 / 退出入口）；图标占位待替换，三平台冒烟（U-05）待实机。
 
 ### KAD-07 单 writer 发送队列
 
@@ -173,7 +173,7 @@
 | U-02 | axum 对构建体积/编译时间影响 | KAD-02 | ✅ 已实现（含 OpenAPI/token 单测）；编译体积对比待回填 |
 | U-03 | Claude Code HTTP hook 真实请求格式（变量占位/时序） | Q6 实测 | 待实测回填 `docs/specs/adapters/`（目录尚未创建） |
 | U-04 | Codex Desktop notify 重写冲突规避 | Q6 实测 | 实测后定适配模板 |
-| U-05 | 托盘图标三平台差异（mac 菜单栏/win 通知区/linux DE） | KAD-06 | 托盘未实装，验证前置未满足（待托盘落地后逐平台适配） |
+| U-05 | 托盘图标三平台差异（mac 菜单栏/win 通知区/linux DE） | KAD-06 | ✅ 托盘已实装（图标占位待替换）；三平台行为冒烟待实机 |
 | U-06 | Tauri async command 与 btleplug 事件循环线程模型整合 | KAD-01/03 | ✅ 已落地：见 KAD-08 + ADR-0003（setup 侧已通过 `enter()` guard 解决；BLE 线程侧始终在 async fn 内部，原本安全） |
 | U-07 | token 明文存储风险 | KAD-04 | 改进项：系统钥匙串（mac Keychain/win Credential Manager/linux secret-service），V2 |
 
@@ -197,7 +197,7 @@
 | KAD-03 状态流 = Rust 唯一事实源 + events | ✅ 设计确定 |
 | KAD-04 配置/主题 = JSON 文件（config.json + themes/） | ✅ 设计确定 |
 | KAD-05 日志 = tracing 生态 + 协议 DEBUG 编译开关 | ✅ 设计确定 |
-| KAD-06 托盘常驻 + 关窗隐藏 + 单实例 | ✅ 设计确定 |
+| KAD-06 托盘常驻 + 关窗隐藏 + 单实例 | ✅ 已实现（U-05 三平台冒烟待完成） |
 | KAD-07 单 writer 队列 + 事务状态机 | ✅ 设计确定 |
 | KAD-08 core 不绑 runtime + setup 契约显式化（ADR-0003） | ✅ 设计确定 |
 

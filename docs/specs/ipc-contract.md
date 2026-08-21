@@ -134,10 +134,11 @@
 | 事件名 | 触发时机 | payload | 实现状态（2026-08-21） |
 |---|---|---|---|
 | `business-state-changed` | 仲裁结果变化（含 hold 回落） | `{ state, source, session, sinceTs, theme }` | ✅ 已 emit |
-| `device-connection-changed` | 连接/断开（含断连宽限开始） | `{ connected, address, name }` | ✅ 连接 / 断连均已 emit |
+| `device-connection-changed` | 连接/断开（含断连宽限开始） | `{ connected, address, name, reason?, reconnecting? }`（`reason`：`link_lost` / `reconnect_failed`；`reconnecting`：断连后是否处于自动重连） | ✅ 连接 / 断连 / 重连放弃均已 emit |
 | `device-power-changed` | POWER_CHANGED / 握手后首次查询 | `{ batteryPercent, powerSource, chargeState, powerFlags }` | ✅ 握手 + 主动事件均已 emit |
 | `device-fault` | FAULT_EVENT | `{ source, code, context }` | ✅ 已 emit |
 | `theme-changed` | 主题切换生效 | `{ name }` | ✅ 已 emit |
+| `config-changed` | 配置更新成功（设置页 / 托盘徽章朝向） | 更新后完整 Config | ✅ 已 emit |
 | `hook-log`（P2） | 每次 hook 事件受理 | `{ source, state, session, applied, ts }`（排障日志面板用） | ❌ P2 未实现 |
 
 **订阅约定**：前端启动时订阅全部事件；`get_app_state` 快照 + 事件增量构成完整视图。Rust 侧不关心前端是否在监听（事件可丢弃，前端可随时用快照自愈）。
