@@ -30,7 +30,10 @@ pub fn state_priority(state: &str) -> u8 {
 
 /// 是否标准状态
 pub fn is_standard_state(state: &str) -> bool {
-    matches!(state, ST_IDLE | ST_WORKING | ST_WAITING | ST_SUCCESS | ST_ERROR)
+    matches!(
+        state,
+        ST_IDLE | ST_WORKING | ST_WAITING | ST_SUCCESS | ST_ERROR
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -152,7 +155,9 @@ impl Arbiter {
         }
 
         // 相同 source + state 且未驻留中 → 幂等不重复（hook-api §3.2）
-        if self.current.state == ev.state && self.current.source.as_deref() == Some(ev.source.as_str()) {
+        if self.current.state == ev.state
+            && self.current.source.as_deref() == Some(ev.source.as_str())
+        {
             return ApplyOutcome::NoChange(self.current.clone());
         }
 
@@ -253,7 +258,11 @@ mod tests {
     fn hold_rollback_to_idle() {
         let mut a = Arbiter::new(ArbitrationMode::Priority, 0);
         // SUCCESS hold 5000ms
-        assert!(applied(&a.apply(&ev("cc", ST_SUCCESS, 1000), Some(5000), 1000)));
+        assert!(applied(&a.apply(
+            &ev("cc", ST_SUCCESS, 1000),
+            Some(5000),
+            1000
+        )));
         assert_eq!(a.current().hold_until_ms, Some(6000));
         // 到期前 tick 无变化
         assert!(a.tick(5999).is_none());

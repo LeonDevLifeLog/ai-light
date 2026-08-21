@@ -52,7 +52,10 @@ pub fn process_event(
     let now = (shared.now_ms)();
     // hold_ms 从主题查（ADR-0001 Q2）
     let hold_ms = {
-        let guard = shared.theme.read().map_err(|_| EngineError::State("theme 锁失败".into()))?;
+        let guard = shared
+            .theme
+            .read()
+            .map_err(|_| EngineError::State("theme 锁失败".into()))?;
         guard
             .as_ref()
             .and_then(|t| t.states.get(state).and_then(|s| s.hold_ms))
@@ -203,7 +206,10 @@ async fn transport_set_scene(
     transport: &Transport,
     scene: &OutputScene,
 ) -> Result<(), EngineError> {
-    let frame = transport.set_scene(scene).await.map_err(EngineError::Transport)?;
+    let frame = transport
+        .set_scene(scene)
+        .await
+        .map_err(EngineError::Transport)?;
     // 应答语义对账（协议 §8.5）：非 OK 结果码告警（低电量/参数拒绝等）
     let rc = protocol::parse_set_scene_response(&frame.data);
     if let Ok((rc, _)) = rc {

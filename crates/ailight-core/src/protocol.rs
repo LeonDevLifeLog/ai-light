@@ -213,7 +213,9 @@ pub struct FrameParser {
 
 impl FrameParser {
     pub fn new() -> Self {
-        Self { buf: Vec::with_capacity(512) }
+        Self {
+            buf: Vec::with_capacity(512),
+        }
     }
 
     pub fn push(&mut self, data: &[u8]) {
@@ -353,7 +355,11 @@ impl OutputScene {
             apply_mode: APPLY_IF_CHANGED,
             transition_ms: 0,
             leds: [LedTrack::default(); 3],
-            buzzer: BuzzerTrack { start_delay_ms: 0, repeat_count: 0, segments: vec![] },
+            buzzer: BuzzerTrack {
+                start_delay_ms: 0,
+                repeat_count: 0,
+                segments: vec![],
+            },
         }
     }
 
@@ -397,7 +403,7 @@ impl OutputScene {
             return None;
         }
         let n = data[58] as usize; // buzzer segment_count（偏移 58）
-        // 实际布局：6 头 + 48 LED + 5 buzzer 头 = 59；segments 在 59..59+5n
+                                   // 实际布局：6 头 + 48 LED + 5 buzzer 头 = 59；segments 在 59..59+5n
         if data.len() != base + 5 * n {
             return None;
         }
@@ -431,7 +437,11 @@ impl OutputScene {
             apply_mode,
             transition_ms,
             leds,
-            buzzer: BuzzerTrack { start_delay_ms, repeat_count, segments },
+            buzzer: BuzzerTrack {
+                start_delay_ms,
+                repeat_count,
+                segments,
+            },
         })
     }
 }
@@ -669,7 +679,9 @@ pub struct RuntimeStatus {
     pub scene_uptime_ms: u32,
     pub fault_flags: u16,
 }
-pub fn parse_runtime_status_response(data: &[u8]) -> Result<(ResultCode, RuntimeStatus), ParseError> {
+pub fn parse_runtime_status_response(
+    data: &[u8],
+) -> Result<(ResultCode, RuntimeStatus), ParseError> {
     if data.len() < 11 {
         return Err(ParseError::NeedMore);
     }
@@ -771,9 +783,11 @@ mod tests {
             let frame = set_scene(1, &scene);
             assert_eq!(
                 frame,
-                hex("55 AA 04 00 01 20 00 3B 01 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                hex(
+                    "55 AA 04 00 01 20 00 3B 01 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00
                      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-                     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 61")
+                     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 61"
+                )
             );
         }
 
@@ -788,7 +802,11 @@ mod tests {
                 apply_mode: APPLY_IF_CHANGED,
                 transition_ms: 0,
                 leds: [LedTrack::default(), led, LedTrack::default()],
-                buzzer: BuzzerTrack { start_delay_ms: 0, repeat_count: 0, segments: vec![] },
+                buzzer: BuzzerTrack {
+                    start_delay_ms: 0,
+                    repeat_count: 0,
+                    segments: vec![],
+                },
             };
             let frame = set_scene(2, &scene);
             // 帧布局：8 帧头 + 6 场景头 + LED0(16B) + LED1(16B, 含 FF B4 00 32) + LED2(16B) + buzzer(5B) + 校验和 47
@@ -824,18 +842,28 @@ mod tests {
                     start_delay_ms: 0,
                     repeat_count: 3,
                     segments: vec![
-                        BuzzerSegment { frequency_hz: 2000, duration_ms: 150, volume: 50 },
-                        BuzzerSegment { frequency_hz: 0, duration_ms: 150, volume: 0 },
+                        BuzzerSegment {
+                            frequency_hz: 2000,
+                            duration_ms: 150,
+                            volume: 50,
+                        },
+                        BuzzerSegment {
+                            frequency_hz: 0,
+                            duration_ms: 150,
+                            volume: 0,
+                        },
                     ],
                 },
             };
             let frame = set_scene(3, &scene);
             assert_eq!(
                 frame,
-                hex("55 AA 04 00 03 20 00 45 01 01 00 00 00 00 01 00 00 00 FF 00 00 3C 01 90
+                hex(
+                    "55 AA 04 00 03 20 00 45 01 01 00 00 00 00 01 00 00 00 FF 00 00 3C 01 90
                      00 00 32 00 05 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
                      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 02 07 D0 00 96 32
-                     00 00 00 96 00 AB")
+                     00 00 00 96 00 AB"
+                )
             );
         }
 
@@ -857,14 +885,20 @@ mod tests {
                 apply_mode: APPLY_IF_CHANGED,
                 transition_ms: 0,
                 leds: [mk(0x0000), mk(0x5555), mk(0xAAAA)],
-                buzzer: BuzzerTrack { start_delay_ms: 0, repeat_count: 0, segments: vec![] },
+                buzzer: BuzzerTrack {
+                    start_delay_ms: 0,
+                    repeat_count: 0,
+                    segments: vec![],
+                },
             };
             let frame = set_scene(4, &scene);
             assert_eq!(
                 frame,
-                hex("55 AA 04 00 04 20 00 3B 01 01 00 00 00 00 02 00 00 00 00 FF 00 32 04 B0
+                hex(
+                    "55 AA 04 00 04 20 00 3B 01 01 00 00 00 00 02 00 00 00 00 FF 00 32 04 B0
                      00 00 00 00 00 00 02 00 00 00 00 FF 00 32 04 B0 55 55 00 00 00 00 02 00
-                     00 00 00 FF 00 32 04 B0 AA AA 00 00 00 00 00 00 00 00 00 17")
+                     00 00 00 FF 00 32 04 B0 AA AA 00 00 00 00 00 00 00 00 00 17"
+                )
             );
         }
 
@@ -890,8 +924,10 @@ mod tests {
         fn g17_7_capabilities() {
             assert_eq!(get_capabilities(1), hex("55 AA 04 00 01 04 00 00 08"));
             let mut p = FrameParser::new();
-            p.push(&hex("55 AA 04 00 01 84 00 17 00 01 00 00 07 FF 03 00 1F 00 C8 13 88 09 C4 10
-                         00 64 27 10 64 00 00 07"));
+            p.push(&hex(
+                "55 AA 04 00 01 84 00 17 00 01 00 00 07 FF 03 00 1F 00 C8 13 88 09 C4 10
+                         00 64 27 10 64 00 00 07",
+            ));
             let f = p.next_frame().unwrap();
             let (rc, cap) = parse_capabilities_response(&f.data).unwrap();
             assert_eq!(rc, ResultCode::Ok);
@@ -925,7 +961,9 @@ mod tests {
         #[test]
         fn g17_9_device_info() {
             let mut p = FrameParser::new();
-            p.push(&hex("55 AA 04 00 01 82 00 10 00 04 04 01 00 00 01 01 00 01 AA BB CC DD EE FF 9D"));
+            p.push(&hex(
+                "55 AA 04 00 01 82 00 10 00 04 04 01 00 00 01 01 00 01 AA BB CC DD EE FF 9D",
+            ));
             let f = p.next_frame().unwrap();
             let (rc, info) = parse_device_info_response(&f.data).unwrap();
             assert_eq!(rc, ResultCode::Ok);
@@ -939,8 +977,10 @@ mod tests {
         #[test]
         fn g17_10_output_status() {
             let mut p = FrameParser::new();
-            p.push(&hex("55 AA 04 00 01 A1 00 15 00 07 B5 01 00 80 00 00 40 00 00 20 00 00 00
-                         00 00 00 00 05 DC 38"));
+            p.push(&hex(
+                "55 AA 04 00 01 A1 00 15 00 07 B5 01 00 80 00 00 40 00 00 20 00 00 00
+                         00 00 00 00 05 DC 38",
+            ));
             let f = p.next_frame().unwrap();
             let (rc, st) = parse_output_status_response(&f.data).unwrap();
             assert_eq!(rc, ResultCode::Ok);
@@ -959,9 +999,11 @@ mod tests {
             scene.apply_mode = RESTART_SCENE;
             assert_eq!(
                 set_scene(5, &scene),
-                hex("55 AA 04 00 05 20 00 3B 01 01 01 00 00 00 00 00 00 00 00 00 00 00 00 00
+                hex(
+                    "55 AA 04 00 05 20 00 3B 01 01 01 00 00 00 00 00 00 00 00 00 00 00 00 00
                      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-                     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 66")
+                     00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 66"
+                )
             );
         }
 
@@ -1039,8 +1081,16 @@ mod tests {
                     start_delay_ms: 100,
                     repeat_count: 2,
                     segments: vec![
-                        BuzzerSegment { frequency_hz: 440, duration_ms: 200, volume: 60 },
-                        BuzzerSegment { frequency_hz: 0, duration_ms: 100, volume: 1 },
+                        BuzzerSegment {
+                            frequency_hz: 440,
+                            duration_ms: 200,
+                            volume: 60,
+                        },
+                        BuzzerSegment {
+                            frequency_hz: 0,
+                            duration_ms: 100,
+                            volume: 1,
+                        },
                     ],
                 },
             };
@@ -1114,13 +1164,34 @@ mod tests {
         #[test]
         fn response_parsers_need_more() {
             // 截断输入 → NeedMore（各应答解析器边界）
-            assert!(matches!(parse_ping_response(&[0x00]), Err(ParseError::NeedMore)));
-            assert!(matches!(parse_device_info_response(&[0x00; 5]), Err(ParseError::NeedMore)));
-            assert!(matches!(parse_capabilities_response(&[0x00; 10]), Err(ParseError::NeedMore)));
-            assert!(matches!(parse_power_status_response(&[0x00; 3]), Err(ParseError::NeedMore)));
-            assert!(matches!(parse_output_status_response(&[0x00; 10]), Err(ParseError::NeedMore)));
-            assert!(matches!(parse_runtime_status_response(&[0x00; 5]), Err(ParseError::NeedMore)));
-            assert!(matches!(parse_set_scene_response(&[0x00; 2]), Err(ParseError::NeedMore)));
+            assert!(matches!(
+                parse_ping_response(&[0x00]),
+                Err(ParseError::NeedMore)
+            ));
+            assert!(matches!(
+                parse_device_info_response(&[0x00; 5]),
+                Err(ParseError::NeedMore)
+            ));
+            assert!(matches!(
+                parse_capabilities_response(&[0x00; 10]),
+                Err(ParseError::NeedMore)
+            ));
+            assert!(matches!(
+                parse_power_status_response(&[0x00; 3]),
+                Err(ParseError::NeedMore)
+            ));
+            assert!(matches!(
+                parse_output_status_response(&[0x00; 10]),
+                Err(ParseError::NeedMore)
+            ));
+            assert!(matches!(
+                parse_runtime_status_response(&[0x00; 5]),
+                Err(ParseError::NeedMore)
+            ));
+            assert!(matches!(
+                parse_set_scene_response(&[0x00; 2]),
+                Err(ParseError::NeedMore)
+            ));
             // 空数据 → 非法结果码（InvalidLength）
             assert_eq!(parse_result(&[]), ResultCode::InvalidLength);
             // 未知结果码透传

@@ -6,12 +6,13 @@
 
 use std::collections::HashMap;
 
+use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::protocol::{
-    self, BuzzerSegment, BuzzerTrack, LedTrack, OutputScene, Rgb, APPLY_IF_CHANGED,
-    CURVE_CONSTANT, CURVE_SAW_DOWN, CURVE_SAW_UP, CURVE_SQUARE, CURVE_TRIANGLE, END_HIGH,
-    END_LOW, END_OFF,
+    self, BuzzerSegment, BuzzerTrack, LedTrack, OutputScene, Rgb, APPLY_IF_CHANGED, CURVE_CONSTANT,
+    CURVE_SAW_DOWN, CURVE_SAW_UP, CURVE_SQUARE, CURVE_TRIANGLE, END_HIGH, END_LOW, END_OFF,
 };
 
 /// 主题格式版本
@@ -63,68 +64,307 @@ pub fn load_builtin(name: &str) -> Option<ThemeFile> {
 
 // ---- 数据结构（theme-format V1.0） ----
 
-#[derive(Debug, Clone, Deserialize)]
+/// 可导入、分享和编辑的完整主题文件。
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ThemeFile {
+    /// 主题名称与格式版本。
     pub theme: ThemeMeta,
+    /// 可复用的命名灯光/声音场景；至少包含一个场景。
     pub scenes: HashMap<String, Scene>,
+    /// 业务状态到场景名称的映射。
     pub states: HashMap<String, StateConfig>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+/// 主题元信息。
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ThemeMeta {
+    /// 主题名称，只允许字母、数字、下划线和连字符。
+    #[schemars(
+        length(min = 1, max = 64),
+        pattern(r"^[A-Za-z0-9_-]+$"),
+        extend("examples" = ["aurora"])
+    )]
     pub name: String,
+    /// 主题格式版本，当前固定为 1。
+    #[schemars(extend("const" = 1, "examples" = [1]))]
     pub version: u32,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+/// 一组可同时执行的三灯轨道与可选蜂鸣轨道。
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Scene {
+    /// 顶、中、底三条灯轨；null 表示该灯输出黑色。
+    #[schemars(length(equal = 3))]
     pub leds: Vec<Option<LedTrackDef>>,
+    /// 可选蜂鸣轨道；省略或 null 表示静音。
     #[serde(default)]
     pub buzzer: Option<BuzzerTrackDef>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct LedTrackDef {
-    pub curve: String,
-    #[serde(default)]
-    pub low: Option<String>,
-    pub high: String,
-    pub brightness: u8,
-    #[serde(default)]
-    pub period_ms: Option<u16>,
-    #[serde(default)]
-    pub phase_deg: Option<u16>,
-    #[serde(default)]
-    pub duty_percent: Option<u8>,
-    #[serde(default)]
-    pub repeat: Option<u16>,
-    #[serde(default)]
-    pub end_level: Option<String>,
+/// 灯光曲线。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum Curve {
+    /// 静态常亮。
+    Constant,
+    /// 方波闪烁。
+    Square,
+    /// 三角波呼吸。
+    Triangle,
+    /// 由暗到亮的锯齿波。
+    SawUp,
+    /// 由亮到暗的锯齿波。
+    SawDown,
 }
 
+/// 有限重复结束后的灯轨电平。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum EndLevel {
+    /// 熄灭。
+    Off,
+    /// 保持低点颜色。
+    Low,
+    /// 保持高点颜色。
+    High,
+}
+
+/// 单条灯轨。其字段约束随 curve 改变，生成的 Schema 使用 oneOf 表达。
 #[derive(Debug, Clone, Deserialize)]
-pub struct BuzzerTrackDef {
+#[serde(deny_unknown_fields)]
+pub struct LedTrackDef {
+    /// 灯光曲线类型。
+    pub curve: Curve,
+    /// 波形低点颜色，格式为 #RRGGBB。
     #[serde(default)]
-    pub start_delay_ms: Option<u16>,
+    pub low: Option<String>,
+    /// 波形高点颜色，格式为 #RRGGBB。
+    pub high: String,
+    /// 整条灯轨亮度，范围 0~100。
+    pub brightness: u8,
+    /// 完整波形周期毫秒数；非 CONSTANT 曲线必填且大于 0。
+    #[serde(default)]
+    pub period_ms: Option<u16>,
+    /// 波形相位角，范围 0~360。
+    #[serde(default)]
+    pub phase_deg: Option<u16>,
+    /// 方波高电平占比，SQUARE 曲线必填且范围 1~99。
+    #[serde(default)]
+    pub duty_percent: Option<u8>,
+    /// 有限重复次数；0 或省略表示持续运行。
     #[serde(default)]
     pub repeat: Option<u16>,
+    /// 有限重复完成后的输出电平。
+    #[serde(default)]
+    pub end_level: Option<EndLevel>,
+}
+
+/// 蜂鸣器播放轨道。
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BuzzerTrackDef {
+    /// 开始播放前的延迟毫秒数。
+    #[schemars(range(min = 0, max = 65535), extend("examples" = [120]))]
+    #[serde(default)]
+    pub start_delay_ms: Option<u16>,
+    /// 整组片段重复次数；0 或省略表示持续循环。
+    #[schemars(range(min = 0, max = 65535), extend("examples" = [1]))]
+    #[serde(default)]
+    pub repeat: Option<u16>,
+    /// 按顺序播放的蜂鸣片段，数量为 1~16。
+    #[schemars(length(min = 1, max = 16))]
     pub segments: Vec<BuzzerSegmentDef>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+/// 单个蜂鸣音调或静音间隔。
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct BuzzerSegmentDef {
+    /// 频率 Hz；0 表示静音间隔，其他值还需满足设备能力范围。
+    #[schemars(range(min = 0, max = 65535), extend("examples" = [880]))]
     pub frequency_hz: u16,
+    /// 片段持续时间毫秒数，必须大于 0。
+    #[schemars(range(min = 1, max = 65535), extend("examples" = [160]))]
     pub duration_ms: u16,
+    /// 蜂鸣音量，范围 0~100。
+    #[schemars(range(min = 0, max = 100), extend("examples" = [70]))]
     pub volume: u8,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+/// 单个业务状态的场景映射与切换语义。
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct StateConfig {
+    /// 引用当前主题 scenes 中存在的场景名称。
+    #[schemars(
+        length(min = 1, max = 64),
+        pattern(r"^[A-Za-z0-9_-]+$"),
+        extend("examples" = ["working"])
+    )]
     pub scene: String,
+    /// 进入状态时的过渡时长，范围 0~2500 毫秒。
+    #[schemars(range(min = 0, max = 2500), extend("examples" = [180]))]
     #[serde(default)]
     pub transition_ms: Option<u16>,
+    /// 终态驻留时长毫秒数；0 或省略表示不自动回落。
+    #[schemars(range(min = 0), extend("examples" = [2000]))]
     #[serde(default)]
     pub hold_ms: Option<u64>,
+}
+
+impl JsonSchema for LedTrackDef {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "LedTrackDef".into()
+    }
+
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        let end_level = generator.subschema_for::<EndLevel>();
+        let color = json!({
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$",
+            "description": "RGB 十六进制颜色，格式为 #RRGGBB。",
+            "examples": ["#168CFF"]
+        });
+        let brightness = json!({
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "整条灯轨亮度，范围 0~100。",
+            "examples": [60]
+        });
+        let phase = json!({
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 360,
+            "description": "波形相位角，范围 0~360。",
+            "examples": [120]
+        });
+        let repeat = json!({
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535,
+            "description": "有限重复次数；0 或省略表示持续运行。",
+            "examples": [3]
+        });
+
+        json!({
+            "description": "单条灯轨。不同 curve 使用互斥的字段约束。",
+            "oneOf": [
+                led_track_variant(
+                    json!({"const": "CONSTANT", "description": "静态常亮曲线。", "examples": ["CONSTANT"]}),
+                    color.clone(), brightness.clone(), phase.clone(), repeat.clone(),
+                    json!({"type": "integer", "const": 0, "description": "CONSTANT 曲线的周期只能省略或为 0。"}),
+                    json!({"type": "integer", "const": 0, "description": "CONSTANT 曲线不使用占空比。"}),
+                    &["curve", "high", "brightness"],
+                    end_level.clone(),
+                ),
+                led_track_variant(
+                    json!({"const": "SQUARE", "description": "方波闪烁曲线。", "examples": ["SQUARE"]}),
+                    color.clone(), brightness.clone(), phase.clone(), repeat.clone(),
+                    json!({"type": "integer", "minimum": 1, "maximum": 65535, "description": "完整方波周期毫秒数。", "examples": [1000]}),
+                    json!({"type": "integer", "minimum": 1, "maximum": 99, "description": "方波高电平占比。", "examples": [50]}),
+                    &["curve", "high", "brightness", "period_ms", "duty_percent"],
+                    end_level.clone(),
+                ),
+                led_track_variant(
+                    json!({"enum": ["TRIANGLE", "SAW_UP", "SAW_DOWN"], "description": "呼吸、渐亮或渐弱曲线。", "examples": ["TRIANGLE"]}),
+                    color, brightness, phase, repeat,
+                    json!({"type": "integer", "minimum": 1, "maximum": 65535, "description": "完整波形周期毫秒数。", "examples": [1600]}),
+                    json!({"type": "integer", "const": 0, "description": "非 SQUARE 曲线不使用占空比。"}),
+                    &["curve", "high", "brightness", "period_ms"],
+                    end_level,
+                )
+            ]
+        })
+        .try_into()
+        .expect("LedTrackDef Schema 必须合法")
+    }
+}
+
+fn led_track_variant(
+    curve: serde_json::Value,
+    color: serde_json::Value,
+    brightness: serde_json::Value,
+    phase: serde_json::Value,
+    repeat: serde_json::Value,
+    period: serde_json::Value,
+    duty: serde_json::Value,
+    required: &[&str],
+    end_level: Schema,
+) -> serde_json::Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": required,
+        "properties": {
+            "curve": curve,
+            "low": color.clone(),
+            "high": color,
+            "brightness": brightness,
+            "period_ms": period,
+            "phase_deg": phase,
+            "duty_percent": duty,
+            "repeat": repeat,
+            "end_level": {
+                "allOf": [end_level],
+                "description": "有限重复完成后的输出电平。",
+                "examples": ["OFF"]
+            }
+        }
+    })
+}
+
+/// 从运行时 Theme DTO 生成 JSON Schema Draft 2020-12。
+pub fn theme_schema_value() -> serde_json::Value {
+    let schema = schemars::schema_for!(ThemeFile);
+    let mut value = serde_json::to_value(schema).expect("Theme Schema 必须可序列化");
+    let root = value
+        .as_object_mut()
+        .expect("Theme Schema 根节点必须是对象");
+    root.insert(
+        "$id".into(),
+        json!("https://ai-light.local/schemas/theme-v1.schema.json"),
+    );
+    root.insert("title".into(), json!("AI-Light Theme"));
+    root.insert(
+        "description".into(),
+        json!("AI-Light 主题文件格式 V1：状态到灯光与声音场景的映射。"),
+    );
+
+    let name_schema = json!({
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9_-]+$"
+    });
+    let properties = root
+        .get_mut("properties")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("Theme Schema 必须包含 properties");
+    let scenes = properties
+        .get_mut("scenes")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("Theme Schema 必须包含 scenes");
+    scenes.insert("minProperties".into(), json!(1));
+    scenes.insert("propertyNames".into(), name_schema.clone());
+    let states = properties
+        .get_mut("states")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("Theme Schema 必须包含 states");
+    states.insert("propertyNames".into(), name_schema);
+
+    value
+}
+
+/// 生成适合提交和分发的稳定格式 JSON Schema 文本。
+pub fn theme_schema_pretty() -> String {
+    let mut output =
+        serde_json::to_string_pretty(&theme_schema_value()).expect("Theme Schema 必须可格式化");
+    output.push('\n');
+    output
 }
 
 // ---- 错误 ----
@@ -153,31 +393,31 @@ impl std::error::Error for ThemeError {}
 
 // ---- 曲线/终态映射 ----
 
-fn curve_to_u8(name: &str) -> Option<u8> {
-    match name {
-        "CONSTANT" => Some(CURVE_CONSTANT),
-        "SQUARE" => Some(CURVE_SQUARE),
-        "TRIANGLE" => Some(CURVE_TRIANGLE),
-        "SAW_UP" => Some(CURVE_SAW_UP),
-        "SAW_DOWN" => Some(CURVE_SAW_DOWN),
-        _ => None,
+fn curve_to_u8(curve: Curve) -> u8 {
+    match curve {
+        Curve::Constant => CURVE_CONSTANT,
+        Curve::Square => CURVE_SQUARE,
+        Curve::Triangle => CURVE_TRIANGLE,
+        Curve::SawUp => CURVE_SAW_UP,
+        Curve::SawDown => CURVE_SAW_DOWN,
     }
 }
 
-fn end_level_to_u8(name: &str) -> Option<u8> {
-    match name {
-        "OFF" => Some(END_OFF),
-        "LOW" => Some(END_LOW),
-        "HIGH" => Some(END_HIGH),
-        _ => None,
+fn end_level_to_u8(level: EndLevel) -> u8 {
+    match level {
+        EndLevel::Off => END_OFF,
+        EndLevel::Low => END_LOW,
+        EndLevel::High => END_HIGH,
     }
 }
 
 // ---- 校验（ADR-0002 T-06：整体校验） ----
 
 pub fn validate(theme: &ThemeFile) -> Result<(), ThemeError> {
-    if theme.theme.name.is_empty() {
-        return Err(ThemeError::Invalid("theme.name 为空".into()));
+    if !valid_name(&theme.theme.name) {
+        return Err(ThemeError::Invalid(
+            "theme.name 命名非法（允许字母数字_-，≤64）".into(),
+        ));
     }
     if theme.theme.version != THEME_FORMAT_VERSION {
         return Err(ThemeError::Invalid(format!(
@@ -189,6 +429,11 @@ pub fn validate(theme: &ThemeFile) -> Result<(), ThemeError> {
         return Err(ThemeError::Invalid("scenes 不能为空".into()));
     }
     for (name, scene) in &theme.scenes {
+        if !valid_name(name) {
+            return Err(ThemeError::Invalid(format!(
+                "scene 名命名非法（允许字母数字_-，≤64）: {name}"
+            )));
+        }
         if scene.leds.len() != 3 {
             return Err(ThemeError::Invalid(format!(
                 "scene[{name}].leds 长度必须为 3，实际 {}",
@@ -205,6 +450,11 @@ pub fn validate(theme: &ThemeFile) -> Result<(), ThemeError> {
         }
     }
     for (state, cfg) in &theme.states {
+        if !valid_name(state) {
+            return Err(ThemeError::Invalid(format!(
+                "state 名命名非法（允许字母数字_-，≤64）: {state}"
+            )));
+        }
         if !theme.scenes.contains_key(&cfg.scene) {
             return Err(ThemeError::Invalid(format!(
                 "states[{state}].scene 引用不存在的 SCENE: {}",
@@ -230,14 +480,12 @@ fn validate_led(scene: &str, idx: usize, led: &LedTrackDef) -> Result<(), ThemeE
             led.brightness
         )));
     }
-    let curve = curve_to_u8(&led.curve).ok_or_else(|| {
-        ThemeError::Invalid(format!(
-            "{where_}.curve 非法: {}（可选 CONSTANT/SQUARE/TRIANGLE/SAW_UP/SAW_DOWN）",
-            led.curve
-        ))
-    })?;
+    let curve = curve_to_u8(led.curve);
     if Rgb::from_hex(&led.high).is_none() {
-        return Err(ThemeError::Invalid(format!("{where_}.high 颜色非法: {}", led.high)));
+        return Err(ThemeError::Invalid(format!(
+            "{where_}.high 颜色非法: {}",
+            led.high
+        )));
     }
     if let Some(low) = &led.low {
         if Rgb::from_hex(low).is_none() {
@@ -263,6 +511,14 @@ fn validate_led(scene: &str, idx: usize, led: &LedTrackDef) -> Result<(), ThemeE
             }
         }
         CURVE_SQUARE => {
+            let period = led.period_ms.ok_or_else(|| {
+                ThemeError::Invalid(format!("{where_}.period_ms 必填（非 CONSTANT 曲线）"))
+            })?;
+            if period == 0 {
+                return Err(ThemeError::Invalid(format!(
+                    "{where_}.period_ms 必须 > 0（非 CONSTANT 曲线）"
+                )));
+            }
             let duty = led.duty_percent.ok_or_else(|| {
                 ThemeError::Invalid(format!("{where_}.duty_percent 在 SQUARE 下必填"))
             })?;
@@ -299,14 +555,15 @@ fn validate_led(scene: &str, idx: usize, led: &LedTrackDef) -> Result<(), ThemeE
             )));
         }
     }
-    if let Some(end) = &led.end_level {
-        if end_level_to_u8(end).is_none() {
-            return Err(ThemeError::Invalid(format!(
-                "{where_}.end_level 非法: {end}（可选 OFF/LOW/HIGH）"
-            )));
-        }
-    }
     Ok(())
+}
+
+fn valid_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 fn validate_buzzer(scene: &str, buz: &BuzzerTrackDef) -> Result<(), ThemeError> {
@@ -378,7 +635,11 @@ pub fn compile_state(theme: &ThemeFile, state: &str) -> Result<OutputScene, Them
                 })
                 .collect(),
         },
-        None => BuzzerTrack { start_delay_ms: 0, repeat_count: 0, segments: vec![] },
+        None => BuzzerTrack {
+            start_delay_ms: 0,
+            repeat_count: 0,
+            segments: vec![],
+        },
     };
 
     Ok(OutputScene {
@@ -390,7 +651,7 @@ pub fn compile_state(theme: &ThemeFile, state: &str) -> Result<OutputScene, Them
 }
 
 fn compile_led(def: &LedTrackDef) -> Result<LedTrack, ThemeError> {
-    let curve = curve_to_u8(&def.curve).unwrap(); // validate 已保证
+    let curve = curve_to_u8(def.curve);
     let high = Rgb::from_hex(&def.high).unwrap();
     let low = match &def.low {
         Some(h) => Rgb::from_hex(h).unwrap(),
@@ -406,11 +667,7 @@ fn compile_led(def: &LedTrackDef) -> Result<LedTrack, ThemeError> {
         phase,
         duty_percent: def.duty_percent.unwrap_or(0),
         repeat_count: def.repeat.unwrap_or(0),
-        end_level: def
-            .end_level
-            .as_deref()
-            .and_then(end_level_to_u8)
-            .unwrap_or(END_OFF),
+        end_level: def.end_level.map(end_level_to_u8).unwrap_or(END_OFF),
     })
 }
 
@@ -445,7 +702,10 @@ mod tests {
 
     #[test]
     fn compile_default_states() {
-        let theme = load(&builtin(&format!("{THEMES_DIR}/default.ailight-theme.json"))).unwrap();
+        let theme = load(&builtin(&format!(
+            "{THEMES_DIR}/default.ailight-theme.json"
+        )))
+        .unwrap();
         // WORKING：三灯 TRIANGLE 呼吸
         let scene = compile_state(&theme, "WORKING").unwrap();
         assert_eq!(scene.transition_ms, 300);
@@ -501,6 +761,17 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(validate(&t), Err(ThemeError::Invalid(_))));
+        // 未知字段由 serde 整体拒绝（与 JSON Schema additionalProperties=false 一致）
+        assert!(matches!(
+            load(r#"{"theme":{"name":"t","version":1,"extra":true},"scenes":{},"states":{}}"#),
+            Err(ThemeError::Parse(_))
+        ));
+        // SQUARE 与其他非静态波形一样必须提供正周期
+        let t: ThemeFile = serde_json::from_str(
+            r##"{"theme":{"name":"t","version":1},"scenes":{"a":{"leds":[{"curve":"SQUARE","high":"#FFFFFF","brightness":50,"duty_percent":50},null,null]}},"states":{}}"##,
+        )
+        .unwrap();
+        assert!(matches!(validate(&t), Err(ThemeError::Invalid(_))));
         // CONSTANT 带 period
         let t: ThemeFile = serde_json::from_str(
             r##"{"theme":{"name":"t","version":1},"scenes":{"a":{"leds":[{"curve":"CONSTANT","high":"#FFFFFF","brightness":50,"period_ms":500},null,null]}},"states":{}}"##,
@@ -539,8 +810,34 @@ mod tests {
     }
 
     #[test]
+    fn builtin_themes_match_json_schema() {
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../../../docs/specs/theme.schema.json")).unwrap();
+        let validator = jsonschema::validator_for(&schema).unwrap();
+
+        for (name, content) in BUILTIN_THEMES {
+            let instance: serde_json::Value = serde_json::from_str(content).unwrap();
+            if let Err(error) = validator.validate(&instance) {
+                panic!("内置主题 {name} 不符合 JSON Schema: {error}");
+            }
+        }
+    }
+
+    #[test]
+    fn checked_in_json_schema_matches_dtos() {
+        assert_eq!(
+            include_str!("../../../docs/specs/theme.schema.json"),
+            theme_schema_pretty(),
+            "Theme DTO 已变化；运行 cargo run --example generate_theme_schema 更新 Schema"
+        );
+    }
+
+    #[test]
     fn state_not_found() {
-        let theme = load(&builtin(&format!("{THEMES_DIR}/default.ailight-theme.json"))).unwrap();
+        let theme = load(&builtin(&format!(
+            "{THEMES_DIR}/default.ailight-theme.json"
+        )))
+        .unwrap();
         assert!(matches!(
             compile_state(&theme, "NOPE"),
             Err(ThemeError::StateNotFound(_))

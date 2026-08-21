@@ -116,8 +116,13 @@ pub async fn scan(adapter: &Adapter, timeout_secs: u64) -> Result<Vec<BleDeviceI
 
 /// 获取默认适配器
 pub async fn default_adapter() -> Result<Adapter, BleError> {
-    let manager = Manager::new().await.map_err(|e| BleError::Scan(e.to_string()))?;
-    let adapters = manager.adapters().await.map_err(|e| BleError::Scan(e.to_string()))?;
+    let manager = Manager::new()
+        .await
+        .map_err(|e| BleError::Scan(e.to_string()))?;
+    let adapters = manager
+        .adapters()
+        .await
+        .map_err(|e| BleError::Scan(e.to_string()))?;
     adapters.into_iter().next().ok_or(BleError::NoAdapter)
 }
 
@@ -135,7 +140,9 @@ pub async fn connect_to_address(
     let mut found: Option<(Peripheral, String)> = None;
     for p in peripherals {
         let props = p.properties().await.ok().flatten();
-        let addr = props.as_ref().map(|pr| normalize_address(&pr.address.to_string()));
+        let addr = props
+            .as_ref()
+            .map(|pr| normalize_address(&pr.address.to_string()));
         if addr.as_deref() == Some(addr_norm.as_str()) {
             let name = props
                 .as_ref()
@@ -145,8 +152,7 @@ pub async fn connect_to_address(
             break;
         }
     }
-    let (peripheral, name) =
-        found.ok_or_else(|| BleError::DeviceNotFound(address.to_string()))?;
+    let (peripheral, name) = found.ok_or_else(|| BleError::DeviceNotFound(address.to_string()))?;
     let io = BleIo::connect(peripheral).await?;
     Ok((io, name))
 }

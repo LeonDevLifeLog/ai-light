@@ -1,207 +1,214 @@
-# AI-Light 主题格式规范（Theme Format）
+# AI-Light 主题格式指南
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.0（正式版） |
-| 文档状态 | 生效（ADR-0002 确定） |
-| 文件扩展名 | `.ailight-theme.json`（单文件，可分享/导入） |
-| 生效日期 | 2026-08-19 |
+| 格式版本 | V1 |
+| 文件扩展名 | `.ailight-theme.json` |
+| 机器契约 | [JSON Schema Draft 2020-12](./theme.schema.json) |
+| 示例主题 | [内置主题目录](./themes/) |
 
-> 主题 = `状态 → SCENE` 映射表。客户端加载主题后，把接入层收到的标准状态编译为 V0.4 SCENE 下发给硬件。
+主题描述“业务状态应该呈现什么灯光与声音”。设备只执行编译后的场景，不理解 `WORKING`、`ERROR` 等业务语义，因此更换主题不需要修改设备协议或固件。
 
----
+## 1. 概念模型
 
-## 1. 总体结构
-
-```jsonc
-{
-  "theme": {
-    "name": "default",          // 主题名，必填
-    "version": 1                // 主题格式版本，必填，当前 = 1
-  },
-  "scenes": { … },              // 命名 SCENE 库（复用单元）
-  "states": { … }               // 状态 → SCENE 名映射
-}
+```text
+theme    主题名称与格式版本
+scenes   可复用的灯光/声音场景库
+states   业务状态到场景名称的映射
 ```
 
-- 顶层只允许三个键：`theme` / `scenes` / `states`
-- 未知键 → 校验失败（整体拒绝，回退默认主题）
+处理链路：
 
-## 2. SCENE 库（scenes）
+```text
+Hook 状态事件 → 状态仲裁 → states 查找 → scenes 编译 → 设备场景
+```
 
-键 = SCENE 名（`[a-zA-Z0-9_-]+`，必填），值 = SCENE 对象：
+`scenes` 与 `states` 分离可以让多个状态复用一个场景，也可以只修改场景而不改变业务映射。
 
-```jsonc
+## 2. 最小主题
+
+```json
 {
-  "breath-blue": {
-    "leds": [ …3 条轨道，可含 null… ],
-    "buzzer": null              // 可选；null = 静音
+  "theme": {
+    "name": "minimal-blue",
+    "version": 1
+  },
+  "scenes": {
+    "off": {
+      "leds": [null, null, null]
+    },
+    "blue": {
+      "leds": [
+        {
+          "curve": "CONSTANT",
+          "high": "#168CFF",
+          "brightness": 60
+        },
+        null,
+        null
+      ]
+    }
+  },
+  "states": {
+    "IDLE": {
+      "scene": "off"
+    },
+    "WORKING": {
+      "scene": "blue"
+    }
   }
 }
 ```
 
-### 2.1 LedTrack（灯轨道，数组长度 3，对应 顶/中/底）
+## 3. 顶层结构
 
-每条轨道可为 `null`（该灯不参与本 SCENE，输出黑色）：
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `theme` | object | 元信息；包含 `name` 与固定值 `version: 1` |
+| `scenes` | object | 至少一个命名场景 |
+| `states` | object | 状态到场景的映射，可以为空 |
 
-| 字段 | 类型 | 必填 | 说明 | 协议映射（V0.4） |
-|---|---|---|---|---|
-| `curve` | string | ✅ | `CONSTANT` / `SQUARE` / `TRIANGLE` / `SAW_UP` / `SAW_DOWN` | curve 枚举 |
-| `low` | hex color | 条件 | 波形低点颜色 `#RRGGBB`（CONSTANT 时忽略，须省略或 `#000000`） | low_rgb |
-| `high` | hex color | ✅ | 波形高点颜色 | high_rgb |
-| `brightness` | int 0~100 | ✅ | 整轨亮度；0 = 全黑，但轨道时间仍正常推进 | brightness |
-| `period_ms` | int | 条件 | 完整周期；0 或省略 = CONSTANT 静态轨 | period_ms |
-| `phase_deg` | int 0~360 | 条件 | 相位（角度制，编译时换算 `phase = phase_deg × 65536 / 360`） | phase |
-| `duty_percent` | int 1~99 | 条件 | 仅 SQUARE 有效；非 SQUARE 须省略 | duty_percent |
-| `repeat` | int | 条件 | 有限次数；0 或省略 = 持续 | repeat_count |
-| `end_level` | string | 条件 | `OFF` / `LOW` / `HIGH`；有限次数时的终态 | end_level |
+主题名、场景名和状态名统一使用 `[A-Za-z0-9_-]+`，长度为 1 至 64 字符。顶层和各层对象的未知字段都会导致整个主题被拒绝。
 
-**约束（与 V0.4 §8.2 校验规则一致，主题层先行校验）**：
-- `CONSTANT`：只填 `high` + `brightness`，其余字段省略
-- 非 `SQUARE`：不得出现 `duty_percent`
-- `period_ms = 0` 仅 CONSTANT 允许；否则必须在设备能力范围 `[min_period_ms, max_period_ms]`（运行时以 GET_CAPABILITIES 为准，主题静态校验只查 0 与非 0）
+## 4. 场景结构
 
-### 2.2 BuzzerTrack（蜂鸣轨道）
+每个场景包含恰好三条灯轨 `leds`，按顶、中、底顺序排列；某一项为 `null` 表示该灯输出黑色。`buzzer` 可省略或设为 `null` 表示静音。
 
-`null` = 本 SCENE 静音。对象结构：
+```json
+{
+  "leds": [null, null, null],
+  "buzzer": null
+}
+```
 
-```jsonc
-"buzzer": {
-  "start_delay_ms": 0,          // 可选，默认 0
-  "repeat": 3,                  // 可选，0/省略 = 持续循环
-  "segments": [                 // 1~16 条
-    { "frequency_hz": 2000, "duration_ms": 150, "volume": 70 },
-    { "frequency_hz": 0,    "duration_ms": 150, "volume": 0 }   // 0 Hz = 静音间隔
+### 4.1 灯轨
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `curve` | enum | `CONSTANT / SQUARE / TRIANGLE / SAW_UP / SAW_DOWN` |
+| `high` | `#RRGGBB` | 波形高点颜色 |
+| `low` | `#RRGGBB` | 可选，波形低点颜色 |
+| `brightness` | integer 0–100 | 整条灯轨亮度 |
+| `period_ms` | integer | 非 `CONSTANT` 必填且大于 0 |
+| `phase_deg` | integer 0–360 | 可选，三灯错峰运动的相位 |
+| `repeat` | integer 0–65535 | 可选；0 或省略表示持续 |
+| `end_level` | enum | 可选；有限重复结束后的 `OFF / LOW / HIGH` |
+
+曲线条件：
+
+| 曲线 | 约束 |
+|---|---|
+| `CONSTANT` | `period_ms / phase_deg / duty_percent / repeat` 只能省略或为 0 |
+| `SQUARE` | `period_ms` 必须大于 0；`duty_percent` 必填，范围 1–99 |
+| 其他波形 | `period_ms` 必须大于 0；`duty_percent` 只能省略或为 0 |
+
+主题静态校验负责结构和基础范围；设备实际支持的周期范围在连接后根据能力信息检查。
+
+### 4.2 蜂鸣轨
+
+```json
+{
+  "start_delay_ms": 0,
+  "repeat": 3,
+  "segments": [
+    {
+      "frequency_hz": 2000,
+      "duration_ms": 150,
+      "volume": 70
+    },
+    {
+      "frequency_hz": 0,
+      "duration_ms": 150,
+      "volume": 0
+    }
   ]
 }
 ```
 
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `frequency_hz` | int | ✅ | 0 = 静音间隔；否则运行时须在能力范围 `[min_frequency_hz, max_frequency_hz]` |
-| `duration_ms` | int | ✅ | 必须 > 0 |
-| `volume` | int 0~100 | ✅ | 音量；0 = 静音，`frequency_hz = 0` 时设备忽略该值 |
+| 字段 | 约束 |
+|---|---|
+| `start_delay_ms` | 可选，0–65535 |
+| `repeat` | 可选，0–65535；0 或省略表示持续 |
+| `segments` | 必填，1–16 段 |
+| `frequency_hz` | 0–65535；0 表示静音间隔 |
+| `duration_ms` | 1–65535 |
+| `volume` | 0–100 |
 
-## 3. 状态映射（states）
+频率的实际可用范围由设备能力决定，Schema 只表达协议字段可承载的静态范围。
 
-键 = 状态名（标准 5 态或自定义，`[a-zA-Z0-9_-]+`），值：
+## 5. 状态映射
 
-```jsonc
-"WORKING": {
-  "scene": "breath-blue",       // 必填：引用 scenes 中的 SCENE 名
-  "transition_ms": 300,         // 可选：进入本状态的切换过渡时长；0/省略 = 立即
-  "hold_ms": 0                  // 可选：终态驻留时长（见下）
-}
-```
-
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `scene` | string | ✅ | 引用 `scenes` 中的 SCENE 名；引用不存在 → 校验失败 |
-| `transition_ms` | int | 否 | 状态切换过渡（V0.4 transition_ms）；0/省略 = 立即切换 |
-| `hold_ms` | int | 否 | **仅终态语义（SUCCESS/ERROR）有意义**：0 = 驻留到下一事件；N = N 毫秒后自动回落 IDLE；省略 = 0 |
-
-**IDLE 特殊语义**：主题中可写 `IDLE`（指定空闲灯效），不写则内置"熄灭"。
-**未映射状态**：客户端收到 `states` 中未出现的状态 → 按 IDLE 显示 + 记日志。
-
-## 4. 校验与容错
-
-1. 加载时**整体校验**（JSON 合法性、字段范围、SCENE 引用完整性）；
-2. 任一字段非法 → **整个主题拒绝生效**，回退内置默认主题（随客户端分发，含 5 态基础灯效）；
-3. 校验失败与回退原因写入客户端日志；
-4. 运行时设备能力（period/frequency 边界）不符 → 按 V0.4 校验规则返回错误，灯保持原状（主题本身仍有效，能力边界以设备为准）。
-
-## 5. 完整示例
-
-```jsonc
+```json
 {
-  "theme": { "name": "default", "version": 1 },
-  "scenes": {
-    "off": {
-      "leds": [null, null, null],
-      "buzzer": null
-    },
-    "breath-blue": {
-      "leds": [
-        { "curve": "TRIANGLE", "low": "#003366", "high": "#00CCFF", "brightness": 60, "period_ms": 1200, "phase_deg": 0 },
-        { "curve": "TRIANGLE", "low": "#003366", "high": "#00CCFF", "brightness": 60, "period_ms": 1200, "phase_deg": 120 },
-        { "curve": "TRIANGLE", "low": "#003366", "high": "#00CCFF", "brightness": 60, "period_ms": 1200, "phase_deg": 240 }
-      ],
-      "buzzer": null
-    },
-    "breath-amber": {
-      "leds": [
-        { "curve": "TRIANGLE", "low": "#3D2B00", "high": "#FFB400", "brightness": 50, "period_ms": 1800, "phase_deg": 0 },
-        { "curve": "TRIANGLE", "low": "#3D2B00", "high": "#FFB400", "brightness": 50, "period_ms": 1800, "phase_deg": 0 },
-        { "curve": "TRIANGLE", "low": "#3D2B00", "high": "#FFB400", "brightness": 50, "period_ms": 1800, "phase_deg": 0 }
-      ],
-      "buzzer": null
-    },
-    "glow-green": {
-      "leds": [
-        { "curve": "CONSTANT", "high": "#00E676", "brightness": 70 },
-        { "curve": "CONSTANT", "high": "#00E676", "brightness": 70 },
-        { "curve": "CONSTANT", "high": "#00E676", "brightness": 70 }
-      ],
-      "buzzer": null
-    },
-    "alert-red": {
-      "leds": [
-        { "curve": "SQUARE", "high": "#FF0000", "brightness": 80, "period_ms": 400, "duty_percent": 50, "repeat": 5, "end_level": "OFF" },
-        null,
-        null
-      ],
-      "buzzer": {
-        "start_delay_ms": 0, "repeat": 3,
-        "segments": [
-          { "frequency_hz": 2000, "duration_ms": 150, "volume": 70 },
-          { "frequency_hz": 0,    "duration_ms": 150, "volume": 0 }
-        ]
-      }
-    }
+  "WORKING": {
+    "scene": "breath-blue",
+    "transition_ms": 300
   },
-  "states": {
-    "IDLE":     { "scene": "off" },
-    "WORKING":  { "scene": "breath-blue", "transition_ms": 300 },
-    "WAITING":  { "scene": "breath-amber" },
-    "SUCCESS":  { "scene": "glow-green", "hold_ms": 5000 },
-    "ERROR":    { "scene": "alert-red", "hold_ms": 0 },
-    "REVIEW":   { "scene": "breath-purple" }
+  "SUCCESS": {
+    "scene": "success-green",
+    "hold_ms": 5000
   }
 }
 ```
 
-## 6. 编译链路（客户端 L2 → L3）
+| 字段 | 约束 | 语义 |
+|---|---|---|
+| `scene` | 必填，合法名称 | 必须引用当前文件 `scenes` 中存在的场景 |
+| `transition_ms` | 0–2500 | 进入状态时的过渡时长 |
+| `hold_ms` | 非负整数 | 终态驻留后回落 `IDLE`；0 表示不自动回落 |
 
-```text
-标准状态（如 WORKING）
-  → states[WORKING].scene 取 SCENE 名
-  → scenes[SCENE 名] JSON 编译为 V0.4 OutputScene（字节级）
-  → SET_SCENE（apply_mode 幂等，见协议 §8.4）
+标准状态为 `IDLE / WORKING / WAITING / SUCCESS / ERROR`，也可以增加自定义状态。未映射的状态按 `IDLE` 呈现并写入日志；若 `IDLE` 也未映射，则输出熄灭场景。
+
+## 6. 两层校验
+
+主题导入执行两层校验：
+
+1. **JSON Schema 结构校验**：类型、必填字段、枚举、范围、名称格式、条件字段和未知字段。
+2. **运行时语义校验**：`states.*.scene` 跨对象引用、设备能力边界及编译约束。
+
+标准 JSON Schema 无法可靠声明“对象值必须引用同一文档另一个动态键”，所以场景引用由 Rust 校验器负责。任一层失败都会整体拒绝主题，不做部分加载。
+
+### 编辑器配置
+
+VS Code 可按扩展名关联 Schema：
+
+```json
+{
+  "json.schemas": [
+    {
+      "fileMatch": ["*.ailight-theme.json"],
+      "url": "./docs/specs/theme.schema.json"
+    }
+  ]
+}
 ```
 
-- 颜色 hex → RGB 字节；`phase_deg` → 归一化 phase；曲线名 → 枚举值
-- 编译结果与当前有效 SCENE 去重（`APPLY_IF_CHANGED`）；业务离开后重入或试听 → `RESTART_SCENE`
+也可使用支持 JSON Schema Draft 2020-12 的工具直接加载 `theme.schema.json`。
 
-## 7. 与协议 V0.4 的关系
+## 7. 创作建议
 
-- 主题格式是**协议无关的表达层**：所有字段最终编译为 V0.4 SCENE
-- 主题文件**不包含**协议版本/设备能力信息——能力适配在编译期（L3）完成
-- 未来协议升级（如 V0.5 增加新曲线）：主题格式可加字段并递增 `version`，旧主题仍可加载（缺省字段 = 默认值）
+- 先定义语义明确、可复用的场景名，再映射状态。
+- `CONSTANT` 适合静态提示，`TRIANGLE` 适合呼吸，`SQUARE` 适合警报，`SAW_UP/SAW_DOWN` 适合方向性运动。
+- 使用三条轨道不同的 `phase_deg` 形成从上到下、从下到上或交错运动。
+- 提示音尽量短；持续蜂鸣会干扰工作环境。
+- 一个场景被多个状态引用时，修改它会同时影响所有引用状态。
+- 内置主题只能作为创作起点另存为用户主题，不能被同名用户文件覆盖。
 
-## 8. 主题创作器表达约定
+## 8. 版本与兼容性
 
-主题文件保留精确的协议映射字段，但默认 UI 使用用户可理解的效果语言生成这些字段：
+V1 文件必须声明 `theme.version: 1`。未来格式若增加破坏性字段，将递增该版本并发布新的 Schema。主题文件不携带设备协议版本；客户端负责把稳定的主题表达编译到当前设备协议。
 
-| 用户选择 | 主题字段 |
-|---|---|
-| 常亮 / 呼吸 / 闪烁 / 渐亮 / 渐弱 | `CONSTANT / TRIANGLE / SQUARE / SAW_UP / SAW_DOWN` |
-| 舒缓 / 适中 / 活跃 | 预设 `period_ms` |
-| 一起 / 从上往下 / 从下往上 / 交错 | 三灯预设 `phase_deg` 组合 |
-| 光线强度 | 三灯 `brightness` |
-| 无声 / 轻提示 / 确认音 / 警报音 | 预设 `buzzer.segments` |
+维护约定：
 
-- 默认界面不得要求用户理解“相位”“占空比”等协议术语。
-- 精确字段只在轨道工作台或 JSON 视图中渐进披露。
-- 自定义状态与标准状态使用同一 `states → scenes` 映射机制。
-- 一个 SCENE 被多个状态引用时，编辑器必须提示影响范围。
-- 内置主题只能作为创作起点另存为新主题；用户主题不得与内置主题同名。
+- Rust Theme DTO、字段注释与 `JsonSchema` 实现是结构契约的唯一事实源；[theme.schema.json](./theme.schema.json) 是其生成产物。
+- 本文解释概念、工作流与字段语义，不取代机器校验。
+- 修改 DTO 后运行 `cd crates/ailight-core && cargo run --example generate_theme_schema` 更新生成产物。
+- 测试会检查生成产物与 DTO 完全同步，并让六个内置主题同时经过 JSON Schema 与运行时语义校验。
+- 修改字段时必须同步 Schema、Rust 数据结构、内置主题和 UI 主题编辑器契约。
+
+相关文档：
+
+- [内置主题说明](./themes/README.md)
+- [Hook API](./hook-api.md)
+- [IPC 契约](./ipc-contract.md)
+- [ADR-0002](../decisions/ADR-0002-主题格式设计决策.md)

@@ -98,7 +98,8 @@ impl Transport {
 
     /// 便捷方法：SET_SCENE
     pub async fn set_scene(&self, scene: &protocol::OutputScene) -> Result<Frame, TransportError> {
-        self.request(protocol::CMD_SET_SCENE, scene.encode_data()).await
+        self.request(protocol::CMD_SET_SCENE, scene.encode_data())
+            .await
     }
 
     /// 便捷方法：PING
@@ -112,11 +113,7 @@ impl Transport {
     }
 }
 
-async fn writer_task(
-    io: Arc<dyn TransportIo>,
-    mut rx: mpsc::Receiver<Outbound>,
-    timeout_ms: u64,
-) {
+async fn writer_task(io: Arc<dyn TransportIo>, mut rx: mpsc::Receiver<Outbound>, timeout_ms: u64) {
     let mut seq: u16 = 0;
     while let Some(out) = rx.recv().await {
         seq = seq.wrapping_add(1);
@@ -237,7 +234,11 @@ mod tests {
     }
 
     fn ack_frame(cmd: u8, seq: u16) -> Frame {
-        Frame { seq, cmd: protocol::response_cmd(cmd), data: vec![0x00] }
+        Frame {
+            seq,
+            cmd: protocol::response_cmd(cmd),
+            data: vec![0x00],
+        }
     }
 
     #[tokio::test]
@@ -262,7 +263,11 @@ mod tests {
     async fn retry_then_success_same_seq() {
         let h = harness(100); // 短超时加速测试
         let task = tokio::spawn(async move {
-            let f = h.transport.request(protocol::CMD_RESET_OUTPUTS, vec![]).await.unwrap();
+            let f = h
+                .transport
+                .request(protocol::CMD_RESET_OUTPUTS, vec![])
+                .await
+                .unwrap();
             assert_eq!(f.cmd, protocol::response_cmd(protocol::CMD_RESET_OUTPUTS));
         });
         // 等待第 3 次重发完成（前两次超时，不喂帧），再喂应答
@@ -303,8 +308,11 @@ mod tests {
         });
         tokio::time::sleep(Duration::from_millis(50)).await;
         // 先喂一个设备事件（DEVICE_READY），再喂应答
-        h.io
-            .feed_frame(Frame { seq: 99, cmd: protocol::EVT_DEVICE_READY, data: vec![4, 1, 0, 0, 1, 1] });
+        h.io.feed_frame(Frame {
+            seq: 99,
+            cmd: protocol::EVT_DEVICE_READY,
+            data: vec![4, 1, 0, 0, 1, 1],
+        });
         h.io.feed_frame(ack_frame(protocol::CMD_PING, 1));
         task.await.unwrap();
     }

@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V0.1（随原型落地） |
+| 文档版本 | V1.7 |
 | 文档状态 | ⏸ 设计阶段，待实现期修订 |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
@@ -708,6 +708,8 @@ V2 实施时补充：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.7 | 2026-08-21 | 对齐报告：主题定义迁移为 Rust DTO + JsonSchema 单一来源后完成 5 项语义硬检查。Source Events、AppError.code、蓝牙 result code 均与上游契约一致；主题编辑字段完整存在于 DTO 生成的 Theme Schema；ADR/KAD 引用有效。强类型 `Curve` / `EndLevel` 保持既有 JSON 字符串，`LedTrackDef` 条件约束由 `oneOf` 表达，因此 UI 契约无需变更。 |
+| V1.6 | 2026-08-21 | 对齐报告：Theme JSON Schema 与主题指南落地后完成 5 项语义硬检查。Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致（保留值 0x08 无 UI 行为）；主题编辑字段均存在于 theme-format 与 Theme Schema；ADR-0001/0002/0003、KAD-03/06/08 引用有效。同步修正文档版本头漂移。 |
 | V1.5 | 2026-08-21 | 主题个性化重构：简单/进阶改为快速创作/轨道工作台；快速创作采用运动、速度、灯序、声音等用户语言，支持自定义状态和草稿三灯预览；`brightness` / `volume` 统一为 0~100。对齐报告：Source Events、AppError、蓝牙 result code、theme-format 字段、ADR/KAD 引用五项检查通过；修复主题完整示例和内置同名覆盖语义漂移。 |
 | V1.4 | 2026-08-20 | 对齐报告：完成前端实现后的 5 项语义硬检查。Source Events 与 ipc-contract §5 一致；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题编辑字段与 theme-format 字段表一致；ADR-0001 / KAD-03 / KAD-06 引用有效。同步确认 5 个主业务导航 + 设置入口，并补齐 `badgeOrientation` IPC 持久化。 |
 
