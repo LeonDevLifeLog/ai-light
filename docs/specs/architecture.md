@@ -71,7 +71,7 @@
   1. 各平台原生绑定（CoreBluetooth / WinRT / BlueZ 直写）——工作量 ×3，双端维护，否决
   2. Python sidecar（复用 pyPcTest 的 Bleak 栈）——双运行时、IPC 复杂度、分发体积，否决
 - **后果**：跨平台一致性✅；Windows 服务缓存与偶发连接问题需专门处理⚠️；btleplug 事件循环与 Tauri async 的线程模型整合需 spike 验证⚠️。
-- **验证**：三平台冒烟（扫描→连接→握手→SET_SCENE 全链路）。状态：⚠️ 待开发验证。
+- **验证**：三平台冒烟（扫描→连接→握手→SET_SCENE 全链路）。状态：✅ 已实现（`ble.rs`：扫描 / 连接 / 特征发现与 TX 订阅 / 热切换）；三平台实机冒烟（U-01）待完成。
 
 ### KAD-02 本地 HTTP server：axum
 
@@ -84,7 +84,7 @@
   2. `actix-web`——运行时与 Tauri 的 tokio 生态割裂，否决
   3. 原生 `std::net::TcpListener` 手写 HTTP——不可维护，否决
 - **后果**：依赖 +编译时间少量增加（tokio 已存在）✅；axum server 需与 Tauri async runtime 共存（独立 runtime 或 tauri 的 tokio 复用）⚠️。
-- **验证**：构建体积/编译时间对比、端口退避行为。状态：⚠️ 待实现验证。
+- **验证**：构建体积/编译时间对比、端口退避行为。状态：✅ 已实现（`hook_server` 基于 axum，含 OpenAPI 生成与 token 校验单测；端口 47800 退避至 47810）；编译体积对比待回填。
 
 ### KAD-03 状态流架构：Rust 侧唯一事实源 + events 推前端
 
@@ -169,11 +169,11 @@
 
 | # | 不确定项 | 关联 | 处置 |
 |---|---|---|---|
-| U-01 | btleplug 三平台实际行为（Win 缓存规避、Linux BlueZ 依赖） | KAD-01 | 开发期 spike + 三平台冒烟 |
-| U-02 | axum 对构建体积/编译时间影响 | KAD-02 | 构建验证（可与模板基线对比） |
-| U-03 | Claude Code HTTP hook 真实请求格式（变量占位/时序） | Q6 实测 | hook-api 示例回填 `docs/specs/adapters/` |
+| U-01 | btleplug 三平台实际行为（Win 缓存规避、Linux BlueZ 依赖） | KAD-01 | ✅ 代码已落地；三平台实机冒烟待完成 |
+| U-02 | axum 对构建体积/编译时间影响 | KAD-02 | ✅ 已实现（含 OpenAPI/token 单测）；编译体积对比待回填 |
+| U-03 | Claude Code HTTP hook 真实请求格式（变量占位/时序） | Q6 实测 | 待实测回填 `docs/specs/adapters/`（目录尚未创建） |
 | U-04 | Codex Desktop notify 重写冲突规避 | Q6 实测 | 实测后定适配模板 |
-| U-05 | 托盘图标三平台差异（mac 菜单栏/win 通知区/linux DE） | KAD-06 | 开发期逐平台适配 |
+| U-05 | 托盘图标三平台差异（mac 菜单栏/win 通知区/linux DE） | KAD-06 | 托盘未实装，验证前置未满足（待托盘落地后逐平台适配） |
 | U-06 | Tauri async command 与 btleplug 事件循环线程模型整合 | KAD-01/03 | ✅ 已落地：见 KAD-08 + ADR-0003（setup 侧已通过 `enter()` guard 解决；BLE 线程侧始终在 async fn 内部，原本安全） |
 | U-07 | token 明文存储风险 | KAD-04 | 改进项：系统钥匙串（mac Keychain/win Credential Manager/linux secret-service），V2 |
 
@@ -192,8 +192,8 @@
 
 | 决策 | 状态 |
 |---|---|
-| KAD-01 BLE = btleplug | ⚠️ 待开发验证 |
-| KAD-02 HTTP = axum | ⚠️ 待实现验证 |
+| KAD-01 BLE = btleplug | ✅ 已实现（U-01 三平台冒烟待完成） |
+| KAD-02 HTTP = axum | ✅ 已实现（含 OpenAPI/token 单测） |
 | KAD-03 状态流 = Rust 唯一事实源 + events | ✅ 设计确定 |
 | KAD-04 配置/主题 = JSON 文件（config.json + themes/） | ✅ 设计确定 |
 | KAD-05 日志 = tracing 生态 + 协议 DEBUG 编译开关 | ✅ 设计确定 |

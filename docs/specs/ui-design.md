@@ -280,7 +280,7 @@
 - **自定义状态输入**：
   - Input + [触发] 按钮
   - 支持最近 5 个自定义状态名的快捷按钮组（用户决策 ⏸ #3）
-- **预览 SCENE**（P1 占位 / P2 实装）：
+- **预览 SCENE** ✅（P1 已实装：`preview_scene` command + Preview 页"试听当前灯效"按钮）：
   - 按 SCENE 名直接预览，不改变业务状态
   - 设备未连接时禁用 + Tooltip 提示
 - **[全部重置]** 按钮：`reset_outputs()` → 灯效全停 + 业务状态回 IDLE
@@ -585,34 +585,34 @@ z/tooltip    = 300
 
 ---
 
-## 11. 未推进项路线图（合并此前盘点）
+## 11. 功能路线图与实现状态对账（2026-08-21 以代码为事实源修订）
 
 ### 11.1 必做（MVP 闭合）✅ 高优先级
 
-- **托盘常驻服务**：托盘图标 + 菜单（含红绿灯状态文字 / 朝向切换 / 显示窗口 / 退出）+ 关窗隐藏 + 单实例确认 + 退出入口
-- **主窗口 5 页 UI**：状态总览 / 设备管理 / 主题中心 / 试听 / 设置
-- **12 个 P1 commands 前端对接**：`get_app_state` / `get_themes` / `get_theme` / `set_active_theme` / `import_theme` / `scan_devices` / `connect_device` / `trigger_state` / `preview_scene` / `reset_outputs` / `get_config` / `update_config`
-- **6 个 P1 events 订阅**：`business-state-changed` / `device-connection-changed` / `device-power-changed` / `device-fault` / `theme-changed` / （`hook-log` P2）
-- **红绿灯徽章组件**（核心视觉）+ 朝向偏好设置
+- **托盘常驻服务**：❌ 未实装。托盘图标 + 菜单均未实现（`src-tauri` 无 TrayIconBuilder、tauri.conf.json 无 trayIcon）；关窗隐藏与单实例已落地。见 ui-interactions.md §12 的 P1/V2 口径冲突
+- **主窗口 5 页 UI**：✅ 已实装（状态总览 / 设备管理 / 主题中心 / 试听 / 设置）
+- **12 个 P1 commands 前端对接**：✅ 已实装（`get_app_state` / `get_themes` / `get_theme` / `set_active_theme` / `import_theme` / `scan_devices` / `connect_device` / `trigger_state` / `preview_scene` / `reset_outputs` / `get_config` / `update_config`）
+- **P1 events 订阅**：⚠️ 前端已订阅 5 个 P1 events，但 Rust 仅 emit `business-state-changed` / `device-connection-changed`（仅连接方向）/ `theme-changed`；`device-power-changed` / `device-fault` 未 emit（BLE 未接电量读取与 FAULT_EVENT）。`hook-log` 为 P2
+- **红绿灯徽章组件**（核心视觉）+ 朝向偏好设置：✅ 已实装
 
 ### 11.2 应做（产品完整性）
 
-- **`portPreference` 实际读取与重启**：ipc-contract §2.5 提到 P1 要实现；目前 config 有字段但 hook_server 启动未读取
-- **token Bearer 校验**：hook_server 是否真启用 Bearer 校验需要核实并补全单测
-- **`autostart` 真实启用**：`update_config` 接 `patch.autostart` 但没调 `tauri-plugin-autostart`（KAD-06 SHOULD）
-- **`badgeOrientation` 设置项**：本文 5.1.1 / 7.4 / 9.5 已描述
-- **P2 commands**：`export_theme` / `delete_theme` / `disconnect_device` / `forget_device` / `hook-log` event（ipc-contract §7）
+- **`portPreference` 实际读取与重启**：❌ 未实现。config 有字段但 `hook_server::serve` 固定 47800 起退避、不读取；`update_config` 不允许修改（P1 只读）
+- **token Bearer 校验**：✅ 已实现。hook_server 在配置 token 后强制 Bearer 校验，含 `token_auth` 单测；UI 设置入口按设计不开放（V2）
+- **`autostart` 真实启用**：❌ 未实现。`update_config` 仅持久化字段，未接 `tauri-plugin-autostart`（KAD-06 SHOULD）；Settings 页展示禁用态
+- **`badgeOrientation` 设置项**：✅ 已实现（Settings 页 + Dashboard 实时生效 + config 持久化）
+- **P2 commands**：❌ 全部未实现。`export_theme` / `delete_theme` / `disconnect_device` / `forget_device` / `hook-log` event（ipc-contract §7）
 
 ### 11.3 待定（V2 / 远期）
 
-- **`direct_scene`** 高级直控通道（ADR-0001 Q9 预留枚举，V2 实现）
-- **主题编辑器 UI** ✅（P1 已实装：默认简单模式 + 进阶模式 6 步骤）
-- **接入密码 UI**：第一版不开放（V2 重新评估）
-- **token 系统钥匙串**（U-07，迁 mac Keychain / win Credential Manager / linux secret-service）
-- **Tauri updater 在线升级**（需签名，L6 V2）
-- **多设备并发**（当前注册表只预留单灯）
-- **浅色模式**（用户决策 ⏸ #4）
-- **Settings 自启动 Switch** UI（待 tauri-plugin-autostart 启用）
+- **`direct_scene`** 高级直控通道：❌ V2 未实现（ADR-0001 Q9 预留枚举；hook 仅接受 `state_change`）
+- **主题编辑器 UI** ✅（P1 已实装：快速创作 + 轨道工作台；见 §13 决策表 #5 对账）
+- **接入密码 UI**：❌ 未实现（第一版不开放，V2 重新评估）
+- **token 系统钥匙串**：❌ V2 未实现（U-07，迁 mac Keychain / win Credential Manager / linux secret-service）
+- **Tauri updater 在线升级**：❌ V2 未实现（需签名，L6 V2）
+- **多设备并发**：❌ V2 未实现（当前注册表只预留单灯）
+- **浅色模式**：❌ P2 未实现（用户决策 ⏸ #4）
+- **Settings 自启动 Switch**：❌ 未实现（当前展示禁用态，待 tauri-plugin-autostart 启用）
 
 ### 11.4 三平台实测（影响 release 阻塞）
 
@@ -624,11 +624,13 @@ z/tooltip    = 300
 
 ### 11.5 文档 / 适配器
 
-- **`docs/specs/adapters/` 目录**：Claude Code / Qoder / Codex 配置模板待本机实测后回填（**ADR-0001 Q6 延后项**）
+- **`docs/specs/adapters/` 目录**：❌ 目录不存在，配置模板未回填（**ADR-0001 Q6 延后项**）
 
 ---
 
 ## 12. 验收剧本
+
+> **实现状态对账（2026-08-21）**：以下剧本中涉及**托盘**的步骤（12.1 步骤 1/2/5/8、12.3 步骤 5、12.4 步骤 1）当前**未实现**（托盘未实装）；**12.5 断连与重连全部步骤未实现**（无断连监听 / 退避重连）。其余步骤已由当前实现覆盖。
 
 ### 12.1 首次启动
 
@@ -686,9 +688,9 @@ z/tooltip    = 300
 |---|---|---|---|---|
 | 1 | ~~状态徽章视觉~~ | ~~纯色块 / 呼吸 / 静态灯效~~ | **红绿灯式**（详见 5.1.1） | ✅ 已定 |
 | 2 | ~~主题切换过渡~~ | ~~瞬切 / 渐变~~ | **瞬切** | ✅ 已定 |
-| 3 | 试听面板自定义状态 | 是否加"最近 5 个自定义状态"快捷按钮组 | ⏸ 待定 | 建议 V2 |
+| 3 | 试听面板自定义状态 | 是否加"最近 5 个自定义状态"快捷按钮组 | ✅ 已实装 | 对账：preview.tsx 已实现最近 5 个快捷按钮（本地会话内） |
 | 4 | 浅色模式 | P1 不做 / P2 启用 | ⏸ 建议 P2 暂缓 | 设计代币已为亮色预留 |
-| 5 | 主题编辑器 UI | P1 仅 JSON 导入 / P2 出 UI 编辑器 | ⏸ P1 不做 | 依赖 docs/specs/themes/ 的 JSON Schema |
+| 5 | 主题编辑器 UI | P1 仅 JSON 导入 / P2 出 UI 编辑器 | ✅ 已实装（P1） | 对账：themes.tsx 已实现快速创作 + 轨道工作台（V1.5 重构），本行"P1 不做"作废 |
 
 ---
 
@@ -697,3 +699,4 @@ z/tooltip    = 300
 | 版本 | 日期 | 变更 |
 |---|---|---|
 | V0.1 | 2026-08-20 | 首版设计文档：信息架构 + 5 页面 + 红绿灯徽章方案 + 设计代币 + 路线图 + 验收剧本 |
+| V0.2 | 2026-08-21 | 实现状态对账（以代码为事实源）：§11 路线图逐项标注 ✅/⚠️/❌；§12 验收剧本标注未实现步骤；§13 决策表 #3（最近 5 个自定义状态）与 #5（主题编辑器）改为已实装；同步修正预览 SCENE 状态 |

@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.7 |
-| 文档状态 | ⏸ 设计阶段，待实现期修订 |
+| 文档版本 | V1.8 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.8，2026-08-21） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -39,13 +39,13 @@
 
 后端通过 Tauri events 推送变化，前端订阅：
 
-| Event | Payload | 受影响的 UI |
-|---|---|---|
-| `business-state-changed` | `{ state, source, session, sinceTs, theme }` | Dashboard 红绿灯徽章 + 状态名 + 副标题 |
-| `device-connection-changed` | `{ connected, address, name }` | Dashboard 设备卡 + Sidebar 底部「已连接」状态 |
-| `device-power-changed` | `{ batteryPercent, powerSource, chargeState, powerFlags }` | Dashboard 设备卡电量格 |
-| `device-fault` | `{ source, code, context }` | Devices 页告警卡 |
-| `theme-changed` | `{ name }` | Dashboard 主题卡 + Sidebar 底部「当前主题」 |
+| Event | Payload | 受影响的 UI | 实现状态 |
+|---|---|---|---|
+| `business-state-changed` | `{ state, source, session, sinceTs, theme }` | Dashboard 红绿灯徽章 + 状态名 + 副标题 | ✅ Rust 已 emit |
+| `device-connection-changed` | `{ connected, address, name }` | Dashboard 设备卡 + Sidebar 底部「已连接」状态 | ⚠️ 仅连接成功时 emit；断连 / 宽限未 emit（无断连监听） |
+| `device-power-changed` | `{ batteryPercent, powerSource, chargeState, powerFlags }` | Dashboard 设备卡电量格 | ❌ Rust 未 emit（POWER_CHANGED / GET_POWER_STATUS 未接线） |
+| `device-fault` | `{ source, code, context }` | Devices 页告警卡 | ❌ Rust 未 emit（FAULT_EVENT 未接线） |
+| `theme-changed` | `{ name }` | Dashboard 主题卡 + Sidebar 底部「当前主题」 | ✅ Rust 已 emit |
 
 **初始化流程**：打开主窗口 → 自动调 `get_app_state()` 拉全量快照 → 订阅 events 接收增量。
 
@@ -132,11 +132,12 @@
 点击 [连接] → 后端 `connect_device_internal`：
 1. `ble::scan` 4s 重扫确保设备还在
 2. `ble::connect_to_address` 建链
-3. V0.4 握手：DIS → TX CCC → DEVICE_READY → GET_DEVICE_INFO → GET_CAPABILITIES
-4. 热切换设备（`DeviceIo::set`）
-5. 写 `config.remembered_device`
-6. 触发 `device-connection-changed`
-7. 引擎 resync（重发当前业务 SCENE）
+3. 发现 GB_TRANS 特征 + 订阅 TX Notify（✅ 已实现）
+4. V0.4 握手剩余阶段——DEVICE_READY 等待 / GET_DEVICE_INFO / GET_CAPABILITIES / BAS / GET_POWER_STATUS：❌ 未实现，设备信息与电量字段不会填充
+5. 热切换设备（`DeviceIo::set`）✅
+6. 写 `config.remembered_device` ✅
+7. 触发 `device-connection-changed` ✅
+8. 引擎 resync（重发当前业务 SCENE）✅
 
 UI 反馈：设备卡状态 tag 立即更新；失败显示 Toast（原因 + 重试）。
 
@@ -145,6 +146,8 @@ UI 反馈：设备卡状态 tag 立即更新；失败显示 Toast（原因 + 重
 `P2`：当前版本未提供 UI 入口；通过电源切断 / 走远超时实现。
 
 ### 4.4 故障告警
+
+> ⚠️ 实现状态：Rust 当前未 emit `device-fault`（FAULT_EVENT 未接线）。本告警 UI 已就绪，但在事件链路落地前不会出现。
 
 收到 `device-fault` event → Devices 页顶部插入红色 Alert 卡：
 - 标题：「设备故障事件」
@@ -358,8 +361,8 @@ V2 评估何时重新加上：用户使用安全意识提升 / 设备被滥用 /
 
 ### 9.4 系统
 
-- 开机自启：P1 展示禁用态 +「待平台支持」，不伪造已生效；接入 `tauri-plugin-autostart` 后于 P2 开放。
-- 查看日志：P2 接入系统目录打开能力后开放。
+- 开机自启：✅ P1 禁用态已实装（Settings 页「待平台支持」+ 禁用 Switch，不伪造已生效）；接入 `tauri-plugin-autostart` 后于 P2 开放真实切换。
+- 查看日志：❌ P2 未实现（接入系统目录打开能力后开放）。
 
 ---
 
@@ -461,9 +464,11 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 ---
 
-## 12. 托盘菜单（V2 实施）
+## 12. 托盘（图标 + 菜单）
 
-**当前版本未实装**（KAD-06 已确定方向，但 UI 原型暂未实现）。
+**实现状态（2026-08-21 对账）：托盘本体与菜单均未实装**——`src-tauri` 无 TrayIconBuilder、tauri.conf.json 无 trayIcon；单实例插件与「关窗 = 隐藏」已落地。
+
+> ⚠️ 优先级口径冲突：ui-design.md §11.1 将「托盘常驻服务」列为 MVP 必做（P1），本文原标 V2——需产品确认后统一，再排入里程碑。
 
 设计要点（来自 ui-design.md §5.1.1）：
 
@@ -478,9 +483,9 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 │ 退出 ───────────────┘
 ```
 
-V2 实施时补充：
+实施时补充：
 - 单实例保证（已有 `tauri-plugin-single-instance`）
-- 关窗 = 隐藏，菜单"退出"才是真退出
+- 关窗 = 隐藏，菜单"退出"才是真退出（关窗隐藏已落地，退出入口待托盘）
 - mac 菜单栏 / win 通知区 / linux DE 三平台适配
 
 ---
@@ -513,10 +518,15 @@ V2 实施时补充：
 
 | 编号 | 项 | 优先级 |
  |---|---|---|
+| G-01 | BLE 断连监听 + `device-connection-changed{false}` + 退避重连 | P1 |
+| G-02 | 握手信息读取（DEVICE_READY / GET_DEVICE_INFO / GET_CAPABILITIES / GET_POWER_STATUS）→ `device-power-changed` | P1 |
+| G-03 | FAULT_EVENT 接线 → `device-fault` | P1 |
+| G-04 | 托盘实装（图标 + 菜单；先统一 P1/V2 口径） | P1/V2 ⚠️ |
+| G-05 | `portPreference` 读取与热重启 | P1 |
+| G-06 | `autostart` 接入 tauri-plugin-autostart | P2 |
 | U-01 | btleplug 三平台冒烟（mac/win/linux） | P1 阻塞 release |
 | U-02 | axum 编译/启动验证 | P1 |
-| U-05 | 托盘图标三平台差异 | P1 |
-| V2-1 | 托盘菜单实装 | V2 |
+| U-05 | 托盘图标三平台差异 | P1（托盘实装后） |
 | V2-2 | 接入密码 UI 重新评估 | V2 |
 | V2-3 | 主题编辑器加入波形实时动画预览 | V2 |
 | V2-4 | 设备详情页（电量历史 / 固件升级）| V2 |
@@ -585,6 +595,8 @@ V2 实施时补充：
 
 ### A.4 §4.x 新增：蓝牙交互各阶段 UI 反馈（V0.4 §5）
 
+> ⚠️ 实现状态对账（2026-08-21）：当前仅阶段 1（BLE 连接）与特征发现 / TX 订阅（阶段 2~3 的订阅部分）已实现；阶段 4~8（DEVICE_READY / GET_DEVICE_INFO / GET_CAPABILITIES / BAS / GET_POWER_STATUS）与下方「断连宽限期」全部未实现。
+
 | 阶段 | 后端动作 | UI 反馈 | 失败 Toast |
 |---|---|---|---|
 | 1. BLE 连接 | `btleplug.connect` | 设备卡 `Connecting` + spinner | "连接失败：`<reason>`" |
@@ -598,7 +610,7 @@ V2 实施时补充：
 
 **任一阶段失败** → 设备卡回滚到 `Disconnected` + 触发 `device-connection-changed{connected: false, reason}`。
 
-**断连宽限期**（V0.4 §13）：
+**断连宽限期**（V0.4 §13）：❌ 以下行为均未实现（无断连监听 / 退避重连）。
 
 | 时间窗口 | 设备侧行为 | UI 反馈 |
 |---|---|---|
@@ -708,6 +720,7 @@ V2 实施时补充：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.8 | 2026-08-21 | 实现状态对账（以代码为事实源，用户触发审计）：§2.1 事件表新增实现状态列（`device-power-changed` / `device-fault` 未 emit）；§4.2 握手流程按实际修正（DEVICE_READY 等信息读取未接线）；§4.4 / A.4 标注未实现链路；§12 托盘修正为"本体与菜单均未实装"并记录 P1/V2 口径冲突；§14 待办表新增 G-01~G-06 实现缺口。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003、KAD-03/06/08 引用有效。 |
 | V1.7 | 2026-08-21 | 对齐报告：主题定义迁移为 Rust DTO + JsonSchema 单一来源后完成 5 项语义硬检查。Source Events、AppError.code、蓝牙 result code 均与上游契约一致；主题编辑字段完整存在于 DTO 生成的 Theme Schema；ADR/KAD 引用有效。强类型 `Curve` / `EndLevel` 保持既有 JSON 字符串，`LedTrackDef` 条件约束由 `oneOf` 表达，因此 UI 契约无需变更。 |
 | V1.6 | 2026-08-21 | 对齐报告：Theme JSON Schema 与主题指南落地后完成 5 项语义硬检查。Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致（保留值 0x08 无 UI 行为）；主题编辑字段均存在于 theme-format 与 Theme Schema；ADR-0001/0002/0003、KAD-03/06/08 引用有效。同步修正文档版本头漂移。 |
 | V1.5 | 2026-08-21 | 主题个性化重构：简单/进阶改为快速创作/轨道工作台；快速创作采用运动、速度、灯序、声音等用户语言，支持自定义状态和草稿三灯预览；`brightness` / `volume` 统一为 0~100。对齐报告：Source Events、AppError、蓝牙 result code、theme-format 字段、ADR/KAD 引用五项检查通过；修复主题完整示例和内置同名覆盖语义漂移。 |
