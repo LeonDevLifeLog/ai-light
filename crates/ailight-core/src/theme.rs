@@ -825,9 +825,11 @@ mod tests {
 
     #[test]
     fn checked_in_json_schema_matches_dtos() {
+        let checked_in: serde_json::Value =
+            serde_json::from_str(include_str!("../../../docs/specs/theme.schema.json")).unwrap();
         assert_eq!(
-            include_str!("../../../docs/specs/theme.schema.json"),
-            theme_schema_pretty(),
+            checked_in,
+            theme_schema_value(),
             "Theme DTO 已变化；运行 cargo run --example generate_theme_schema 更新 Schema"
         );
     }

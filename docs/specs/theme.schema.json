@@ -6,9 +6,7 @@
       "properties": {
         "duration_ms": {
           "description": "片段持续时间毫秒数，必须大于 0。",
-          "examples": [
-            160
-          ],
+          "examples": [160],
           "format": "uint16",
           "maximum": 65535,
           "minimum": 1,
@@ -16,9 +14,7 @@
         },
         "frequency_hz": {
           "description": "频率 Hz；0 表示静音间隔，其他值还需满足设备能力范围。",
-          "examples": [
-            880
-          ],
+          "examples": [880],
           "format": "uint16",
           "maximum": 65535,
           "minimum": 0,
@@ -26,20 +22,14 @@
         },
         "volume": {
           "description": "蜂鸣音量，范围 0~100。",
-          "examples": [
-            70
-          ],
+          "examples": [70],
           "format": "uint8",
           "maximum": 100,
           "minimum": 0,
           "type": "integer"
         }
       },
-      "required": [
-        "frequency_hz",
-        "duration_ms",
-        "volume"
-      ],
+      "required": ["frequency_hz", "duration_ms", "volume"],
       "type": "object"
     },
     "BuzzerTrackDef": {
@@ -49,16 +39,11 @@
         "repeat": {
           "default": null,
           "description": "整组片段重复次数；0 或省略表示持续循环。",
-          "examples": [
-            1
-          ],
+          "examples": [1],
           "format": "uint16",
           "maximum": 65535,
           "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "type": ["integer", "null"]
         },
         "segments": {
           "description": "按顺序播放的蜂鸣片段，数量为 1~16。",
@@ -72,21 +57,14 @@
         "start_delay_ms": {
           "default": null,
           "description": "开始播放前的延迟毫秒数。",
-          "examples": [
-            120
-          ],
+          "examples": [120],
           "format": "uint16",
           "maximum": 65535,
           "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "type": ["integer", "null"]
         }
       },
-      "required": [
-        "segments"
-      ],
+      "required": ["segments"],
       "type": "object"
     },
     "EndLevel": {
@@ -117,9 +95,7 @@
           "properties": {
             "brightness": {
               "description": "整条灯轨亮度，范围 0~100。",
-              "examples": [
-                60
-              ],
+              "examples": [60],
               "maximum": 100,
               "minimum": 0,
               "type": "integer"
@@ -127,9 +103,7 @@
             "curve": {
               "const": "CONSTANT",
               "description": "静态常亮曲线。",
-              "examples": [
-                "CONSTANT"
-              ]
+              "examples": ["CONSTANT"]
             },
             "duty_percent": {
               "const": 0,
@@ -143,23 +117,17 @@
                 }
               ],
               "description": "有限重复完成后的输出电平。",
-              "examples": [
-                "OFF"
-              ]
+              "examples": ["OFF"]
             },
             "high": {
               "description": "RGB 十六进制颜色，格式为 #RRGGBB。",
-              "examples": [
-                "#168CFF"
-              ],
+              "examples": ["#168CFF"],
               "pattern": "^#[0-9A-Fa-f]{6}$",
               "type": "string"
             },
             "low": {
               "description": "RGB 十六进制颜色，格式为 #RRGGBB。",
-              "examples": [
-                "#168CFF"
-              ],
+              "examples": ["#168CFF"],
               "pattern": "^#[0-9A-Fa-f]{6}$",
               "type": "string"
             },
@@ -170,28 +138,20 @@
             },
             "phase_deg": {
               "description": "波形相位角，范围 0~360。",
-              "examples": [
-                120
-              ],
+              "examples": [120],
               "maximum": 360,
               "minimum": 0,
               "type": "integer"
             },
             "repeat": {
               "description": "有限重复次数；0 或省略表示持续运行。",
-              "examples": [
-                3
-              ],
+              "examples": [3],
               "maximum": 65535,
               "minimum": 0,
               "type": "integer"
             }
           },
-          "required": [
-            "curve",
-            "high",
-            "brightness"
-          ],
+          "required": ["curve", "high", "brightness"],
           "type": "object"
         },
         {
@@ -199,9 +159,7 @@
           "properties": {
             "brightness": {
               "description": "整条灯轨亮度，范围 0~100。",
-              "examples": [
-                60
-              ],
+              "examples": [60],
               "maximum": 100,
               "minimum": 0,
               "type": "integer"
@@ -209,15 +167,11 @@
             "curve": {
               "const": "SQUARE",
               "description": "方波闪烁曲线。",
-              "examples": [
-                "SQUARE"
-              ]
+              "examples": ["SQUARE"]
             },
             "duty_percent": {
               "description": "方波高电平占比。",
-              "examples": [
-                50
-              ],
+              "examples": [50],
               "maximum": 99,
               "minimum": 1,
               "type": "integer"
@@ -229,49 +183,37 @@
                 }
               ],
               "description": "有限重复完成后的输出电平。",
-              "examples": [
-                "OFF"
-              ]
+              "examples": ["OFF"]
             },
             "high": {
               "description": "RGB 十六进制颜色，格式为 #RRGGBB。",
-              "examples": [
-                "#168CFF"
-              ],
+              "examples": ["#168CFF"],
               "pattern": "^#[0-9A-Fa-f]{6}$",
               "type": "string"
             },
             "low": {
               "description": "RGB 十六进制颜色，格式为 #RRGGBB。",
-              "examples": [
-                "#168CFF"
-              ],
+              "examples": ["#168CFF"],
               "pattern": "^#[0-9A-Fa-f]{6}$",
               "type": "string"
             },
             "period_ms": {
               "description": "完整方波周期毫秒数。",
-              "examples": [
-                1000
-              ],
+              "examples": [1000],
               "maximum": 65535,
               "minimum": 1,
               "type": "integer"
             },
             "phase_deg": {
               "description": "波形相位角，范围 0~360。",
-              "examples": [
-                120
-              ],
+              "examples": [120],
               "maximum": 360,
               "minimum": 0,
               "type": "integer"
             },
             "repeat": {
               "description": "有限重复次数；0 或省略表示持续运行。",
-              "examples": [
-                3
-              ],
+              "examples": [3],
               "maximum": 65535,
               "minimum": 0,
               "type": "integer"
@@ -291,23 +233,15 @@
           "properties": {
             "brightness": {
               "description": "整条灯轨亮度，范围 0~100。",
-              "examples": [
-                60
-              ],
+              "examples": [60],
               "maximum": 100,
               "minimum": 0,
               "type": "integer"
             },
             "curve": {
               "description": "呼吸、渐亮或渐弱曲线。",
-              "enum": [
-                "TRIANGLE",
-                "SAW_UP",
-                "SAW_DOWN"
-              ],
-              "examples": [
-                "TRIANGLE"
-              ]
+              "enum": ["TRIANGLE", "SAW_UP", "SAW_DOWN"],
+              "examples": ["TRIANGLE"]
             },
             "duty_percent": {
               "const": 0,
@@ -321,60 +255,43 @@
                 }
               ],
               "description": "有限重复完成后的输出电平。",
-              "examples": [
-                "OFF"
-              ]
+              "examples": ["OFF"]
             },
             "high": {
               "description": "RGB 十六进制颜色，格式为 #RRGGBB。",
-              "examples": [
-                "#168CFF"
-              ],
+              "examples": ["#168CFF"],
               "pattern": "^#[0-9A-Fa-f]{6}$",
               "type": "string"
             },
             "low": {
               "description": "RGB 十六进制颜色，格式为 #RRGGBB。",
-              "examples": [
-                "#168CFF"
-              ],
+              "examples": ["#168CFF"],
               "pattern": "^#[0-9A-Fa-f]{6}$",
               "type": "string"
             },
             "period_ms": {
               "description": "完整波形周期毫秒数。",
-              "examples": [
-                1600
-              ],
+              "examples": [1600],
               "maximum": 65535,
               "minimum": 1,
               "type": "integer"
             },
             "phase_deg": {
               "description": "波形相位角，范围 0~360。",
-              "examples": [
-                120
-              ],
+              "examples": [120],
               "maximum": 360,
               "minimum": 0,
               "type": "integer"
             },
             "repeat": {
               "description": "有限重复次数；0 或省略表示持续运行。",
-              "examples": [
-                3
-              ],
+              "examples": [3],
               "maximum": 65535,
               "minimum": 0,
               "type": "integer"
             }
           },
-          "required": [
-            "curve",
-            "high",
-            "brightness",
-            "period_ms"
-          ],
+          "required": ["curve", "high", "brightness", "period_ms"],
           "type": "object"
         }
       ]
@@ -411,9 +328,7 @@
           "type": "array"
         }
       },
-      "required": [
-        "leds"
-      ],
+      "required": ["leds"],
       "type": "object"
     },
     "StateConfig": {
@@ -423,21 +338,14 @@
         "hold_ms": {
           "default": null,
           "description": "终态驻留时长毫秒数；0 或省略表示不自动回落。",
-          "examples": [
-            2000
-          ],
+          "examples": [2000],
           "format": "uint64",
           "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "type": ["integer", "null"]
         },
         "scene": {
           "description": "引用当前主题 scenes 中存在的场景名称。",
-          "examples": [
-            "working"
-          ],
+          "examples": ["working"],
           "maxLength": 64,
           "minLength": 1,
           "pattern": "^[A-Za-z0-9_-]+$",
@@ -446,21 +354,14 @@
         "transition_ms": {
           "default": null,
           "description": "进入状态时的过渡时长，范围 0~2500 毫秒。",
-          "examples": [
-            180
-          ],
+          "examples": [180],
           "format": "uint16",
           "maximum": 2500,
           "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
+          "type": ["integer", "null"]
         }
       },
-      "required": [
-        "scene"
-      ],
+      "required": ["scene"],
       "type": "object"
     },
     "ThemeMeta": {
@@ -469,9 +370,7 @@
       "properties": {
         "name": {
           "description": "主题名称，只允许字母、数字、下划线和连字符。",
-          "examples": [
-            "aurora"
-          ],
+          "examples": ["aurora"],
           "maxLength": 64,
           "minLength": 1,
           "pattern": "^[A-Za-z0-9_-]+$",
@@ -480,18 +379,13 @@
         "version": {
           "const": 1,
           "description": "主题格式版本，当前固定为 1。",
-          "examples": [
-            1
-          ],
+          "examples": [1],
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
         }
       },
-      "required": [
-        "name",
-        "version"
-      ],
+      "required": ["name", "version"],
       "type": "object"
     }
   },
@@ -532,11 +426,7 @@
       "description": "主题名称与格式版本。"
     }
   },
-  "required": [
-    "theme",
-    "scenes",
-    "states"
-  ],
+  "required": ["theme", "scenes", "states"],
   "title": "AI-Light Theme",
   "type": "object"
 }
