@@ -9,13 +9,17 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use btleplug::api::{
-    Central, Characteristic, Manager as _, Peripheral as _, ScanFilter, WriteType,
+    Central, CentralEvent, Characteristic, Manager as _, Peripheral as _, ScanFilter, WriteType,
 };
 use btleplug::platform::{Adapter, Manager, Peripheral};
+use futures_util::StreamExt;
 use serde::Serialize;
 use tokio::sync::mpsc;
 
-use crate::protocol::{Frame, FrameParser};
+use crate::protocol::{
+    self, Frame, FrameParser, PowerStatus, CMD_GET_CAPABILITIES, CMD_GET_DEVICE_INFO,
+    CMD_GET_POWER_STATUS, EVT_BUTTON_EVENT, EVT_DEVICE_READY, EVT_FAULT_EVENT, EVT_POWER_CHANGED,
+};
 use crate::transport::TransportIo;
 
 /// GB_TRANS 服务/特征 UUID（协议 §2.2）
@@ -28,6 +32,75 @@ pub const NAME_PREFIX: &str = "ACLight-";
 
 /// ATT payload 分片上限（保守取 MTU 23 的 payload；协议目标 MTU 247 可后续协商优化）
 const ATT_PAYLOAD_MAX: usize = 20;
+/// 等待 DEVICE_READY 的超时（协议 §5：CCC 使能后设备应主动上报）
+const HANDSHAKE_READY_TIMEOUT_MS: u64 = 3000;
+/// 握手各请求的应答超时
+const HANDSHAKE_RESPONSE_TIMEOUT_MS: u64 = 2000;
+
+/// 设备主动上报事件（协议 §11），由连接方消费并映射为 Tauri events
+#[derive(Debug, Clone)]
+pub enum BleEvent {
+    /// DEVICE_READY (0xE0)：连接建立后设备主动上报（握手消费）
+    DeviceReady(protocol::DeviceReady),
+    /// POWER_CHANGED (0xE2)：电源状态变化
+    PowerChanged(PowerStatus),
+    /// BUTTON_EVENT (0xE3)：仅 BUTTON 能力置位时上报
+    ButtonEvent { event: u8, duration_ms: u16 },
+    /// FAULT_EVENT (0xEF)：设备故障
+    Fault { source: u8, code: u8, context: u16 },
+    /// 设备断开（通知流结束或 CentralEvent::DeviceDisconnected）
+    Disconnected,
+}
+
+/// V0.4 §5 握手结果
+#[derive(Debug, Clone)]
+pub struct HandshakeInfo {
+    pub device_info: protocol::DeviceInfo,
+    pub capabilities: protocol::Capabilities,
+    /// 设备具备电源能力位时读取；否则为 None
+    pub power: Option<PowerStatus>,
+}
+
+/// 是否按能力位需要读取电源状态（§15.1：按能力位决定 BAS 订阅与 UI）
+pub fn power_status_needed(capability_bits: u32) -> bool {
+    capability_bits
+        & (protocol::CAP_BATTERY_PRESENT
+            | protocol::CAP_BATTERY_ADC
+            | protocol::CAP_CHARGE_STATUS
+            | protocol::CAP_EXTERNAL_POWER_DETECT)
+        != 0
+}
+
+/// 断连退避重连延迟（秒）：5, 10, 15, 20, 25（客户端主动尝试窗口约 60~75s，协议 §13 宽限期）
+pub fn reconnect_delay_secs(attempt: u32) -> u64 {
+    u64::from(5 * attempt.max(1)).min(60)
+}
+
+/// 帧分流：设备主动事件 vs 请求应答
+fn classify_frame(frame: &Frame) -> bool {
+    matches!(
+        frame.cmd,
+        EVT_DEVICE_READY | EVT_POWER_CHANGED | EVT_BUTTON_EVENT | EVT_FAULT_EVENT
+    )
+}
+
+/// 主动事件帧 → BleEvent（解析失败返回 None，仅记录日志）
+fn parse_event(frame: &Frame) -> Option<BleEvent> {
+    match frame.cmd {
+        EVT_DEVICE_READY => protocol::parse_device_ready(&frame.data).map(BleEvent::DeviceReady),
+        EVT_POWER_CHANGED => protocol::parse_power_changed(&frame.data).map(BleEvent::PowerChanged),
+        EVT_BUTTON_EVENT => protocol::parse_button_event(&frame.data).map(|b| BleEvent::ButtonEvent {
+            event: b.event,
+            duration_ms: b.duration_ms,
+        }),
+        EVT_FAULT_EVENT => protocol::parse_fault_event(&frame.data).map(|f| BleEvent::Fault {
+            source: f.source,
+            code: f.code,
+            context: f.context,
+        }),
+        _ => None,
+    }
+}
 
 #[derive(Debug)]
 pub enum BleError {
@@ -126,12 +199,12 @@ pub async fn default_adapter() -> Result<Adapter, BleError> {
     adapters.into_iter().next().ok_or(BleError::NoAdapter)
 }
 
-/// 扫描并连接指定地址的设备（地址自动归一化）。
-/// 返回 (BleIo, 显示名)。
+/// 扫描并连接指定地址的设备（地址自动归一化），完成 V0.4 §5 握手。
+/// 返回 (BleIo, 显示名, 握手信息)。
 pub async fn connect_to_address(
     adapter: &Adapter,
     address: &str,
-) -> Result<(BleIo, String), BleError> {
+) -> Result<(BleIo, String, HandshakeInfo), BleError> {
     let peripherals = adapter
         .peripherals()
         .await
@@ -153,8 +226,8 @@ pub async fn connect_to_address(
         }
     }
     let (peripheral, name) = found.ok_or_else(|| BleError::DeviceNotFound(address.to_string()))?;
-    let io = BleIo::connect(peripheral).await?;
-    Ok((io, name))
+    let (io, handshake) = BleIo::connect(adapter.clone(), peripheral).await?;
+    Ok((io, name, handshake))
 }
 
 /// BLE 传输实现：扫描结果中的 peripheral + 已连接的 GATT 特征
@@ -162,11 +235,16 @@ pub struct BleIo {
     peripheral: Peripheral,
     rx_char: Characteristic,
     frames: tokio::sync::Mutex<mpsc::UnboundedReceiver<Frame>>,
+    events: Option<mpsc::UnboundedReceiver<BleEvent>>,
 }
 
 impl BleIo {
-    /// 连接并初始化：discover → 找 GB_TRANS 特征 → 订阅 TX → 启动组帧任务
-    pub async fn connect(peripheral: Peripheral) -> Result<Self, BleError> {
+    /// 连接并初始化（协议 §5）：
+    /// discover → 找 GB_TRANS 特征 → 订阅 TX → 组帧/事件分流 → 断连监听 → 握手
+    pub async fn connect(
+        adapter: Adapter,
+        peripheral: Peripheral,
+    ) -> Result<(Self, HandshakeInfo), BleError> {
         peripheral
             .connect()
             .await
@@ -199,6 +277,10 @@ impl BleIo {
             .map_err(|e| BleError::Subscribe(e.to_string()))?;
         let tx_char_uuid = tx_char.uuid;
         let (tx, rx) = mpsc::unbounded_channel();
+        let (ev_tx, ev_rx) = mpsc::unbounded_channel();
+
+        // 组帧任务：解析 Notify 流；主动事件分流到 events，应答帧进 frames
+        let ev_task_tx = ev_tx.clone();
         tokio::spawn(async move {
             let mut parser = FrameParser::new();
             while let Some(notification) = futures_util::StreamExt::next(&mut stream).await {
@@ -208,18 +290,158 @@ impl BleIo {
                 }
                 parser.push(&notification.value);
                 while let Some(frame) = parser.next_frame() {
-                    if tx.send(frame).is_err() {
+                    if classify_frame(&frame) {
+                        if let Some(ev) = parse_event(&frame) {
+                            if ev_task_tx.send(ev).is_err() {
+                                return;
+                            }
+                        }
+                    } else if tx.send(frame).is_err() {
                         return;
+                    }
+                }
+            }
+            // 通知流结束 = 设备断开（CentralEvent 监听也会上报，接收端幂等）
+            let _ = ev_task_tx.send(BleEvent::Disconnected);
+        });
+
+        // 断连监听：CentralEvent::DeviceDisconnected（该 peripheral）
+        let pid = peripheral.id();
+        let ev_disc_tx = ev_tx.clone();
+        tokio::spawn(async move {
+            let mut events = match adapter.events().await {
+                Ok(stream) => stream,
+                Err(e) => {
+                    tracing::warn!("订阅 CentralEvent 失败: {e}");
+                    return;
+                }
+            };
+            while let Some(event) = StreamExt::next(&mut events).await {
+                if let CentralEvent::DeviceDisconnected(id) = event {
+                    if id == pid {
+                        let _ = ev_disc_tx.send(BleEvent::Disconnected);
+                        break;
                     }
                 }
             }
         });
 
-        Ok(Self {
-            peripheral,
+        let mut io = Self {
+            peripheral: peripheral.clone(),
             rx_char,
             frames: tokio::sync::Mutex::new(rx),
+            events: Some(ev_rx),
+        };
+        match io.handshake().await {
+            Ok(info) => Ok((io, info)),
+            Err(e) => {
+                let _ = peripheral.disconnect().await;
+                Err(e)
+            }
+        }
+    }
+
+    /// 取出设备事件流（连接方在 Arc 包装前调用）
+    pub fn take_events(&mut self) -> Option<mpsc::UnboundedReceiver<BleEvent>> {
+        self.events.take()
+    }
+
+    /// V0.4 §5 握手：等 DEVICE_READY → GET_DEVICE_INFO → GET_CAPABILITIES → GET_POWER_STATUS（按能力位）
+    async fn handshake(&mut self) -> Result<HandshakeInfo, BleError> {
+        let mut events = self.events.take().ok_or(BleError::Closed)?;
+        let mut frames = self.frames.lock().await;
+        let mut seq: u16 = 0;
+
+        // 1. 等 DEVICE_READY（固件版本与硬件变体以事件为准，协议 §11.1 单一数据源）
+        let ready = tokio::time::timeout(
+            Duration::from_millis(HANDSHAKE_READY_TIMEOUT_MS),
+            wait_device_ready(&mut events),
+        )
+        .await
+        .map_err(|_| BleError::Connect("等待 DEVICE_READY 超时".into()))?
+        .map_err(|e| BleError::Connect(e.to_string()))?;
+        if ready.protocol_version != protocol::PROTOCOL_VERSION {
+            return Err(BleError::Connect(format!(
+                "协议版本不兼容: 0x{:02X}",
+                ready.protocol_version
+            )));
+        }
+
+        // 2. GET_DEVICE_INFO
+        seq += 1;
+        let info_frame = self
+            .request_response(CMD_GET_DEVICE_INFO, seq, &mut frames)
+            .await?;
+        let (rc, device_info) = protocol::parse_device_info_response(&info_frame.data)
+            .map_err(|_| BleError::Connect("GET_DEVICE_INFO 应答解析失败".into()))?;
+        if rc != protocol::ResultCode::Ok {
+            return Err(BleError::Connect(format!("GET_DEVICE_INFO 被拒绝: {rc}")));
+        }
+
+        // 3. GET_CAPABILITIES
+        seq += 1;
+        let caps_frame = self
+            .request_response(CMD_GET_CAPABILITIES, seq, &mut frames)
+            .await?;
+        let (rc, capabilities) = protocol::parse_capabilities_response(&caps_frame.data)
+            .map_err(|_| BleError::Connect("GET_CAPABILITIES 应答解析失败".into()))?;
+        if rc != protocol::ResultCode::Ok {
+            return Err(BleError::Connect(format!("GET_CAPABILITIES 被拒绝: {rc}")));
+        }
+
+        // 4. GET_POWER_STATUS（按能力位，§15.1）
+        let power = if power_status_needed(capabilities.capability_bits) {
+            seq += 1;
+            let power_frame = self
+                .request_response(CMD_GET_POWER_STATUS, seq, &mut frames)
+                .await?;
+            let (rc, power) = protocol::parse_power_status_response(&power_frame.data)
+                .map_err(|_| BleError::Connect("GET_POWER_STATUS 应答解析失败".into()))?;
+            if rc != protocol::ResultCode::Ok {
+                tracing::warn!("GET_POWER_STATUS 被拒绝: {rc}，按无电源处理");
+                None
+            } else {
+                Some(power)
+            }
+        } else {
+            None
+        };
+
+        self.events = Some(events);
+        Ok(HandshakeInfo {
+            device_info,
+            capabilities,
+            power,
         })
+    }
+
+    /// 发送单帧请求并等待匹配应答（seq 透传；非匹配帧跳过）
+    async fn request_response(
+        &self,
+        cmd: u8,
+        seq: u16,
+        frames: &mut mpsc::UnboundedReceiver<Frame>,
+    ) -> Result<Frame, BleError> {
+        let frame = protocol::build_frame(cmd, seq, &[]);
+        // 握手帧短于 ATT 分片上限，单次写入
+        self.peripheral
+            .write(&self.rx_char, &frame, WriteType::WithoutResponse)
+            .await
+            .map_err(|e| BleError::Write(e.to_string()))?;
+        tokio::time::timeout(
+            Duration::from_millis(HANDSHAKE_RESPONSE_TIMEOUT_MS),
+            async {
+                loop {
+                    match frames.recv().await {
+                        Some(f) if f.cmd == protocol::response_cmd(cmd) => return Ok(f),
+                        Some(_) => continue,
+                        None => return Err(BleError::Closed),
+                    }
+                }
+            },
+        )
+        .await
+        .map_err(|_| BleError::Connect(format!("命令 0x{cmd:02X} 应答超时")))?
     }
 
     /// 广播名识别判断（调用方扫描后使用）
@@ -229,6 +451,22 @@ impl BleIo {
 
     pub async fn disconnect(&self) {
         let _ = self.peripheral.disconnect().await;
+    }
+}
+
+/// 握手阶段等待 DEVICE_READY；忽略握手前到达的其他事件，断开则失败
+async fn wait_device_ready(
+    events: &mut mpsc::UnboundedReceiver<BleEvent>,
+) -> Result<protocol::DeviceReady, BleError> {
+    loop {
+        match events.recv().await {
+            Some(BleEvent::DeviceReady(ready)) => return Ok(ready),
+            Some(BleEvent::Disconnected) => {
+                return Err(BleError::Connect("等待 DEVICE_READY 期间设备断开".into()))
+            }
+            Some(_) => continue, // 握手前不应有其他主动事件，忽略
+            None => return Err(BleError::Closed),
+        }
     }
 }
 
@@ -320,6 +558,96 @@ mod tests {
         assert!(is_recognized(&Some("ACLight-1A2B".into())));
         assert!(!is_recognized(&Some("Other-1A2B".into())));
         assert!(!is_recognized(&None));
+    }
+
+    fn frame(cmd: u8, data: Vec<u8>) -> Frame {
+        Frame { seq: 1, cmd, data }
+    }
+
+    #[test]
+    fn event_vs_response_classification() {
+        // 主动事件
+        assert!(classify_frame(&frame(EVT_POWER_CHANGED, vec![0x03])));
+        assert!(classify_frame(&frame(EVT_DEVICE_READY, vec![0x04])));
+        assert!(classify_frame(&frame(EVT_BUTTON_EVENT, vec![0x01])));
+        assert!(classify_frame(&frame(EVT_FAULT_EVENT, vec![0x01])));
+        // 请求应答（cmd | 0x80）
+        assert!(!classify_frame(&frame(protocol::response_cmd(CMD_GET_DEVICE_INFO), vec![0x00])));
+        assert!(!classify_frame(&frame(protocol::response_cmd(CMD_GET_CAPABILITIES), vec![0x00])));
+        assert!(!classify_frame(&frame(protocol::response_cmd(CMD_GET_POWER_STATUS), vec![0x00])));
+    }
+
+    #[test]
+    fn parse_events_from_wire_samples() {
+        // 协议 §17.13 帧示例（data 区）
+        let ready = parse_event(&frame(EVT_DEVICE_READY, vec![0x04, 0x01, 0x00, 0x00, 0x01, 0x01]));
+        match ready {
+            Some(BleEvent::DeviceReady(r)) => {
+                assert_eq!(r.protocol_version, 4);
+                assert_eq!(r.fw, (1, 0, 0));
+                assert_eq!(r.hardware_variant, 1);
+                assert_eq!(r.boot_reason, 1);
+            }
+            other => panic!("DEVICE_READY 解析失败: {other:?}"),
+        }
+
+        let power = parse_event(&frame(EVT_POWER_CHANGED, vec![0x03, 0x00, 0x07, 0x0F, 0x3C, 0x4B, 0x03]));
+        match power {
+            Some(BleEvent::PowerChanged(p)) => {
+                assert_eq!(p.power_source, 3);
+                assert_eq!(p.power_flags, 0x0007);
+                assert_eq!(p.battery_mv, 3900);
+                assert_eq!(p.battery_percent, 75);
+                assert_eq!(p.charge_state, 3);
+            }
+            other => panic!("POWER_CHANGED 解析失败: {other:?}"),
+        }
+
+        let button = parse_event(&frame(EVT_BUTTON_EVENT, vec![0x01, 0x00, 0x78]));
+        match button {
+            Some(BleEvent::ButtonEvent { event, duration_ms }) => {
+                assert_eq!(event, 1);
+                assert_eq!(duration_ms, 120);
+            }
+            other => panic!("BUTTON_EVENT 解析失败: {other:?}"),
+        }
+
+        let fault = parse_event(&frame(EVT_FAULT_EVENT, vec![0x01, 0x02, 0x00, 0x03]));
+        match fault {
+            Some(BleEvent::Fault { source, code, context }) => {
+                assert_eq!(source, 1);
+                assert_eq!(code, 2);
+                assert_eq!(context, 3);
+            }
+            other => panic!("FAULT_EVENT 解析失败: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn power_status_needed_by_capability() {
+        use crate::protocol::{
+            CAP_BATTERY_ADC, CAP_BATTERY_PRESENT, CAP_CHARGE_STATUS, CAP_EXTERNAL_POWER_DETECT,
+            CAP_RGB_LED,
+        };
+        assert!(power_status_needed(CAP_BATTERY_PRESENT));
+        assert!(power_status_needed(CAP_BATTERY_ADC));
+        assert!(power_status_needed(CAP_CHARGE_STATUS));
+        assert!(power_status_needed(CAP_EXTERNAL_POWER_DETECT));
+        assert!(power_status_needed(CAP_BATTERY_PRESENT | CAP_RGB_LED));
+        assert!(!power_status_needed(CAP_RGB_LED));
+        assert!(!power_status_needed(0));
+    }
+
+    #[test]
+    fn reconnect_backoff_sequence() {
+        assert_eq!(reconnect_delay_secs(0), 5);
+        assert_eq!(reconnect_delay_secs(1), 5);
+        assert_eq!(reconnect_delay_secs(2), 10);
+        assert_eq!(reconnect_delay_secs(5), 25);
+        assert_eq!(reconnect_delay_secs(10), 50);
+        // 上限 60s
+        assert_eq!(reconnect_delay_secs(12), 60);
+        assert_eq!(reconnect_delay_secs(20), 60);
     }
 
     #[test]

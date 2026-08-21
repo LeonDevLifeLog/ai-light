@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.7 |
-| 文档状态 | 生效（待用户审阅后定稿） |
+| 文档版本 | V1.14 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.14，2026-08-21） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -159,8 +159,10 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 **Payload**：
 ```typescript
-{ connected: boolean, address: string|null, name: string|null, reason?: string }
+{ connected: boolean, address: string|null, name: string|null, reconnecting?: boolean, reason?: string }
 ```
+
+> ✅ 实现状态：连接成功（`reconnecting: false`）与断连（`reason: "link_lost"`、`reconnecting: true`）均已 emit；重连放弃时 emit `reason: "reconnect_failed"`、`reconnecting: false`。`reason` 值域当前为 `link_lost` / `reconnect_failed`。
 
 ### 3.3 设备电源层（`device-power-changed`）
 
@@ -176,6 +178,8 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 { batteryPercent: number|null, powerSource: string|null, chargeState: string|null, powerFlags: number }
 ```
 
+> ✅ 实现状态：握手 GET_POWER_STATUS 与运行期 POWER_CHANGED 均已 emit（无电池能力设备不发）。
+
 ### 3.4 设备故障层（`device-fault`）
 
 | Source Event | 目标组件 | 同步字段 | 同步方式 |
@@ -188,6 +192,8 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 ```typescript
 { source: 'LED'|'BUZZER'|'POWER'|'PROTOCOL', code: number, context: number }
 ```
+
+> ✅ 实现状态：FAULT_EVENT 已接线并 emit `device-fault`。
 
 ### 3.5 主题层（`theme-changed`）
 
@@ -210,9 +216,14 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 |---|---|---|---|
 | `badgeOrientation: 'horizontal'\|'vertical'` | `TrafficBadge.layout` | — | patch |
 | `badgeOrientation` 变更 | `Sidebar.trayMenu` 单选 | — | patch |
-| `arbitrationMode` 变更 | `Settings.arbitrationSelect` 当前值 | — | patch |
+| `arbitrationMode` 变更 | `Settings.arbitrationCards` 选中卡片 | — | patch（ModeOption 卡片，见 §7.6.1） |
+| `autostart` 变更 | `Settings.autostartSwitch` | — | patch（先 OS 后 config，失败 `AUTOSTART_FAILED` 回滚） |
+| `themeMode` 变更 | `html[data-theme]` + `Settings.themeModeCards` 选中卡片 | — | patch（亮/暗/跟随系统；system 实时响应 `prefers-color-scheme`） |
+| `config-changed`（Rust 事件） | 全组件 | `config.badgeOrientation` / `themeMode` 等完整 Config | full sync |
 
-> `themeMode` / `autostart` 真实切换 / `portPreference` 热重启均为 P2；P1 不发出这些 patch。
+> `portPreference` 热重启为 P2；`autostart` 真实切换已实装（2026-08-21，KAD-09），不再属于 P2。
+>
+> ✅ 实现状态：`update_config`（设置页与托盘徽章朝向共用）成功后 emit `config-changed`，前端订阅整包同步。
 
 ### 3.7 蓝牙主动事件（来自协议 V0.4 §11）
 
@@ -222,6 +233,8 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `POWER_CHANGED (0xE2)` | `DeviceCard.batteryBlock` | 同 3.3 | patch |
 | `BUTTON_EVENT (0xE3)` | `DeviceCard` 按键记录 | `event` / `duration_ms`（V2 显示） | append |
 | `FAULT_EVENT (0xEF)` | 同 3.4 | — | — |
+
+> ✅ 实现状态：四个协议主动事件均已接线（DEVICE_READY 用于握手；POWER_CHANGED / FAULT_EVENT 已 emit；BUTTON_EVENT 当前仅记录日志，V2 展示）。
 
 ### 3.8 初始化流程（一次性）
 
@@ -286,6 +299,8 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 **任一阶段失败 → 设备卡回滚到 `Disconnected` + 触发 `device-connection-changed{connected: false, reason}`**
 
+> ✅ 实现状态：阶段 1~8 已实现。握手失败走连接命令错误路径（前端 Toast），不额外 emit `device-connection-changed{false}`；运行中断连才触发 false 事件与退避重连。
+
 ### 4.4 蓝牙断连与宽限期（V0.4 §13）
 
 | 时间窗口 | 设备侧行为 | UI 反馈 |
@@ -295,6 +310,8 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | 60s 内重连成功 | 无感恢复 | Toast "设备已重新连接" + 设备卡恢复 |
 | 60s 超时 | 设备自动 RESET_OUTPUTS | Toast "设备已离线，请手动重连" + 设备卡 `Disconnected` + [去连接] 按钮高亮 |
 | 重连失败 N 次 | 退避后停止 | Toast "重连失败，请检查设备" + 设备卡保持 `Disconnected` |
+
+> ✅ 实现状态：断连监听与客户端退避重连（5 次，约 75s 窗口，期间已手动连接则放弃）已实现；前端 `Reconnecting` 视觉态（Devices 页重连中卡 + Dashboard 摘要）与断连/重连 Toast 已实装（2026-08-21）。
 
 ### 4.5 主题相关失败路径
 
@@ -329,6 +346,8 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 [任意]     --(托盘"退出")-->         [Terminating]
 [Visible]  --(单实例新启动)-->        [Visible]   // 聚焦
 ```
+
+> ✅ 实现状态：托盘「显示窗口」/「退出」、关窗 = 隐藏、单实例聚焦均已在 Rust 侧落地（`src-tauri/src/tray.rs` + `on_window_event`）。
 
 ### 5.2 设备生命周期
 
@@ -365,6 +384,8 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `Connecting` | spinner + "连接中..." | "连接中"（warn） | 禁用 |
 | `Connected` | 完整字段 | "已连接"（accent） | [断开] P2 |
 | `Reconnecting` | spinner + "重连中...（3/5）" | "重连中"（warn） | 禁用 |
+
+> ✅ 实现状态：`Connected ↔ Disconnected` 双向已实现（断连由事件驱动）；`Reconnecting` 视觉态已实装（由 `device.reconnecting` 驱动）；`Connected` 下的 [断开] 为 P2 未实装。
 
 ### 5.3 业务状态（来自仲裁，[ADR-0001](../decisions/ADR-0001)）
 
@@ -638,16 +659,17 @@ Integrations 页的客户端配置卡（Claude Code / Codex / Qoder / Cursor）�
 ### 6.6 `SettingRow`
 
 **6.6.1 用途**
-Settings 页分组内的单行设置项：左 label + 描述，右控件（Switch / Select / SegControl / Input）。
+Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，右控件（Switch / SegControl / ModeOption 卡片 / StatusTag / 主题预览入口等）。
 
 **6.6.2 对外契约**
 
 | 类别 | 项 | 说明 |
 |---|---|---|
-| Props | `label` | string |
-| Props | `description` | string |
-| Props | `control` | React 子节点（Switch / Select / 等） |
-| Props | `disabled` | boolean |
+| Props | `icon` | Lucide 图标 |
+| Props | `title` | string（行名称） |
+| Props | `description?` | string（用户友好说明，可省略） |
+| Props | `stacked?` | boolean（控件改为整行铺开，仲裁模式卡片用） |
+| Props | `children` | React 子节点（控件） |
 | Emit | 由 control 触发 | — |
 | Invoke | `update_config(patch)` | 由控件 change 触发 |
 
@@ -669,11 +691,12 @@ Settings 页分组内的单行设置项：左 label + 描述，右控件（Switc
 
 **6.6.5 边界条件**
 - 端口切换：需重启服务 → Toast "服务重启中..." → 成功后 Toast "端口已切换"
-- 自启动：依赖 `tauri-plugin-autostart`；当前 P1 暂缓
+- 自启动：✅ 已实装（tauri-plugin-autostart 2.5.1，KAD-09）；失败路径 `AUTOSTART_FAILED` → Toast + 控件回滚到原值；OS 登录项为唯一事实源，config 为启动校准缓存
+- 仲裁模式：ModeOption 卡片独占选择（`aria-pressed`）；「优先级抢占」带「默认」标签；切换经 `update_config(arbitrationMode)` 即时生效
 
 **6.6.6 无障碍**
-- label = `<label for>` 关联控件
-- 描述 = `<p id>`
+- 行名 = 可见 `<strong>`；控件自带 `aria-label`（如"仲裁模式""开机自启"）
+- 说明为纯展示文本，不承担控件命名职责
 
 ---
 
@@ -794,7 +817,7 @@ Settings 页分组内的单行设置项：左 label + 描述，右控件（Switc
 - CustomStateQuickList 点击 → 同上 + 同时把名字加入最近列表（FIFO）
 - ResetOutputsButton → `reset_outputs` → 全停 + 业务复位 IDLE
 
-**快捷键**（详见 [ui-interactions.md §13.8](./ui-interactions.md)）：
+**快捷键**（详见 [ui-interactions.md 附录 A.8](./ui-interactions.md)）：
 - `1`~`5`：标准状态
 - `0`：全部重置
 - `Esc`：清空输入框 focus
@@ -814,13 +837,19 @@ Settings 页分组内的单行设置项：左 label + 描述，右控件（Switc
 ├─────────────────────────┤
 │ SettingGroup: 服务       │ port（只读）+ arbitrationMode + 接入保护状态
 ├─────────────────────────┤
-│ SettingGroup: 显示       │ badgeOrientation + 当前主题
+│ SettingGroup: 显示       │ themeMode + badgeOrientation + 当前主题
 ├─────────────────────────┤
-│ SettingGroup: 系统       │ autostart（P1 禁用态）
+│ SettingGroup: 系统       │ autostart（✅ 可切换）
 └─────────────────────────┘
 ```
 
 **联动**：每 SettingGroup 内的 SettingRow 互不联动；Group 间独立。
+
+**7.6.1 服务组**：服务端口（只读数值）；仲裁模式 = 两张 ModeOption 卡片（整行铺开，单选圆点 + 效果说明 + 「默认」标签）；接入保护 = 状态标签（"仅限本机" / "Token 已启用"）。
+
+**7.6.2 显示组**：外观模式 = 三张 ModeOption 卡片（亮色 / 暗色 / 跟随系统，图标 + 一句说明），切换经 `update_config(themeMode)` 持久化，`html[data-theme]` 即时更新；"跟随系统"下 `data-theme` 随 `prefers-color-scheme` 变化。灯组朝向（SegControl 横排/纵向）；当前主题 = 主题预览入口（Link → /themes）：3 个灯色圆点（取当前主题 WORKING/SUCCESS/ERROR 场景实际 `leds.high`/`low` 色）+ 主题名 + 可选「提示音」标记 + ChevronRight。预览随 `config.activeTheme` 变化刷新；主题读取失败回退为纯名称。
+
+**7.6.3 系统组**：开机自启 Switch（`aria-checked` + 开启态视觉 = 品牌绿底 + 滑块右移 16px）。
 
 ---
 
@@ -1181,7 +1210,7 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 ### 8.11 `SegControl`（segment control）
 
 **8.11.1 用途**
-分段单选控件（themeMode 暗/亮/自动 等）。
+分段单选控件（灯组朝向横排/纵向等）。外观模式（亮/暗/跟随系统）已实装为三张 ModeOption 卡片（见 §7.6.2），不使用本控件。
 
 **8.11.2 对外契约**
 
@@ -1230,6 +1259,8 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 
 **8.12.3 视觉态全集**：同 BuzzerSwitch
 
+> ✅ 已落地：开启态 = `background: var(--accent)` + 滑块 `translateX(16px)`（`.switch[aria-checked="true"]`）；保存中 `disabled` 半透明。
+
 **8.12.4 联动矩阵**
 
 | Source Event | 字段 | 同步方式 |
@@ -1248,7 +1279,7 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 ### 8.13 `Select`（通用选择器）
 
 **8.13.1 用途**
-下拉选择器（end_level / arbitrationMode 等）。
+下拉选择器（主题编辑器 end_level / 场景选择等）。仲裁模式已改用 ModeOption 卡片（见 §7.6.1），不再使用 Select。
 
 **8.13.2 对外契约**
 
@@ -1738,6 +1769,13 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.14 | 2026-08-21 | 外观模式实装（亮/暗/跟随系统，用户触发）：§3.6 配置层联动表新增 `themeMode` 行（`html[data-theme]` + Settings 卡片选中态）；§7.6 Settings 区域显示组加入 themeMode；§7.6.2 补充三张 ModeOption 卡片契约（`update_config(themeMode)` 持久化 + `prefers-color-scheme` 实时响应）；§8.11 SegControl 用途示例更新（外观模式改用卡片）。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4（沿用 `BAD_REQUEST`）；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
+| V1.13 | 2026-08-21 | 设置页 UI 对账（以代码为事实源，用户触发审计）：§3.6 `arbitrationMode` 联动目标更新为选项卡片；§6.6 `SettingRow` 契约改为 `icon/title/description?/stacked?/children`；§7.6 Settings 区域补充仲裁模式选项卡片（ModeOption）与当前主题预览入口；§8.12 Switch 补开启态视觉；§8.13 Select 注明仲裁模式已改用卡片；§7.5 快捷键引用从失效的 §13.8 修正为附录 A.8。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5（含新增 `open-config`）；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003/0004、KAD-04/06/08/09 引用有效。 |
+| V1.12 | 2026-08-21 | G-06 开机自启实装对账（KAD-09 / ADR-0004）：§3.6 配置层联动表新增 `autostart` 行并移除 P2 标注；§6.6.5 边界条件改为真实切换 + `AUTOSTART_FAILED` 失败路径；§7 Settings 组 autostart 由禁用态改为可切换。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4（含新增 `AUTOSTART_FAILED`）；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003/0004、KAD-04/06/08/09 引用有效。同步修正版本头漂移（V1.10 → V1.12）。 |
+| V1.11 | 2026-08-21 | 断连 UX 闭环：§3.2 payload 增加 `reconnecting` / `reason`（值域 `link_lost` / `reconnect_failed`，由 Rust 侧 emit）；§4.4、§5.2 更新为前端 `Reconnecting` 视觉态与 Toast 已实装。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |
+| V1.10 | 2026-08-21 | G-04 托盘实装对账：§3.6 新增 `config-changed` 事件联动（✅，设置页与托盘共用 update_config 路径）；§5.1 窗口可见性状态机标注已实装（托盘「显示窗口」/「退出」/关窗隐藏/单实例聚焦）。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |
+| V1.9 | 2026-08-21 | 实现状态对账（G-01~G-03 闭环）：§3.2~§3.4 事件实现状态更新为 ✅；§3.7 协议主动事件全部接线（BUTTON_EVENT 仅日志）；§4.3 握手阶段 1~8 已实现；§4.4 断连监听与退避重连已实现（前端 Reconnecting 视觉态待办）；§5.2 `Connected ↔ Disconnected` 双向已实现。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |
+| V1.8 | 2026-08-21 | 实现状态对账（以代码为事实源，用户触发审计）：§3.2~§3.4、§3.7 标注事件未接线（`device-connection-changed` 仅连接方向；`device-power-changed` / `device-fault` / 协议主动事件未 emit）；§4.3 握手失败路径标注部分实现；§4.4 断连宽限、§5.2 `Reconnecting` 标注未实现。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |
 | V1.0 | 2026-08-20 | 首版：6 层金字塔 + 全局联动矩阵 + 失败路径矩阵 + 4 状态机 + L2/L3/L4 共 33 个组件详表 |
 | V1.1 | 2026-08-20 | 增量：§9 组件生命周期与资源清理（mount/update/unmount 三阶段 + 资源清理检查清单 + 6 个常见模式 + 内存泄漏自检清单） |
 | V1.2 | 2026-08-20 | 增量：AGENTS.md 新增"触发式双文档审计"条款——ipc-contract / theme-format / 蓝牙 V0.4 / ADR 变更前必须强制对齐 ui-interactions.md 与 ui-interaction-spec.md |

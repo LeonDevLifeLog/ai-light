@@ -40,6 +40,9 @@ pub struct AppConfig {
     /// Dashboard 红绿灯徽章朝向："horizontal" | "vertical"
     #[serde(alias = "badge_orientation")]
     pub badge_orientation: String,
+    /// 界面外观："light" | "dark" | "system"（默认 dark，保留 Dark OLED 基线）
+    #[serde(alias = "theme_mode")]
+    pub theme_mode: String,
 }
 
 impl Default for AppConfig {
@@ -53,6 +56,7 @@ impl Default for AppConfig {
             token: String::new(),
             autostart: false,
             badge_orientation: "horizontal".into(),
+            theme_mode: "dark".into(),
         }
     }
 }
@@ -88,6 +92,14 @@ impl AppConfig {
                         cfg.badge_orientation
                     ));
                     cfg.badge_orientation = "horizontal".into();
+                }
+                if cfg.theme_mode != "light" && cfg.theme_mode != "dark" && cfg.theme_mode != "system"
+                {
+                    warn.push(format!(
+                        "theme_mode 非法({}), 回退 dark",
+                        cfg.theme_mode
+                    ));
+                    cfg.theme_mode = "dark".into();
                 }
                 if !theme::builtin_theme_names().contains(&cfg.active_theme.as_str()) {
                     // 主题名非法或不存在：回退 default（用户主题可能未加载，这里只做静态检查）
@@ -129,6 +141,7 @@ mod tests {
         assert_eq!(cfg.port_preference, 47800);
         assert!(cfg.remembered_device.is_none());
         assert!(cfg.token.is_empty());
+        assert_eq!(cfg.theme_mode, "dark");
     }
 
     #[test]
@@ -144,6 +157,7 @@ mod tests {
         assert_eq!(cfg.remembered_device.unwrap().address, "AA:BB:CC");
         assert_eq!(cfg.token, "secret");
         assert!(cfg.autostart);
+        assert_eq!(cfg.theme_mode, "dark");
     }
 
     #[test]
@@ -159,6 +173,16 @@ mod tests {
         assert_eq!(cfg.version, 1);
         assert_eq!(cfg.arbitration_mode, "priority");
         assert_eq!(cfg.port_preference, 47800);
+        assert_eq!(cfg.theme_mode, "dark");
+    }
+
+    #[test]
+    fn load_invalid_theme_mode_falls_back() {
+        let (cfg, warn) =
+            AppConfig::load(r#"{"theme_mode":"sepia","badge_orientation":"vertical"}"#);
+        assert!(warn.is_some());
+        assert_eq!(cfg.theme_mode, "dark");
+        assert_eq!(cfg.badge_orientation, "vertical");
     }
 
     #[test]

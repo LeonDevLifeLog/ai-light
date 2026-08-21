@@ -23,7 +23,10 @@ export interface DeviceState {
   fwVersion: string | null;
   hardwareVariant: number | null;
   name: string | null;
+  powerFlags: number | null;
   powerSource: number | null;
+  /** 断连后是否处于自动重连中（device-connection-changed 事件字段） */
+  reconnecting: boolean;
 }
 
 export interface BusinessState {
@@ -66,6 +69,7 @@ export interface AppConfig {
   badgeOrientation: "horizontal" | "vertical";
   portPreference: number;
   rememberedDevice: RememberedDevice | null;
+  themeMode: "light" | "dark" | "system";
   token: string;
   version: number;
 }
@@ -121,8 +125,10 @@ const mockSnapshot: AppSnapshot = {
     fwVersion: null,
     hardwareVariant: null,
     batteryPercent: null,
+    powerFlags: null,
     powerSource: null,
     chargeState: null,
+    reconnecting: false,
   },
   business: {
     state: "IDLE",
@@ -144,6 +150,7 @@ const mockConfig: AppConfig = {
   token: "",
   autostart: false,
   badgeOrientation: "horizontal",
+  themeMode: "dark",
 };
 
 const mockTheme: ThemeFile = {

@@ -1,37 +1,133 @@
-import { Monitor, Palette, Radio, Server, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import {
+  ChevronRight,
+  Monitor,
+  Moon,
+  Palette,
+  Radio,
+  Server,
+  ShieldCheck,
+  Sun,
+  SunMoon,
+  Volume2,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useAppState } from "@/app/app-context";
 import { Card, PageHeader, StatusTag } from "@/components/app-ui";
-import { type AppConfig, asAppError } from "@/lib/ailight";
-import { runAsync } from "@/lib/utils";
+import type { AppConfig, ThemeFile } from "@/lib/ailight";
+import { api, asAppError } from "@/lib/ailight";
+import { cn, runAsync } from "@/lib/utils";
 
 function SettingRow({
   icon,
   title,
   description,
+  stacked,
   children,
 }: {
   icon: React.ReactNode;
   title: string;
-  description: string;
+  description?: string;
+  stacked?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="setting-row">
+    <div className={cn("setting-row", stacked && "setting-row--stacked")}>
       <div className="setting-row__icon">{icon}</div>
       <div className="setting-row__copy">
         <strong>{title}</strong>
-        <span>{description}</span>
+        {description ? <span>{description}</span> : null}
       </div>
       <div className="setting-row__control">{children}</div>
     </div>
   );
 }
 
+function themePreview(file: ThemeFile): {
+  swatches: Array<{ state: string; color: string }>;
+  hasSound: boolean;
+} {
+  const preferred = ["WORKING", "SUCCESS", "ERROR", "WAITING", "IDLE"];
+  const keys = preferred.filter((key) => file.states[key]);
+  const pick = keys.length >= 3 ? keys : Object.keys(file.states).slice(0, 3);
+  const swatches: Array<{ state: string; color: string }> = [];
+  let hasSound = false;
+  for (const key of pick) {
+    const scene = file.scenes[file.states[key]?.scene];
+    const led = scene?.leds.find((track) => track != null);
+    swatches.push({
+      state: key,
+      color: led?.high ?? led?.low ?? "#334155",
+    });
+    if (scene?.buzzer) {
+      hasSound = true;
+    }
+  }
+  while (swatches.length < 3) {
+    swatches.push({ state: `pad-${swatches.length}`, color: "#334155" });
+  }
+  return { swatches, hasSound };
+}
+
+const themeModeOptions: Array<{
+  value: AppConfig["themeMode"];
+  icon: typeof Sun;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "light",
+    icon: Sun,
+    label: "亮色",
+    description: "明亮底色，适合白天环境",
+  },
+  {
+    value: "dark",
+    icon: Moon,
+    label: "暗色",
+    description: "OLED 深色，弱光下更护眼",
+  },
+  {
+    value: "system",
+    icon: SunMoon,
+    label: "跟随系统",
+    description: "自动匹配操作系统外观",
+  },
+];
+
 export function SettingsPage() {
   const { snapshot, config, patchConfig, notify } = useAppState();
   const [saving, setSaving] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{
+    swatches: Array<{ state: string; color: string }>;
+    hasSound: boolean;
+  } | null>(null);
+  const activeTheme = config?.activeTheme;
+
+  useEffect(() => {
+    if (!activeTheme) {
+      return;
+    }
+    let cancelled = false;
+    runAsync(
+      api
+        .getTheme(activeTheme)
+        .then((content) => JSON.parse(content) as ThemeFile)
+        .then((file) => {
+          if (!cancelled) {
+            setPreview(themePreview(file));
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setPreview(null);
+          }
+        })
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTheme]);
 
   if (!config) {
     return null;
@@ -55,14 +151,17 @@ export function SettingsPage() {
 
   return (
     <div className="page-stack page-stack--narrow">
-      <PageHeader description="管理服务、状态仲裁与界面偏好" title="设置" />
+      <PageHeader
+        description="管理智能体状态上报、灯效规则与外观偏好"
+        title="设置"
+      />
       <section aria-labelledby="service-settings">
         <h2 className="section-title" id="service-settings">
           服务
         </h2>
         <Card className="settings-card">
           <SettingRow
-            description="本地 Hook 服务当前监听端口"
+            description="智能体工具连接本机服务的端口，一般无需修改"
             icon={<Server />}
             title="服务端口"
           >
@@ -71,29 +170,68 @@ export function SettingsPage() {
             </code>
           </SettingRow>
           <SettingRow
-            description="决定多个来源同时活跃时由谁控制灯效"
+            description="多个工具同时活跃时，决定灯效由谁控制"
             icon={<Radio />}
+            stacked
             title="仲裁模式"
           >
-            <select
-              aria-label="仲裁模式"
-              disabled={saving === "arbitrationMode"}
-              onChange={(event) =>
-                runAsync(
-                  update("arbitrationMode", {
-                    arbitrationMode: event.target
-                      .value as AppConfig["arbitrationMode"],
-                  })
-                )
-              }
-              value={config.arbitrationMode}
-            >
-              <option value="priority">优先级抢占</option>
-              <option value="last_active">最近活跃</option>
-            </select>
+            <fieldset aria-label="仲裁模式" className="mode-options">
+              <button
+                aria-pressed={config.arbitrationMode === "priority"}
+                className={cn(
+                  "mode-option",
+                  config.arbitrationMode === "priority" && "mode-option--active"
+                )}
+                disabled={saving === "arbitrationMode"}
+                onClick={() =>
+                  runAsync(
+                    update("arbitrationMode", { arbitrationMode: "priority" })
+                  )
+                }
+                type="button"
+              >
+                <span aria-hidden="true" className="mode-option__indicator" />
+                <span className="mode-option__body">
+                  <span className="mode-option__title">
+                    <span className="mode-option__name">优先级抢占</span>
+                    <span className="mode-option__tag">默认</span>
+                  </span>
+                  <span className="mode-option__desc">
+                    重要状态优先：错误 &gt; 完成 &gt; 进行中 &gt; 等待 &gt; 空闲
+                  </span>
+                </span>
+              </button>
+              <button
+                aria-pressed={config.arbitrationMode === "last_active"}
+                className={cn(
+                  "mode-option",
+                  config.arbitrationMode === "last_active" &&
+                    "mode-option--active"
+                )}
+                disabled={saving === "arbitrationMode"}
+                onClick={() =>
+                  runAsync(
+                    update("arbitrationMode", {
+                      arbitrationMode: "last_active",
+                    })
+                  )
+                }
+                type="button"
+              >
+                <span aria-hidden="true" className="mode-option__indicator" />
+                <span className="mode-option__body">
+                  <span className="mode-option__title">
+                    <span className="mode-option__name">最近活跃</span>
+                  </span>
+                  <span className="mode-option__desc">
+                    最后上报状态的工具接管灯效
+                  </span>
+                </span>
+              </button>
+            </fieldset>
           </SettingRow>
           <SettingRow
-            description="第一版界面不开放密码修改；服务始终只监听本机回环地址"
+            description="状态上报是否需要密钥认证"
             icon={<ShieldCheck />}
             title="接入保护"
           >
@@ -111,7 +249,48 @@ export function SettingsPage() {
         </h2>
         <Card className="settings-card">
           <SettingRow
-            description="状态总览中红、黄、绿灯的排列方向"
+            description="界面亮暗主题：亮色 / 暗色 / 跟随系统"
+            icon={<SunMoon />}
+            stacked
+            title="外观模式"
+          >
+            <fieldset
+              aria-label="外观模式"
+              className="mode-options mode-options--tri"
+            >
+              {themeModeOptions.map(
+                ({ value, icon: Icon, label, description }) => (
+                  <button
+                    aria-pressed={config.themeMode === value}
+                    className={cn(
+                      "mode-option",
+                      config.themeMode === value && "mode-option--active"
+                    )}
+                    disabled={saving === "themeMode"}
+                    key={value}
+                    onClick={() =>
+                      runAsync(update("themeMode", { themeMode: value }))
+                    }
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="mode-option__icon">
+                      <Icon size={17} />
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="mode-option__indicator"
+                    />
+                    <span className="mode-option__body">
+                      <span className="mode-option__name">{label}</span>
+                      <span className="mode-option__desc">{description}</span>
+                    </span>
+                  </button>
+                )
+              )}
+            </fieldset>
+          </SettingRow>
+          <SettingRow
+            description="状态总览中红绿灯的排列方向"
             icon={<Monitor />}
             title="灯组朝向"
           >
@@ -141,12 +320,31 @@ export function SettingsPage() {
             </fieldset>
           </SettingRow>
           <SettingRow
-            description="当前生效的灯效与蜂鸣方案"
+            description="当前灯效与提示音方案，点击更换"
             icon={<Palette />}
             title="当前主题"
           >
-            <Link className="setting-link" to="/themes">
-              {snapshot?.activeTheme ?? config.activeTheme}
+            <Link className="setting-link setting-theme" to="/themes">
+              {preview ? (
+                <span aria-hidden="true" className="setting-theme__dots">
+                  {preview.swatches.map((swatch) => (
+                    <span
+                      key={swatch.state}
+                      style={{ background: swatch.color }}
+                    />
+                  ))}
+                </span>
+              ) : null}
+              <span className="setting-theme__name">
+                {snapshot?.activeTheme ?? config.activeTheme}
+              </span>
+              {preview?.hasSound ? (
+                <span className="setting-theme__sound">
+                  <Volume2 size={12} />
+                  提示音
+                </span>
+              ) : null}
+              <ChevronRight size={14} />
             </Link>
           </SettingRow>
         </Card>
@@ -157,28 +355,27 @@ export function SettingsPage() {
         </h2>
         <Card className="settings-card">
           <SettingRow
-            description="后端插件尚未接入，当前配置仅保留偏好"
+            description="登录系统后自动启动 AI-Light"
             icon={<Monitor />}
             title="开机自启"
           >
-            <div className="setting-inline">
-              <StatusTag>待平台支持</StatusTag>
-              <button
-                aria-checked={config.autostart}
-                className="switch"
-                disabled
-                role="switch"
-                type="button"
-              >
-                <span />
-              </button>
-            </div>
+            <button
+              aria-checked={config.autostart}
+              aria-label="开机自启"
+              className="switch"
+              disabled={saving === "autostart"}
+              onClick={() =>
+                runAsync(update("autostart", { autostart: !config.autostart }))
+              }
+              role="switch"
+              type="button"
+            >
+              <span />
+            </button>
           </SettingRow>
         </Card>
       </section>
-      <p className="settings-note">
-        设置会立即写入应用配置。接入密码当前以明文存储在本机配置目录中。
-      </p>
+      <p className="settings-note">所有设置即时生效并自动保存</p>
     </div>
   );
 }

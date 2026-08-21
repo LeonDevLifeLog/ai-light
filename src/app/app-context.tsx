@@ -97,18 +97,30 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             );
           }
         ),
-        await subscribe<Partial<AppSnapshot["device"]>>(
+        await subscribe<Partial<AppSnapshot["device"]> & { reason?: string }>(
           "device-connection-changed",
           (device) => {
             setSnapshot((current) =>
               current
-                ? { ...current, device: { ...current.device, ...device } }
+                ? {
+                    ...current,
+                    device: {
+                      ...current.device,
+                      ...device,
+                      reconnecting: device.reconnecting ?? false,
+                    },
+                  }
                 : current
             );
-            notify({
-              tone: device.connected ? "success" : "info",
-              title: device.connected ? "设备已连接" : "设备已断开",
-            });
+            if (device.connected) {
+              notify({ tone: "success", title: "设备已连接" });
+            } else if (device.reconnecting) {
+              notify({ tone: "info", title: "设备已断开，正在重连…" });
+            } else if (device.reason === "reconnect_failed") {
+              notify({ tone: "error", title: "重连失败，请检查设备" });
+            } else {
+              notify({ tone: "info", title: "设备已断开" });
+            }
           }
         ),
         await subscribe<Partial<AppSnapshot["device"]>>(
@@ -142,6 +154,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                 }
               : current
           );
+        }),
+        await subscribe<AppConfig>("config-changed", (nextConfig) => {
+          setConfig(nextConfig);
         })
       );
     };

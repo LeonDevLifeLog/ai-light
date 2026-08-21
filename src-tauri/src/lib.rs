@@ -1,10 +1,12 @@
 //! AI-Light Tauri 应用入口：装配 core 模块、注册 commands/events
 
 mod commands;
+mod tray;
 
 use std::sync::{Arc, RwLock};
 
 use tauri::{Emitter, Manager};
+use tauri_plugin_autostart::ManagerExt;
 
 use ailight_core::arbiter::ArbitrationMode;
 use ailight_core::ble::DeviceIo;
@@ -39,7 +41,19 @@ pub fn run() {
                 let _ = w.set_focus();
             }
         }))
+        // 开机自启（设计方案 D-03/D-07）：官方插件，macOS 走 LaunchAgent；
+        // `--autostart` 参数使登录启动可辨识，本期行为与手动启动一致。
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .args(["--autostart"])
+                .build(),
+        )
         .setup(|app| {
+            // macOS：仅菜单栏常驻（Accessory），Dock 不显示图标——关窗 = 隐藏、退出只经托盘
+            // （KAD-06：托盘常驻与窗口生命周期解耦，避免从 Dock 退出连带终止托盘）
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             // 日志（KAD-05）
             let _ = logging::init(app.path().app_log_dir().ok().as_deref(), "info");
 
@@ -47,7 +61,7 @@ pub fn run() {
             let config_dir = app.path().app_config_dir()?;
             std::fs::create_dir_all(&config_dir)?;
             let cfg_path = config_dir.join("config.json");
-            let (config, warn) = if cfg_path.exists() {
+            let (mut config, warn) = if cfg_path.exists() {
                 match std::fs::read_to_string(&cfg_path) {
                     Ok(c) => AppConfig::load(&c),
                     Err(e) => (AppConfig::default(), Some(format!("读取 config 失败: {e}"))),
@@ -102,12 +116,41 @@ pub fn run() {
                     if cur.is_some() && cur != last {
                         let c = cur.clone().unwrap();
                         let _ = handle.emit("business-state-changed", &c);
+                        crate::tray::update_status(&handle, &c.state);
                         last = cur;
                     }
                 }
             });
 
+            // 开机自启校准（设计方案 D-05）：OS 登录项为唯一事实源，config 只做启动校准缓存。
+            // 插件 setup 已在 Builder::build 阶段（initialize_plugins）完成，此处可安全读取；
+            // is_enabled 失败不阻塞启动，保留本地缓存值。
+            match app.autolaunch().is_enabled() {
+                Ok(os_enabled) => {
+                    if os_enabled != config.autostart {
+                        tracing::info!(
+                            os_enabled,
+                            cached = config.autostart,
+                            "autostart 校准：以 OS 登录项为准"
+                        );
+                        config.autostart = os_enabled;
+                    }
+                }
+                Err(e) => eprintln!("autostart 校准失败（保留本地缓存）: {e}"),
+            }
+
             app.manage(AppState { shared, engine, device_io, config: RwLock::new(config) });
+
+            // 托盘常驻（KAD-06）：图标 + 菜单 + 动态状态文字
+            let tray_state = tray::init(app.handle())?;
+            app.manage(tray_state);
+            {
+                let app_state = app.state::<AppState>();
+                let cfg = app_state.config.read().unwrap();
+                let handle = app.handle();
+                crate::tray::update_theme(handle, &cfg.active_theme);
+                crate::tray::update_orientation(handle, &cfg.badge_orientation);
+            }
 
             // 启动后自动连接记住的设备
             let auto_handle = app.handle().clone();
@@ -123,7 +166,10 @@ pub fn run() {
                     match commands::connect_device_internal(&auto_handle, &dev.address, &dev.name).await
                     {
                         Ok(()) => tracing::info!("已自动连接设备 {}", dev.name),
-                        Err(e) => tracing::warn!("自动连接失败: {e}"),
+                        Err(e) => {
+                            tracing::warn!("自动连接失败: {e}，进入退避重连");
+                            commands::spawn_reconnect(auto_handle, dev.address, dev.name, 1);
+                        }
                     }
                 }
             });
@@ -151,6 +197,15 @@ pub fn run() {
             commands::get_config,
             commands::update_config,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // 启动即显示主窗口（产品形态：打开程序时窗口同时打开）
+            if let tauri::RunEvent::Ready = event {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        });
 }

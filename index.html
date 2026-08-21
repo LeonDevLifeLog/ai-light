@@ -1,10 +1,33 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8">
     <link rel="icon" type="image/svg+xml" href="/vite.svg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tauri</title>
+    <title>AI-Light</title>
+    <script>
+    "use strict";
+    // 首帧主题引导：避免亮/暗主题切换时的闪白/闪黑。
+    // config.json 是唯一事实源；此处仅用 localStorage 缓存 + 系统外观做启动兜底，
+    // 与 src/app/theme-provider.tsx 的 THEME_MODE_KEY 保持一致。
+    (() => {
+      let mode = "dark";
+      let stored = null;
+      try {
+        stored = localStorage.getItem("ailight.themeMode");
+      } catch {
+        /* localStorage 不可用时保持默认暗色 */
+      }
+      if (stored === "light" || stored === "dark" || stored === "system") {
+        mode = stored;
+      }
+      const resolved =
+        mode === "dark" ||
+        (mode === "system" &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.dataset.theme = resolved ? "dark" : "light";
+    })();
+    </script>
   </head>
 
   <body>

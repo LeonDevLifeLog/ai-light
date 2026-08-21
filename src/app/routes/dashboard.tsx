@@ -68,6 +68,7 @@ export function DashboardPage() {
             battery={snapshot.device.batteryPercent}
             connected={snapshot.device.connected}
             name={snapshot.device.name}
+            reconnecting={snapshot.device.reconnecting}
           />
         </Link>
         <Link

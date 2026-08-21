@@ -63,6 +63,9 @@ pub struct DeviceSnapshot {
     /// 充电状态协议枚举值；设备未提供时为 null。
     #[schema(example = 0)]
     pub charge_state: Option<u8>,
+    /// 电源标志位协议枚举值；设备未提供时为 null。
+    #[schema(example = 7)]
+    pub power_flags: Option<u16>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
