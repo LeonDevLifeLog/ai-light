@@ -592,7 +592,7 @@ z/tooltip    = 300
 - **托盘常驻服务**：❌ 未实装。托盘图标 + 菜单均未实现（`src-tauri` 无 TrayIconBuilder、tauri.conf.json 无 trayIcon）；关窗隐藏与单实例已落地。见 ui-interactions.md §12 的 P1/V2 口径冲突
 - **主窗口 5 页 UI**：✅ 已实装（状态总览 / 设备管理 / 主题中心 / 试听 / 设置）
 - **12 个 P1 commands 前端对接**：✅ 已实装（`get_app_state` / `get_themes` / `get_theme` / `set_active_theme` / `import_theme` / `scan_devices` / `connect_device` / `trigger_state` / `preview_scene` / `reset_outputs` / `get_config` / `update_config`）
-- **P1 events 订阅**：⚠️ 前端已订阅 5 个 P1 events，但 Rust 仅 emit `business-state-changed` / `device-connection-changed`（仅连接方向）/ `theme-changed`；`device-power-changed` / `device-fault` 未 emit（BLE 未接电量读取与 FAULT_EVENT）。`hook-log` 为 P2
+- **P1 events 订阅**：✅ 前端已订阅 5 个 P1 events，Rust 全部已 emit（含断连方向、`device-power-changed`、`device-fault`）。`hook-log` 为 P2
 - **红绿灯徽章组件**（核心视觉）+ 朝向偏好设置：✅ 已实装
 
 ### 11.2 应做（产品完整性）
@@ -630,7 +630,7 @@ z/tooltip    = 300
 
 ## 12. 验收剧本
 
-> **实现状态对账（2026-08-21）**：以下剧本中涉及**托盘**的步骤（12.1 步骤 1/2/5/8、12.3 步骤 5、12.4 步骤 1）当前**未实现**（托盘未实装）；**12.5 断连与重连全部步骤未实现**（无断连监听 / 退避重连）。其余步骤已由当前实现覆盖。
+> **实现状态对账（2026-08-21）**：以下剧本中涉及**托盘**的步骤（12.1 步骤 1/2/5/8、12.3 步骤 5、12.4 步骤 1）当前**未实现**（托盘未实装）。**12.5 断连与重连后端链路已实现**（断连事件 → 5 次退避重连，约 75s 窗口）；步骤 2/3 的 Toast 与 `Reconnecting` 视觉态、步骤 5 的"重连成功 Toast"待前端实装，实机验证待 U-01。
 
 ### 12.1 首次启动
 
@@ -700,3 +700,4 @@ z/tooltip    = 300
 |---|---|---|
 | V0.1 | 2026-08-20 | 首版设计文档：信息架构 + 5 页面 + 红绿灯徽章方案 + 设计代币 + 路线图 + 验收剧本 |
 | V0.2 | 2026-08-21 | 实现状态对账（以代码为事实源）：§11 路线图逐项标注 ✅/⚠️/❌；§12 验收剧本标注未实现步骤；§13 决策表 #3（最近 5 个自定义状态）与 #5（主题编辑器）改为已实装；同步修正预览 SCENE 状态 |
+| V0.3 | 2026-08-21 | G-01~G-03 闭环对账：P1 events 5/5 全部 emit（断连双向 / `device-power-changed` / `device-fault`）；§12.5 断连重连后端链路已实现，前端 Toast/Reconnecting 视觉态与实机验证待办 |

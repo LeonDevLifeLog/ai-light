@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.8 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.8，2026-08-21） |
+| 文档版本 | V1.9 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.9，2026-08-21） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -162,7 +162,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 { connected: boolean, address: string|null, name: string|null, reason?: string }
 ```
 
-> ⚠️ 实现状态：Rust 仅在连接成功时 emit 本事件；断开 / 断连宽限尚未 emit（无断连监听），`reason` 字段暂无来源。
+> ✅ 实现状态：连接成功与运行中断连均已 emit；`reason` 字段暂无来源（断连事件不携带原因）。
 
 ### 3.3 设备电源层（`device-power-changed`）
 
@@ -178,7 +178,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 { batteryPercent: number|null, powerSource: string|null, chargeState: string|null, powerFlags: number }
 ```
 
-> ⚠️ 实现状态：Rust 当前未 emit 本事件（POWER_CHANGED / GET_POWER_STATUS 未接线），对应 UI 联动为"就绪未激活"。
+> ✅ 实现状态：握手 GET_POWER_STATUS 与运行期 POWER_CHANGED 均已 emit（无电池能力设备不发）。
 
 ### 3.4 设备故障层（`device-fault`）
 
@@ -193,7 +193,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 { source: 'LED'|'BUZZER'|'POWER'|'PROTOCOL', code: number, context: number }
 ```
 
-> ⚠️ 实现状态：Rust 当前未 emit 本事件（FAULT_EVENT 未接线），对应 UI 联动为"就绪未激活"。
+> ✅ 实现状态：FAULT_EVENT 已接线并 emit `device-fault`。
 
 ### 3.5 主题层（`theme-changed`）
 
@@ -229,7 +229,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `BUTTON_EVENT (0xE3)` | `DeviceCard` 按键记录 | `event` / `duration_ms`（V2 显示） | append |
 | `FAULT_EVENT (0xEF)` | 同 3.4 | — | — |
 
-> ⚠️ 实现状态：四个协议主动事件均未接线（ble.rs 仅订阅 TX 特征并组帧，未分发 DEVICE_READY / POWER_CHANGED / BUTTON_EVENT / FAULT_EVENT）。
+> ✅ 实现状态：四个协议主动事件均已接线（DEVICE_READY 用于握手；POWER_CHANGED / FAULT_EVENT 已 emit；BUTTON_EVENT 当前仅记录日志，V2 展示）。
 
 ### 3.8 初始化流程（一次性）
 
@@ -294,7 +294,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 **任一阶段失败 → 设备卡回滚到 `Disconnected` + 触发 `device-connection-changed{connected: false, reason}`**
 
-> ⚠️ 实现状态：当前仅覆盖阶段 1（BLE 连接）与特征发现 / TX 订阅（阶段 2~3 的订阅部分）；阶段 4~8（DEVICE_READY / GET_DEVICE_INFO / GET_CAPABILITIES / BAS / GET_POWER_STATUS）未实现，握手失败回滚（含 `device-connection-changed{false}`）未接线。
+> ✅ 实现状态：阶段 1~8 已实现。握手失败走连接命令错误路径（前端 Toast），不额外 emit `device-connection-changed{false}`；运行中断连才触发 false 事件与退避重连。
 
 ### 4.4 蓝牙断连与宽限期（V0.4 §13）
 
@@ -306,7 +306,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | 60s 超时 | 设备自动 RESET_OUTPUTS | Toast "设备已离线，请手动重连" + 设备卡 `Disconnected` + [去连接] 按钮高亮 |
 | 重连失败 N 次 | 退避后停止 | Toast "重连失败，请检查设备" + 设备卡保持 `Disconnected` |
 
-> ⚠️ 实现状态：断连监听、60s 宽限、退避重连均未实现，本矩阵当前为设计契约。
+> ✅ 实现状态：断连监听与客户端退避重连（5 次，约 75s 窗口，期间已手动连接则放弃）已实现；前端 `Reconnecting` 视觉态与重连 Toast 尚未实装（保持待办）。
 
 ### 4.5 主题相关失败路径
 
@@ -378,7 +378,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `Connected` | 完整字段 | "已连接"（accent） | [断开] P2 |
 | `Reconnecting` | spinner + "重连中...（3/5）" | "重连中"（warn） | 禁用 |
 
-> ⚠️ 实现状态：当前代码仅覆盖 `Disconnected → Connecting → Connected`（连接成功路径）；`Reconnecting`（断连 / 退避重连）未实现；`Connected` 下的 [断开] 为 P2 未实装。
+> ✅ 实现状态：`Connected ↔ Disconnected` 双向已实现（断连由事件驱动）；`Reconnecting` 视觉态未实装（后端重连成功前快照保持 Disconnected）；`Connected` 下的 [断开] 为 P2 未实装。
 
 ### 5.3 业务状态（来自仲裁，[ADR-0001](../decisions/ADR-0001)）
 
@@ -1752,6 +1752,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.9 | 2026-08-21 | 实现状态对账（G-01~G-03 闭环）：§3.2~§3.4 事件实现状态更新为 ✅；§3.7 协议主动事件全部接线（BUTTON_EVENT 仅日志）；§4.3 握手阶段 1~8 已实现；§4.4 断连监听与退避重连已实现（前端 Reconnecting 视觉态待办）；§5.2 `Connected ↔ Disconnected` 双向已实现。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |
 | V1.8 | 2026-08-21 | 实现状态对账（以代码为事实源，用户触发审计）：§3.2~§3.4、§3.7 标注事件未接线（`device-connection-changed` 仅连接方向；`device-power-changed` / `device-fault` / 协议主动事件未 emit）；§4.3 握手失败路径标注部分实现；§4.4 断连宽限、§5.2 `Reconnecting` 标注未实现。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |
 | V1.0 | 2026-08-20 | 首版：6 层金字塔 + 全局联动矩阵 + 失败路径矩阵 + 4 状态机 + L2/L3/L4 共 33 个组件详表 |
 | V1.1 | 2026-08-20 | 增量：§9 组件生命周期与资源清理（mount/update/unmount 三阶段 + 资源清理检查清单 + 6 个常见模式 + 内存泄漏自检清单） |

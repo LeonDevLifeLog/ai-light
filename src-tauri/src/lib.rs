@@ -123,7 +123,10 @@ pub fn run() {
                     match commands::connect_device_internal(&auto_handle, &dev.address, &dev.name).await
                     {
                         Ok(()) => tracing::info!("已自动连接设备 {}", dev.name),
-                        Err(e) => tracing::warn!("自动连接失败: {e}"),
+                        Err(e) => {
+                            tracing::warn!("自动连接失败: {e}，进入退避重连");
+                            commands::spawn_reconnect(auto_handle, dev.address, dev.name, 1);
+                        }
                     }
                 }
             });

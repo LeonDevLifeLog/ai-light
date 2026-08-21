@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.8 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.8，2026-08-21） |
+| 文档版本 | V1.9 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.9，2026-08-21） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -42,9 +42,9 @@
 | Event | Payload | 受影响的 UI | 实现状态 |
 |---|---|---|---|
 | `business-state-changed` | `{ state, source, session, sinceTs, theme }` | Dashboard 红绿灯徽章 + 状态名 + 副标题 | ✅ Rust 已 emit |
-| `device-connection-changed` | `{ connected, address, name }` | Dashboard 设备卡 + Sidebar 底部「已连接」状态 | ⚠️ 仅连接成功时 emit；断连 / 宽限未 emit（无断连监听） |
-| `device-power-changed` | `{ batteryPercent, powerSource, chargeState, powerFlags }` | Dashboard 设备卡电量格 | ❌ Rust 未 emit（POWER_CHANGED / GET_POWER_STATUS 未接线） |
-| `device-fault` | `{ source, code, context }` | Devices 页告警卡 | ❌ Rust 未 emit（FAULT_EVENT 未接线） |
+| `device-connection-changed` | `{ connected, address, name }` | Dashboard 设备卡 + Sidebar 底部「已连接」状态 | ✅ 连接 / 断连均已 emit（断连时清空电源字段） |
+| `device-power-changed` | `{ batteryPercent, powerSource, chargeState, powerFlags }` | Dashboard 设备卡电量格 | ✅ 握手 GET_POWER_STATUS + POWER_CHANGED 主动事件均已 emit |
+| `device-fault` | `{ source, code, context }` | Devices 页告警卡 | ✅ FAULT_EVENT 已接线并 emit |
 | `theme-changed` | `{ name }` | Dashboard 主题卡 + Sidebar 底部「当前主题」 | ✅ Rust 已 emit |
 
 **初始化流程**：打开主窗口 → 自动调 `get_app_state()` 拉全量快照 → 订阅 events 接收增量。
@@ -133,7 +133,7 @@
 1. `ble::scan` 4s 重扫确保设备还在
 2. `ble::connect_to_address` 建链
 3. 发现 GB_TRANS 特征 + 订阅 TX Notify（✅ 已实现）
-4. V0.4 握手剩余阶段——DEVICE_READY 等待 / GET_DEVICE_INFO / GET_CAPABILITIES / BAS / GET_POWER_STATUS：❌ 未实现，设备信息与电量字段不会填充
+4. V0.4 握手——等 DEVICE_READY → GET_DEVICE_INFO → GET_CAPABILITIES → GET_POWER_STATUS（按能力位）（✅ 已实现；固件 / 硬件变体 / 电量写入设备快照）
 5. 热切换设备（`DeviceIo::set`）✅
 6. 写 `config.remembered_device` ✅
 7. 触发 `device-connection-changed` ✅
@@ -147,7 +147,7 @@ UI 反馈：设备卡状态 tag 立即更新；失败显示 Toast（原因 + 重
 
 ### 4.4 故障告警
 
-> ⚠️ 实现状态：Rust 当前未 emit `device-fault`（FAULT_EVENT 未接线）。本告警 UI 已就绪，但在事件链路落地前不会出现。
+> ✅ 实现状态：FAULT_EVENT (0xEF) 已接线，Rust 收到后 emit `device-fault`，Devices 页告警卡即可出现。
 
 收到 `device-fault` event → Devices 页顶部插入红色 Alert 卡：
 - 标题：「设备故障事件」
@@ -518,9 +518,9 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 编号 | 项 | 优先级 |
  |---|---|---|
-| G-01 | BLE 断连监听 + `device-connection-changed{false}` + 退避重连 | P1 |
-| G-02 | 握手信息读取（DEVICE_READY / GET_DEVICE_INFO / GET_CAPABILITIES / GET_POWER_STATUS）→ `device-power-changed` | P1 |
-| G-03 | FAULT_EVENT 接线 → `device-fault` | P1 |
+| G-01 | BLE 断连监听 + `device-connection-changed{false}` + 退避重连（5 次，约 75s 窗口） | ✅ 已实现（2026-08-21；实机冒烟 U-01 待完成） |
+| G-02 | 握手信息读取（DEVICE_READY / GET_DEVICE_INFO / GET_CAPABILITIES / GET_POWER_STATUS）→ `device-power-changed` | ✅ 已实现（2026-08-21；实机冒烟 U-01 待完成） |
+| G-03 | FAULT_EVENT 接线 → `device-fault` | ✅ 已实现（2026-08-21；实机冒烟 U-01 待完成） |
 | G-04 | 托盘实装（图标 + 菜单；先统一 P1/V2 口径） | P1/V2 ⚠️ |
 | G-05 | `portPreference` 读取与热重启 | P1 |
 | G-06 | `autostart` 接入 tauri-plugin-autostart | P2 |
@@ -595,7 +595,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 ### A.4 §4.x 新增：蓝牙交互各阶段 UI 反馈（V0.4 §5）
 
-> ⚠️ 实现状态对账（2026-08-21）：当前仅阶段 1（BLE 连接）与特征发现 / TX 订阅（阶段 2~3 的订阅部分）已实现；阶段 4~8（DEVICE_READY / GET_DEVICE_INFO / GET_CAPABILITIES / BAS / GET_POWER_STATUS）与下方「断连宽限期」全部未实现。
+> ✅ 实现状态对账（2026-08-21）：阶段 1~8（BLE 连接 / 特征发现 / TX 订阅 / DEVICE_READY / GET_DEVICE_INFO / GET_CAPABILITIES / GET_POWER_STATUS）已全部实现；BAS 订阅按能力位尚未单独订阅（电量经 GET_POWER_STATUS / POWER_CHANGED 获取）。
 
 | 阶段 | 后端动作 | UI 反馈 | 失败 Toast |
 |---|---|---|---|
@@ -610,7 +610,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 **任一阶段失败** → 设备卡回滚到 `Disconnected` + 触发 `device-connection-changed{connected: false, reason}`。
 
-**断连宽限期**（V0.4 §13）：❌ 以下行为均未实现（无断连监听 / 退避重连）。
+**断连宽限期**（V0.4 §13）：✅ 客户端链路已实现（断连监听 → `device-connection-changed{false}` → 5 次退避重连，约 75s 窗口，期间已手动连接则放弃）；前端 `Reconnecting` 视觉态与重连 Toast 尚未实装。
 
 | 时间窗口 | 设备侧行为 | UI 反馈 |
 |---|---|---|
@@ -720,6 +720,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.9 | 2026-08-21 | 实现状态对账（G-01~G-03 闭环）：§2.1 事件表 `device-connection-changed` / `device-power-changed` / `device-fault` 全部改为 ✅；§4.2 握手流程标注已实现；§4.4 故障告警链路已接线；§14 G-01~G-03 标记完成；A.4 阶段 1~8 已实现，断连宽限客户端链路已实现（前端 Reconnecting 视觉态待办）。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003、KAD-03/06/08 引用有效。 |
 | V1.8 | 2026-08-21 | 实现状态对账（以代码为事实源，用户触发审计）：§2.1 事件表新增实现状态列（`device-power-changed` / `device-fault` 未 emit）；§4.2 握手流程按实际修正（DEVICE_READY 等信息读取未接线）；§4.4 / A.4 标注未实现链路；§12 托盘修正为"本体与菜单均未实装"并记录 P1/V2 口径冲突；§14 待办表新增 G-01~G-06 实现缺口。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003、KAD-03/06/08 引用有效。 |
 | V1.7 | 2026-08-21 | 对齐报告：主题定义迁移为 Rust DTO + JsonSchema 单一来源后完成 5 项语义硬检查。Source Events、AppError.code、蓝牙 result code 均与上游契约一致；主题编辑字段完整存在于 DTO 生成的 Theme Schema；ADR/KAD 引用有效。强类型 `Curve` / `EndLevel` 保持既有 JSON 字符串，`LedTrackDef` 条件约束由 `oneOf` 表达，因此 UI 契约无需变更。 |
 | V1.6 | 2026-08-21 | 对齐报告：Theme JSON Schema 与主题指南落地后完成 5 项语义硬检查。Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致（保留值 0x08 无 UI 行为）；主题编辑字段均存在于 theme-format 与 Theme Schema；ADR-0001/0002/0003、KAD-03/06/08 引用有效。同步修正文档版本头漂移。 |

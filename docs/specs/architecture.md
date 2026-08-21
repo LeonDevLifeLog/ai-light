@@ -71,7 +71,7 @@
   1. 各平台原生绑定（CoreBluetooth / WinRT / BlueZ 直写）——工作量 ×3，双端维护，否决
   2. Python sidecar（复用 pyPcTest 的 Bleak 栈）——双运行时、IPC 复杂度、分发体积，否决
 - **后果**：跨平台一致性✅；Windows 服务缓存与偶发连接问题需专门处理⚠️；btleplug 事件循环与 Tauri async 的线程模型整合需 spike 验证⚠️。
-- **验证**：三平台冒烟（扫描→连接→握手→SET_SCENE 全链路）。状态：✅ 已实现（`ble.rs`：扫描 / 连接 / 特征发现与 TX 订阅 / 热切换）；三平台实机冒烟（U-01）待完成。
+- **验证**：三平台冒烟（扫描→连接→握手→SET_SCENE 全链路）。状态：✅ 已实现（`ble.rs`：扫描 / 连接 / 特征发现与 TX 订阅 / V0.4 §5 握手 / 主动事件分发 / 断连监听 / 热切换）；三平台实机冒烟（U-01）待完成。
 
 ### KAD-02 本地 HTTP server：axum
 

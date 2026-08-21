@@ -134,9 +134,9 @@
 | 事件名 | 触发时机 | payload | 实现状态（2026-08-21） |
 |---|---|---|---|
 | `business-state-changed` | 仲裁结果变化（含 hold 回落） | `{ state, source, session, sinceTs, theme }` | ✅ 已 emit |
-| `device-connection-changed` | 连接/断开（含断连宽限开始） | `{ connected, address, name }` | ⚠️ 仅连接成功时 emit；断连 / 宽限未 emit |
-| `device-power-changed` | POWER_CHANGED / 握手后首次查询 | `{ batteryPercent, powerSource, chargeState, powerFlags }` | ❌ 未 emit |
-| `device-fault` | FAULT_EVENT | `{ source, code, context }` | ❌ 未 emit |
+| `device-connection-changed` | 连接/断开（含断连宽限开始） | `{ connected, address, name }` | ✅ 连接 / 断连均已 emit |
+| `device-power-changed` | POWER_CHANGED / 握手后首次查询 | `{ batteryPercent, powerSource, chargeState, powerFlags }` | ✅ 握手 + 主动事件均已 emit |
+| `device-fault` | FAULT_EVENT | `{ source, code, context }` | ✅ 已 emit |
 | `theme-changed` | 主题切换生效 | `{ name }` | ✅ 已 emit |
 | `hook-log`（P2） | 每次 hook 事件受理 | `{ source, state, session, applied, ts }`（排障日志面板用） | ❌ P2 未实现 |
 
@@ -163,7 +163,7 @@
 以代码为事实源（对应 ui-design.md §11 路线图对账）：
 
 - **P1 commands（12 个）**：✅ 全部已注册（`src-tauri/src/commands.rs`）并由前端 `api` 层对接。
-- **P1 events（5 个）**：前端已全部订阅；Rust 仅 emit `business-state-changed` / `device-connection-changed`（仅连接方向）/ `theme-changed`；`device-power-changed` / `device-fault` 未 emit（BLE 电量读取与 FAULT_EVENT 未接线）。
+- **P1 events（5 个）**：✅ 全部已 emit。`device-connection-changed` 覆盖连接与断连双向；`device-power-changed` 由握手 GET_POWER_STATUS 与 POWER_CHANGED 主动事件触发；`device-fault` 由 FAULT_EVENT 触发。
 - **P2 commands / event（5 个）**：❌ 全部未实现。
 - **错误码映射偏差**：`preview_scene` 在设备未连接时实际返回 `INTERNAL`（commands 层统一 `internal()` 映射），契约要求 `DEVICE_NOT_CONNECTED`——待修正。
 - **配置项**：`arbitrationMode` / `token`（服务端 Bearer 校验已实现）/ `badgeOrientation` / `rememberedDevice` 已生效；`autostart` 仅持久化、未接 `tauri-plugin-autostart`；`portPreference` 已持久化但 `hook_server::serve` 未读取。
