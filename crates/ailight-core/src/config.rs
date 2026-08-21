@@ -10,28 +10,36 @@ pub const DEFAULT_PORT: u16 = 47800;
 pub const MAX_PORT: u16 = 47810;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct RememberedDevice {
     pub address: String,
     pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(default)]
+#[serde(default, rename_all = "camelCase")]
 pub struct AppConfig {
     /// schema 版本，当前 = 1
     pub version: u32,
     /// 仲裁模式："priority" | "last_active"（ADR-0001 Q8）
+    #[serde(alias = "arbitration_mode")]
     pub arbitration_mode: String,
     /// 当前生效主题名（默认 "default"）
+    #[serde(alias = "active_theme")]
     pub active_theme: String,
     /// hook 服务首选端口；0 = 自动（47800 起退避至 47810）
+    #[serde(alias = "port_preference")]
     pub port_preference: u16,
     /// 记住的设备；null = 无
+    #[serde(alias = "remembered_device")]
     pub remembered_device: Option<RememberedDevice>,
     /// 空字符串 = 不校验；非空 = 启用 Bearer 校验（hook-api §7）
     pub token: String,
     /// 开机自启（KAD-06 SHOULD）
     pub autostart: bool,
+    /// Dashboard 红绿灯徽章朝向："horizontal" | "vertical"
+    #[serde(alias = "badge_orientation")]
+    pub badge_orientation: String,
 }
 
 impl Default for AppConfig {
@@ -44,6 +52,7 @@ impl Default for AppConfig {
             remembered_device: None,
             token: String::new(),
             autostart: false,
+            badge_orientation: "horizontal".into(),
         }
     }
 }
@@ -72,6 +81,13 @@ impl AppConfig {
                         cfg.port_preference, DEFAULT_PORT
                     ));
                     cfg.port_preference = DEFAULT_PORT;
+                }
+                if cfg.badge_orientation != "horizontal" && cfg.badge_orientation != "vertical" {
+                    warn.push(format!(
+                        "badge_orientation 非法({}), 回退 horizontal",
+                        cfg.badge_orientation
+                    ));
+                    cfg.badge_orientation = "horizontal".into();
                 }
                 if !theme::builtin_theme_names().contains(&cfg.active_theme.as_str()) {
                     // 主题名非法或不存在：回退 default（用户主题可能未加载，这里只做静态检查）

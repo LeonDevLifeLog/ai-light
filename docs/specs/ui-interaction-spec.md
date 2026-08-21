@@ -95,7 +95,7 @@ L2 页面层        6 个 page-section（dashboard / devices / integrations / th
   ↓
 L3 区域层        每页面内的功能区块（e.g. Dashboard = StatusHero + DeviceCard + ThemeCard）
   ↓
-L4 组件层        可复用 UI 组件（LightDot / TrafficBadge / DeviceCard / StateTab / CurveCard / Switch ...）
+L4 组件层        可复用 UI 组件（LightDot / TrafficBadge / DeviceCard / StateTab / MotionPresetCard / Switch ...）
   ↓
 L5 控件层        子控件（color picker / slider / select / chip / tag / button ...）
   ↓
@@ -208,13 +208,11 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 | 配置变更 | 目标组件 | 同步字段 | 同步方式 |
 |---|---|---|---|
-| `themeMode: 'dark'\|'light'\|'auto'` | 全局 `html[data-theme]` | — | full |
-| `themeMode` 变更 | `Settings.themeSeg` 按钮高亮 | `on` class | patch |
 | `badgeOrientation: 'horizontal'\|'vertical'` | `TrafficBadge.layout` | — | patch |
 | `badgeOrientation` 变更 | `Sidebar.trayMenu` 单选 | — | patch |
 | `arbitrationMode` 变更 | `Settings.arbitrationSelect` 当前值 | — | patch |
-| `autostart` 变更 | `Settings.autostartSwitch` `on` class | — | patch |
-| `portPreference` 变更 | Toast "服务重启中..." → "端口已切换" / "回滚" | — | emit |
+
+> `themeMode` / `autostart` 真实切换 / `portPreference` 热重启均为 P2；P1 不发出这些 patch。
 
 ### 3.7 蓝牙主动事件（来自协议 V0.4 §11）
 
@@ -255,7 +253,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `THEME_BUILTIN` | 尝试删除内置主题 | Dialog "内置主题不可删除" | 关闭 |
 | `BAD_REQUEST` | 参数非法（如 trigger_state 状态名含非法字符） | Toast "请求参数非法：`<reason>`" | 修正输入 |
 | `DEVICE_NOT_CONNECTED` | preview_scene / trigger_state 时未连接 | Toast "请先连接设备" | 跳转 `/devices` |
-| 内部错误（INTERNAL_ERROR） | Rust 侧异常 | Toast "服务异常，请查看日志" | 打开日志目录 |
+| `INTERNAL` | Rust 侧异常（含 BLE 下发失败） | Toast "服务异常，请查看日志" | 打开日志目录 |
 
 ### 4.2 蓝牙协议 result code → UI 反馈（V0.4 §3.6）
 
@@ -307,7 +305,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | JSON 解析失败 | Dialog "JSON 解析失败：第 X 行 Y 列 `<reason>`" |
 | 顶层多键 / 缺键（theme / scenes / states） | Dialog "校验失败：缺少/多余键 `<key>`" |
 | SCENE 引用不存在 | Dialog "校验失败：states[`<state>`].scene 引用 `<scene>` 不存在" |
-| 字段非法（如 brightness=0、duration_ms=0） | Dialog "校验失败：`<field>` 值非法：`<value>`" |
+| 字段非法（如 brightness=101、duration_ms=0） | Dialog "校验失败：`<field>` 值非法：`<value>`" |
 | 编辑保存失败（写文件失败） | Toast "保存失败：`<reason>`" + 编辑器保留输入 |
 | 主题切换校验失败 | Toast "主题 'X' 校验失败" + 不切换 + 保留当前主题 |
 
@@ -388,9 +386,9 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 ### 5.4 主题编辑器模式
 
 ```
-[Closed] --(点 [编辑当前主题])--> [Open, simple, IDLE]
-[Open, simple] --(切 advanced)--> [Open, advanced, IDLE]      // 字段全部展开
-[Open, advanced] --(切 simple)--> [Open, simple, IDLE]         // 多余字段隐藏
+[Closed] --(点 [以此主题创建])--> [Open, quick, WORKING]
+[Open, quick] --(切 workbench)--> [Open, workbench, WORKING]   // 精确字段展开
+[Open, workbench] --(切 quick)--> [Open, quick, WORKING]       // 精确字段隐藏
 [Open, 任何模式] --(切 state-tab)--> [Open, 相同模式, 新 state] // 数据保留
 [Open, 任何模式] --(点 取消/Esc)--> [Closed]                  // 丢弃修改
 [Open, 任何模式] --(点 保存)--> [Closed, 写文件]               // 校验 + 持久化
@@ -400,7 +398,9 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 **关键不变量**：
 - 模式切换**不丢**用户已填数据（数据在 `STATE_DATA` 对象中保留）
 - `editingState` 切换**不丢**当前模式的字段
-- 取消/关闭 Dialog 时**丢弃**未保存修改（无 dirty 标记，V2 评估是否加）
+- 标准 5 态不可删除；允许创建和删除自定义状态
+- 用户界面不以“相位”为主要标签，使用“灯光顺序 / 出场时间”
+- 取消/关闭 Dialog 时存在未保存修改 → 必须确认后才丢弃
 
 ---
 
@@ -438,7 +438,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | Source Event | 字段 | 同步方式 |
 |---|---|---|
 | `device-connection-changed` | `Sidebar.statusDot.color` | patch |
-| `update_config.themeMode` | (none, P1) | — |
+| Dark OLED（P1 固定） | (none) | — |
 | 用户点击 nav-item | `currentRoute` | full |
 
 **6.1.5 边界条件**
@@ -812,15 +812,11 @@ Settings 页分组内的单行设置项：左 label + 描述，右控件（Switc
 ┌─────────────────────────┐
 │  标题                    │
 ├─────────────────────────┤
-│ SettingGroup: 外观       │ themeMode
+│ SettingGroup: 服务       │ port（只读）+ arbitrationMode + 接入保护状态
 ├─────────────────────────┤
-│ SettingGroup: 灯组显示   │ badgeOrientation
+│ SettingGroup: 显示       │ badgeOrientation + 当前主题
 ├─────────────────────────┤
-│ SettingGroup: 主题       │ 当前激活主题名
-├─────────────────────────�
-│ SettingGroup: 设备       │ 记住的设备
-├─────────────────────────┤
-│ SettingGroup: 系统       │ autostart + 日志
+│ SettingGroup: 系统       │ autostart（P1 禁用态）
 └─────────────────────────┘
 ```
 
@@ -900,10 +896,10 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 
 ---
 
-### 8.3 `StateTab`（主题编辑器 5 状态切换）
+### 8.3 `StateTab`（主题创作器状态切换）
 
 **8.3.1 用途**
-主题编辑器内 5 个状态 tab：IDLE / WORKING / WAITING / SUCCESS / ERROR。
+主题创作器内标准 5 态 + 用户自定义状态 tab。
 
 **8.3.2 对外契约**
 
@@ -930,8 +926,8 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 | `theme-changed` | 预览色块 | patch |
 
 **8.3.5 边界条件**
-- 5 个 tab 严格按固定顺序：`[IDLE, WORKING, WAITING, SUCCESS, ERROR]`
-- 不可隐藏 / 不可重排
+- 标准 5 态严格按固定顺序且不可删除
+- 自定义状态显示在标准状态之后，可添加、删除
 
 **8.3.6 无障碍**
 - 5 个 tab = `<button>` + `aria-pressed`
@@ -939,19 +935,19 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 
 ---
 
-### 8.4 `CurveCard`（5 波形卡片）
+### 8.4 `MotionPresetCard`（6 个运动预设）
 
 **8.4.1 用途**
-进阶模式编辑器第 1 步：5 个波形卡片（CONSTANT / SQUARE / TRIANGLE / SAW_UP / SAW_DOWN）。
+快速创作第一步：常亮 / 呼吸 / 闪烁 / 流动 / 渐亮 / 渐弱。协议曲线名不对用户展示。
 
 **8.4.2 对外契约**
 
 | 类别 | 项 | 说明 |
 |---|---|---|
-| Props | `curve` | `Curve` |
+| Props | `motion` | `steady / breathe / blink / flow / fade-in / fade-out` |
 | Props | `isActive` | boolean |
 | Props | `previewColor` | string（hex） |
-| Emit | `onClick(curve)` | 切换波形 |
+| Emit | `onClick(motion)` | 生成对应三灯轨道参数 |
 
 **8.4.3 视觉态全集**
 
@@ -964,7 +960,7 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 **8.4.4 联动矩阵**：纯展示 + 触发。
 
 **8.4.5 边界条件**
-- 5 种波形严格按固定顺序
+- 6 种运动效果严格按固定顺序
 - SINE 协议枚举预留但 UI 不暴露（V0.4 §7.2）
 
 **8.4.6 无障碍**
@@ -985,7 +981,7 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 | Props | `lowColor` | string |
 | Props | `highColor` | string |
 | Props | `brightness` | number (0~100) |
-| Props | `simpleMode` | boolean（隐藏 low picker） |
+| Props | `quickMode` | boolean（隐藏精确协议参数） |
 | Emit | `onChangeLow(color)` / `onChangeHigh(color)` / `onChangeBrightness(b)` | — |
 
 **8.5.3 视觉态全集**
@@ -993,7 +989,7 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 | 态 | 触发条件 | 视觉 |
 |---|---|---|
 | `default` | 初始 | 60px 标签 + 3 列 picker / slider |
-| `simpleMode` | `simpleMode == true` | 隐藏 low picker + slider（仅 high color） |
+| `quickMode` | `quickMode == true` | 只显示用户可理解的颜色与强度控制 |
 
 **8.5.4 联动矩阵**
 
@@ -1042,10 +1038,10 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 
 ---
 
-### 8.7 `PhaseSlider`（相位滑块 0-360°）
+### 8.7 `EntryTimingSlider`（出场时间 0-360°）
 
 **8.7.1 用途**
-进阶模式第 3 步：相位差滑块。
+轨道工作台的精确出场时间滑块。角度只是精确值，主标签不得显示“相位”。
 
 **8.7.2 对外契约**
 
@@ -1065,15 +1061,15 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 
 | Source Event | 字段 | 同步方式 |
 |---|---|---|
-| RelationPreset 切换 | `value` 设置为预设值 | patch |
+| LightOrderPreset 切换 | `value` 设置为预设组合 | patch |
 
 **8.7.5 边界条件**
 - `value > 360` → clamp 到 360
 - `value < 0` → clamp 到 0
-- 选择 "自定义" 预设后 → 滑块启用自由调节
+- 用户拖动后 → 灯光顺序进入自定义
 
 **8.7.6 无障碍**
-- `<input type="range">` + `aria-label="相位差（度）"`
+- `<input type="range">` + `aria-label="该灯在一轮动画中的出场位置"`
 
 ---
 
@@ -1147,16 +1143,16 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 
 ---
 
-### 8.10 `RelationPreset`（关系预设按钮组）
+### 8.10 `LightOrderPreset`（灯光顺序预设）
 
 **8.10.1 用途**
-进阶模式第 3 步：4 个三灯关系预设按钮（同步 / 120° / 240° / 自定义）。
+快速创作和轨道工作台共用的四个直觉预设：一起 / 从上往下 / 从下往上 / 交错。
 
 **8.10.2 对外契约**
 
 | 类别 | 项 | 说明 |
 |---|---|---|
-| Props | `active` | `'sync' \| '120' \| '240' \| 'custom'` |
+| Props | `active` | `'together' \| 'top-down' \| 'bottom-up' \| 'staggered' \| 'custom'` |
 | Emit | `onClick(value)` | — |
 
 **8.10.3 视觉态全集**
@@ -1171,8 +1167,8 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 
 | Source Event | 字段 | 同步方式 |
 |---|---|---|
-| PhaseSlider 自定义值 | `active = 'custom'` | patch |
-| 用户点击预设 | PhaseSlider `value = <预设>` | patch |
+| EntryTimingSlider 自定义值 | `active = 'custom'` | patch |
+| 用户点击预设 | 三灯 `phase_deg` 写入对应组合 | patch |
 
 **8.10.5 边界条件**
 - 4 个预设严格按固定顺序
@@ -1207,7 +1203,7 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 
 | Source Event | 字段 | 同步方式 |
 |---|---|---|
-| `update_config.themeMode` | 当前 value | patch |
+| `update_config.badgeOrientation` | 当前 value | patch |
 
 **8.11.5 边界条件**
 - N >= 2；典型 3 个
@@ -1746,3 +1742,5 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 | V1.1 | 2026-08-20 | 增量：§9 组件生命周期与资源清理（mount/update/unmount 三阶段 + 资源清理检查清单 + 6 个常见模式 + 内存泄漏自检清单） |
 | V1.2 | 2026-08-20 | 增量：AGENTS.md 新增"触发式双文档审计"条款——ipc-contract / theme-format / 蓝牙 V0.4 / ADR 变更前必须强制对齐 ui-interactions.md 与 ui-interaction-spec.md |
 | V1.3 | 2026-08-20 | 重构：废除"季度 + 触发式"双条款，改为单一"内容驱动审计"——5 个内容信号触发（会话入口 / 变更前 / 变更后自动 / 用户触发 / 漂移信号），无时间边界 |
+| V1.4 | 2026-08-20 | 对齐报告：前端实现后完成 5 项语义硬检查。§3 Source Events 全部存在于 ipc-contract §5；§4.1 AppError.code 全部存在于 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 一致；ADR / KAD 引用均可解析。修复 `badgeOrientation` IPC、`INTERNAL` 错误码与导航计数漂移。 |
+| V1.5 | 2026-08-21 | 主题创作器重构：快速创作隐藏协议术语，以运动、速度、灯序和声音预设生成 SCENE；轨道工作台将相位改述为出场时间；状态 tab 支持自定义状态。对齐报告：§3 Source Events、§4.1 AppError、§4.2 result code、§6~§8 theme-format 字段和 ADR/KAD 引用五项均通过；`brightness` / `volume` 统一为 0~100。 |

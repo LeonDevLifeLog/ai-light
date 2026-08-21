@@ -163,6 +163,19 @@ impl Engine {
         Ok(())
     }
 
+    /// 试听未保存的主题草稿；仅编译并下发，不替换当前主题或业务状态。
+    pub async fn preview_theme(
+        &self,
+        draft: &theme::ThemeFile,
+        state: &str,
+    ) -> Result<(), EngineError> {
+        theme::validate(draft).map_err(EngineError::Theme)?;
+        let mut scene = theme::compile_state(draft, state).map_err(EngineError::Theme)?;
+        scene.apply_mode = protocol::RESTART_SCENE;
+        transport_set_scene(&self.transport, &scene).await?;
+        Ok(())
+    }
+
     /// 复位：RESET_OUTPUTS + 业务状态回 IDLE（ipc-contract §2.4 联动）
     pub async fn reset(&self) -> Result<(), EngineError> {
         let now = (self.shared.now_ms)();
@@ -379,6 +392,23 @@ mod tests {
             r,
             Err(EngineError::Theme(theme::ThemeError::StateNotFound(_)))
         ));
+    }
+
+    #[tokio::test]
+    async fn preview_theme_draft_does_not_replace_active_theme() {
+        let (shared, io, engine) = setup();
+        let mut draft = load_default_theme();
+        draft.scenes.get_mut("breath-blue").unwrap().leds[0]
+            .as_mut()
+            .unwrap()
+            .brightness = 0;
+        engine.preview_theme(&draft, "WORKING").await.unwrap();
+        assert_eq!(io.writes().len(), 1);
+        let parsed = crate::protocol::parse_frame(&io.writes()[0]).unwrap().0;
+        let scene = OutputScene::decode_data(&parsed.data).unwrap();
+        assert_eq!(scene.apply_mode, crate::protocol::RESTART_SCENE);
+        assert_eq!(scene.leds[0].brightness, 0);
+        assert_eq!(shared.theme_name.read().unwrap().as_str(), "default");
     }
 
     #[tokio::test]

@@ -95,6 +95,7 @@
 │ ────────   │  ────────────                               │
 │ ⚡ 状态    │                                              │
 │ 📡 设备    │  <页面内容>                                  │
+│ 🔗 接入    │                                              │
 │ 🎨 主题    │                                              │
 │ 🔔 试听    │                                              │
 │ ⚙ 设置    │                                              │
@@ -105,8 +106,8 @@
 └────────────┴─────────────────────────────────────────────┘
 ```
 
-- 5 个一级导航项（命中 Material Design `bottom-nav-limit` 规则的精神：少而精）
-- 侧边栏固定宽度 200px；底部展示版本号 + 当前 hook 服务端口
+- 5 个主业务导航项（状态 / 设备 / 接入 / 主题 / 试听）+ 设置入口
+- 侧边栏固定宽度 220px；底部展示版本号 + 当前 hook 服务端口
 
 ### 4.2 路由表 ✅
 
@@ -114,6 +115,7 @@
 |---|---|---|---|---|
 | `/` | 状态总览（Dashboard） | P1 | `get_app_state` | `business-state-changed` / `device-connection-changed` / `device-power-changed` / `theme-changed` |
 | `/devices` | 设备管理 | P1 | `scan_devices`, `connect_device` | `device-connection-changed` / `device-power-changed` / `device-fault` |
+| `/integrations` | 接入外部工具 | P1 | `get_app_state`（读取当前服务端口） | — |
 | `/themes` | 主题中心 | P1 | `get_themes`, `get_theme`, `set_active_theme`, `import_theme` | `theme-changed` |
 | `/preview` | 试听面板 | P1 | `trigger_state`, `preview_scene`, `reset_outputs` | `business-state-changed` |
 | `/settings` | 设置 | P1 | `get_config`, `update_config` | — |

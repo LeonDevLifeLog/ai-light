@@ -1,0 +1,211 @@
+import { Bluetooth, Radio, RefreshCw, Signal, WifiOff } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { useAppState } from "@/app/app-context";
+import {
+  ActionButton,
+  Card,
+  EmptyState,
+  InlineAlert,
+  PageHeader,
+  StatusTag,
+} from "@/components/app-ui";
+import { api, asAppError, type ScannedDevice } from "@/lib/ailight";
+import { runAsync } from "@/lib/utils";
+
+function signalLabel(rssi: number | null) {
+  if (rssi == null) {
+    return "信号未知";
+  }
+  if (rssi >= -60) {
+    return "信号很强";
+  }
+  if (rssi >= -75) {
+    return "信号良好";
+  }
+  return "信号较弱";
+}
+
+export function DevicesPage() {
+  const { snapshot, fault, notify, refresh } = useAppState();
+  const [devices, setDevices] = useState<ScannedDevice[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState<string | null>(null);
+  const [hasScanned, setHasScanned] = useState(false);
+
+  const scan = useCallback(async () => {
+    setScanning(true);
+    setScanError(null);
+    try {
+      setDevices(await api.scanDevices());
+    } catch (error) {
+      setScanError(asAppError(error).message);
+    } finally {
+      setScanning(false);
+      setHasScanned(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    runAsync(scan());
+  }, [scan]);
+
+  const connect = async (device: ScannedDevice) => {
+    setConnecting(device.address);
+    try {
+      await api.connectDevice(device.address);
+      await refresh();
+      notify({
+        tone: "success",
+        title: "连接请求已发送",
+        message: device.name,
+      });
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "连接失败",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setConnecting(null);
+    }
+  };
+
+  return (
+    <div className="page-stack">
+      <PageHeader
+        actions={
+          <ActionButton
+            busy={scanning}
+            onClick={() => runAsync(scan())}
+            tone="primary"
+          >
+            <RefreshCw aria-hidden="true" size={16} />{" "}
+            {scanning ? "正在查找" : "重新查找"}
+          </ActionButton>
+        }
+        description="连接你附近的 AgentCore-Light 灯牌"
+        title="设备"
+      />
+
+      {scanning ? (
+        <Card className="scan-status" role="status">
+          <span className="scan-pip" />
+          <span>正在查找附近的灯牌，扫描大约需要 5 秒…</span>
+          <div
+            aria-label="扫描进行中"
+            aria-valuemax={100}
+            aria-valuemin={0}
+            className="progress"
+            role="progressbar"
+          >
+            <span />
+          </div>
+        </Card>
+      ) : null}
+      {scanError ? (
+        <InlineAlert title="无法扫描蓝牙设备">
+          {scanError}。请检查系统蓝牙权限后重试。
+        </InlineAlert>
+      ) : null}
+      {fault ? (
+        <InlineAlert title="设备故障">
+          来源 {fault.source}，故障码 {fault.code}，上下文 {fault.context}。
+        </InlineAlert>
+      ) : null}
+
+      {snapshot?.device.connected ? (
+        <section aria-labelledby="connected-title">
+          <h2 className="section-title" id="connected-title">
+            已连接
+          </h2>
+          <Card className="connected-device">
+            <div className="device-orb is-connected">
+              <Radio aria-hidden="true" />
+            </div>
+            <div className="connected-device__name">
+              <strong>{snapshot.device.name ?? "AgentCore-Light"}</strong>
+              <span className="mono">{snapshot.device.address}</span>
+            </div>
+            <dl className="device-stats">
+              <div>
+                <dt>电量</dt>
+                <dd>{snapshot.device.batteryPercent ?? "—"}%</dd>
+              </div>
+              <div>
+                <dt>固件</dt>
+                <dd>{snapshot.device.fwVersion ?? "—"}</dd>
+              </div>
+              <div>
+                <dt>硬件</dt>
+                <dd>{snapshot.device.hardwareVariant ?? "—"}</dd>
+              </div>
+            </dl>
+            <StatusTag tone="success">已连接</StatusTag>
+          </Card>
+        </section>
+      ) : null}
+
+      <section aria-labelledby="nearby-title">
+        <h2 className="section-title" id="nearby-title">
+          附近设备
+        </h2>
+        {!scanning && devices.length === 0 && hasScanned ? (
+          <Card>
+            <EmptyState
+              action={
+                <ActionButton onClick={() => runAsync(scan())}>
+                  <RefreshCw size={16} /> 再试一次
+                </ActionButton>
+              }
+              description="请确认灯牌已上电、处于广播范围内，并允许 AI-Light 使用蓝牙。"
+              icon={<WifiOff />}
+              title="未发现 AgentCore-Light 设备"
+            />
+          </Card>
+        ) : (
+          <div className="device-list">
+            {devices.map((device) => (
+              <Card
+                className="device-row"
+                key={`${device.address}-${device.name}-${device.rssi}`}
+              >
+                <div className="device-orb">
+                  <Bluetooth aria-hidden="true" />
+                </div>
+                <div className="device-row__copy">
+                  <strong>{device.name || "未命名蓝牙设备"}</strong>
+                  <span className="mono">{device.address}</span>
+                </div>
+                <span className="signal-copy">
+                  <Signal aria-hidden="true" size={15} />{" "}
+                  {signalLabel(device.rssi)}
+                </span>
+                {device.recognized ? (
+                  <StatusTag tone="success">已识别</StatusTag>
+                ) : (
+                  <StatusTag>其他设备</StatusTag>
+                )}
+                <ActionButton
+                  busy={connecting === device.address}
+                  disabled={
+                    !device.recognized ||
+                    snapshot?.device.address === device.address
+                  }
+                  onClick={() => runAsync(connect(device))}
+                  tone="primary"
+                >
+                  {snapshot?.device.address === device.address
+                    ? "已连接"
+                    : "连接"}
+                </ActionButton>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+export const Component = DevicesPage;

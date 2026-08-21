@@ -224,9 +224,9 @@ pub fn validate(theme: &ThemeFile) -> Result<(), ThemeError> {
 
 fn validate_led(scene: &str, idx: usize, led: &LedTrackDef) -> Result<(), ThemeError> {
     let where_ = format!("scene[{scene}].leds[{idx}]");
-    if led.brightness == 0 || led.brightness > 100 {
+    if led.brightness > 100 {
         return Err(ThemeError::Invalid(format!(
-            "{where_}.brightness 必须在 1~100，实际 {}",
+            "{where_}.brightness 必须在 0~100，实际 {}",
             led.brightness
         )));
     }
@@ -323,9 +323,9 @@ fn validate_buzzer(scene: &str, buz: &BuzzerTrackDef) -> Result<(), ThemeError> 
                 "{where_}.segments[{i}].duration_ms 必须 > 0"
             )));
         }
-        if seg.volume == 0 || seg.volume > 100 {
+        if seg.volume > 100 {
             return Err(ThemeError::Invalid(format!(
-                "{where_}.segments[{i}].volume 必须在 1~100，实际 {}",
+                "{where_}.segments[{i}].volume 必须在 0~100，实际 {}",
                 seg.volume
             )));
         }
@@ -507,9 +507,26 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(validate(&t), Err(ThemeError::Invalid(_))));
-        // brightness 0
+        // brightness 0 = 全黑，合法
         let t: ThemeFile = serde_json::from_str(
             r##"{"theme":{"name":"t","version":1},"scenes":{"a":{"leds":[{"curve":"CONSTANT","high":"#FFFFFF","brightness":0},null,null]}},"states":{}}"##,
+        )
+        .unwrap();
+        assert!(validate(&t).is_ok());
+        // 静音音量 0 合法
+        let t: ThemeFile = serde_json::from_str(
+            r##"{"theme":{"name":"t","version":1},"scenes":{"a":{"leds":[null,null,null],"buzzer":{"segments":[{"frequency_hz":0,"duration_ms":100,"volume":0}]}}},"states":{}}"##,
+        )
+        .unwrap();
+        assert!(validate(&t).is_ok());
+        // brightness / volume 上界为 100
+        let t: ThemeFile = serde_json::from_str(
+            r##"{"theme":{"name":"t","version":1},"scenes":{"a":{"leds":[{"curve":"CONSTANT","high":"#FFFFFF","brightness":101},null,null]}},"states":{}}"##,
+        )
+        .unwrap();
+        assert!(matches!(validate(&t), Err(ThemeError::Invalid(_))));
+        let t: ThemeFile = serde_json::from_str(
+            r##"{"theme":{"name":"t","version":1},"scenes":{"a":{"leds":[null,null,null],"buzzer":{"segments":[{"frequency_hz":1000,"duration_ms":100,"volume":101}]}}},"states":{}}"##,
         )
         .unwrap();
         assert!(matches!(validate(&t), Err(ThemeError::Invalid(_))));
