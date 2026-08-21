@@ -157,22 +157,22 @@ export function SettingsPage() {
         </h2>
         <Card className="settings-card">
           <SettingRow
-            description="后端插件尚未接入，当前配置仅保留偏好"
+            description="登录系统后自动启动并驻留托盘"
             icon={<Monitor />}
             title="开机自启"
           >
-            <div className="setting-inline">
-              <StatusTag>待平台支持</StatusTag>
-              <button
-                aria-checked={config.autostart}
-                className="switch"
-                disabled
-                role="switch"
-                type="button"
-              >
-                <span />
-              </button>
-            </div>
+            <button
+              aria-checked={config.autostart}
+              className="switch"
+              disabled={saving === "autostart"}
+              onClick={() =>
+                runAsync(update("autostart", { autostart: !config.autostart }))
+              }
+              role="switch"
+              type="button"
+            >
+              <span />
+            </button>
           </SettingRow>
         </Card>
       </section>

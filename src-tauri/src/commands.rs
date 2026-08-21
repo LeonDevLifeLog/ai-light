@@ -2,6 +2,7 @@
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_autostart::ManagerExt;
 use tokio::sync::mpsc;
 
 use ailight_core::arbiter::{ArbitrationMode, ST_IDLE};
@@ -446,6 +447,17 @@ pub fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppConfig>
             if token.is_empty() { None } else { Some(token.clone()) };
     }
     if let Some(autostart) = patch.autostart {
+        // 先 OS 后 config（设计方案 D-06）：OS 登录项为唯一事实源，
+        // enable/disable 成功才写缓存；失败返回 AUTOSTART_FAILED，config 保持不变。
+        let autolaunch = app.autolaunch();
+        let os_result = if autostart {
+            autolaunch.enable()
+        } else {
+            autolaunch.disable()
+        };
+        if let Err(e) = os_result {
+            return Err(err("AUTOSTART_FAILED", format!("开机自启设置失败: {e}")));
+        }
         cfg.autostart = autostart;
     }
     if let Some(orientation) = &patch.badge_orientation {

@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.10 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.10，2026-08-21） |
+| 文档版本 | V1.12 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.12，2026-08-21） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -217,9 +217,10 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `badgeOrientation: 'horizontal'\|'vertical'` | `TrafficBadge.layout` | — | patch |
 | `badgeOrientation` 变更 | `Sidebar.trayMenu` 单选 | — | patch |
 | `arbitrationMode` 变更 | `Settings.arbitrationSelect` 当前值 | — | patch |
+| `autostart` 变更 | `Settings.autostartSwitch` | — | patch（先 OS 后 config，失败 `AUTOSTART_FAILED` 回滚） |
 | `config-changed`（Rust 事件） | 全组件 | `config.badgeOrientation` 等完整 Config | full sync |
 
-> `themeMode` / `autostart` 真实切换 / `portPreference` 热重启均为 P2；P1 不发出这些 patch。
+> `portPreference` 热重启为 P2；`autostart` 真实切换已实装（2026-08-21，KAD-09），不再属于 P2。
 >
 > ✅ 实现状态：`update_config`（设置页与托盘徽章朝向共用）成功后 emit `config-changed`，前端订阅整包同步。
 
@@ -688,7 +689,7 @@ Settings 页分组内的单行设置项：左 label + 描述，右控件（Switc
 
 **6.6.5 边界条件**
 - 端口切换：需重启服务 → Toast "服务重启中..." → 成功后 Toast "端口已切换"
-- 自启动：依赖 `tauri-plugin-autostart`；当前 P1 暂缓
+- 自启动：✅ 已实装（tauri-plugin-autostart 2.5.1，KAD-09）；失败路径 `AUTOSTART_FAILED` → Toast + 控件回滚到原值；OS 登录项为唯一事实源，config 为启动校准缓存
 
 **6.6.6 无障碍**
 - label = `<label for>` 关联控件
@@ -835,7 +836,7 @@ Settings 页分组内的单行设置项：左 label + 描述，右控件（Switc
 ├─────────────────────────┤
 │ SettingGroup: 显示       │ badgeOrientation + 当前主题
 ├─────────────────────────┤
-│ SettingGroup: 系统       │ autostart（P1 禁用态）
+│ SettingGroup: 系统       │ autostart（✅ 可切换）
 └─────────────────────────┘
 ```
 
@@ -1757,6 +1758,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.12 | 2026-08-21 | G-06 开机自启实装对账（KAD-09 / ADR-0004）：§3.6 配置层联动表新增 `autostart` 行并移除 P2 标注；§6.6.5 边界条件改为真实切换 + `AUTOSTART_FAILED` 失败路径；§7 Settings 组 autostart 由禁用态改为可切换。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4（含新增 `AUTOSTART_FAILED`）；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003/0004、KAD-04/06/08/09 引用有效。同步修正版本头漂移（V1.10 → V1.12）。 |
 | V1.11 | 2026-08-21 | 断连 UX 闭环：§3.2 payload 增加 `reconnecting` / `reason`（值域 `link_lost` / `reconnect_failed`，由 Rust 侧 emit）；§4.4、§5.2 更新为前端 `Reconnecting` 视觉态与 Toast 已实装。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |
 | V1.10 | 2026-08-21 | G-04 托盘实装对账：§3.6 新增 `config-changed` 事件联动（✅，设置页与托盘共用 update_config 路径）；§5.1 窗口可见性状态机标注已实装（托盘「显示窗口」/「退出」/关窗隐藏/单实例聚焦）。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |
 | V1.9 | 2026-08-21 | 实现状态对账（G-01~G-03 闭环）：§3.2~§3.4 事件实现状态更新为 ✅；§3.7 协议主动事件全部接线（BUTTON_EVENT 仅日志）；§4.3 握手阶段 1~8 已实现；§4.4 断连监听与退避重连已实现（前端 Reconnecting 视觉态待办）；§5.2 `Connected ↔ Disconnected` 双向已实现。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003、KAD-04/06/08 引用有效。 |

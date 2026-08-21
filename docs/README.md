@@ -10,6 +10,11 @@
 - [技术架构](./specs/architecture.md)
 - [UI 交互说明](./specs/ui-interactions.md) / [UI 组件契约](./specs/ui-interaction-spec.md)
 
+## 设计方案
+
+- [开机自启设计方案](./design/开机自启设计方案.md)（V0.1，未实施）
+- [蓝牙硬件能力接口协议设计说明书 V0.4](./design/蓝牙硬件能力接口协议设计说明书_V0.4.md)
+
 ## CI/CD
 
 - [建设进展](./ci-cd/status.md)：已完成、待验证和待建设事项

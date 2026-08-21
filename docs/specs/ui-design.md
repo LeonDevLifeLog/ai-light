@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V0.1（设计阶段首版） |
+| 文档版本 | V0.8 |
 | 文档状态 | ⏸ 设计阶段，待用户审阅后定稿 |
 | 范围 | L5 展示层（前端 UI + 托盘 + 窗口生命周期） |
 | 上游 | [docs/specs/ipc-contract.md V1.0](./ipc-contract.md)、[theme-format.md V1.0](./theme-format.md)、[architecture.md](./architecture.md) KAD-06 |
@@ -28,7 +28,7 @@
 - **托盘常驻为主**，主窗口可关闭（关窗 = 隐藏，非退出）— KAD-06
 - 启动时主窗口同时打开（/ Dashboard）；关窗 = 隐藏，托盘常驻，可随时从托盘唤回窗口
 - 单实例（`tauri-plugin-single-instance` 已接入）
-- 开机自启（KAD-06 SHOULD，P1 暂缓，应做档跟进）
+- 开机自启（✅ 已实装 2026-08-21：OS 登录项为唯一事实源，Settings 真实切换；KAD-09）
 
 ---
 
@@ -310,7 +310,7 @@
 - **显示**：
   - **徽章朝向**（单选：横向 / 纵向）— 5.1.1 红绿灯徽章
 - **其他**：
-  - 开机自启（Switch；P1 暂缓——需要 `tauri-plugin-autostart` 启用）
+  - 开机自启（Switch；✅ 已实装——`tauri-plugin-autostart` 已接入，KAD-09）
   - 日志目录（只读 + [打开目录] 按钮）
 
 **关键交互**：
@@ -599,7 +599,7 @@ z/tooltip    = 300
 
 - **`portPreference` 实际读取与重启**：❌ 未实现。config 有字段但 `hook_server::serve` 固定 47800 起退避、不读取；`update_config` 不允许修改（P1 只读）
 - **token Bearer 校验**：✅ 已实现。hook_server 在配置 token 后强制 Bearer 校验，含 `token_auth` 单测；UI 设置入口按设计不开放（V2）
-- **`autostart` 真实启用**：❌ 未实现。`update_config` 仅持久化字段，未接 `tauri-plugin-autostart`（KAD-06 SHOULD）；Settings 页展示禁用态
+- **`autostart` 真实启用**：✅ 已实现（2026-08-21）。`update_config` 先 OS 后 config（`AUTOSTART_FAILED` 错误码）；setup 启动校准；Settings 页 Switch 真实化；平台 = macOS LaunchAgent / Win Run key / Linux XDG autostart（U-08 三平台实机待完成）
 - **`badgeOrientation` 设置项**：✅ 已实现（Settings 页 + Dashboard 实时生效 + config 持久化）
 - **P2 commands**：❌ 全部未实现。`export_theme` / `delete_theme` / `disconnect_device` / `forget_device` / `hook-log` event（ipc-contract §7）
 
@@ -612,7 +612,6 @@ z/tooltip    = 300
 - **Tauri updater 在线升级**：❌ V2 未实现（需签名，L6 V2）
 - **多设备并发**：❌ V2 未实现（当前注册表只预留单灯）
 - **浅色模式**：❌ P2 未实现（用户决策 ⏸ #4）
-- **Settings 自启动 Switch**：❌ 未实现（当前展示禁用态，待 tauri-plugin-autostart 启用）
 
 ### 11.4 三平台实测（影响 release 阻塞）
 
@@ -705,3 +704,4 @@ z/tooltip    = 300
 | V0.5 | 2026-08-21 | macOS 平台适配：激活策略设为 Accessory（Dock 不显示图标），托盘常驻与窗口生命周期完全解耦（关窗 = 隐藏、退出只经托盘）；同步 §9.4 |
 | V0.6 | 2026-08-21 | 产品形态调整：启动时主窗口同时打开（RunEvent::Ready → show + focus），不再是"仅托盘出现"；关窗后仍由托盘唤回；同步 §2 / §12.1 验收剧本 |
 | V0.7 | 2026-08-21 | 断连 UX 闭环：§12.5 全链路已实现（断连事件 + 前端 Reconnecting 视觉态 + 断连/重连 Toast + 5 次退避重连）；`device-connection-changed` payload 增加 `reason` / `reconnecting` |
+| V0.8 | 2026-08-21 | G-06 开机自启实装（KAD-09 / ADR-0004）：§2 产品形态、§3.1 设置页、§11.2 路线图对账更新；Settings 自启动 Switch 从禁用态改为真实切换（OS 登录项为事实源，config 为校准缓存）；新增 `AUTOSTART_FAILED` 错误码。同步修正文档版本头漂移（V0.1 → V0.8）。 |

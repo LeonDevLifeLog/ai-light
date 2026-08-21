@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.10 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.10，2026-08-21） |
+| 文档版本 | V1.13 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.13，2026-08-21） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -363,7 +363,7 @@ V2 评估何时重新加上：用户使用安全意识提升 / 设备被滥用 /
 
 ### 9.4 系统
 
-- 开机自启：✅ P1 禁用态已实装（Settings 页「待平台支持」+ 禁用 Switch，不伪造已生效）；接入 `tauri-plugin-autostart` 后于 P2 开放真实切换。
+- 开机自启：✅ 已实装（2026-08-21，KAD-09 / ADR-0004）。Settings 页 Switch 真实切换：`update_config` 先 OS 后 config（OS 登录项为唯一事实源，config 为启动校准缓存）；失败返回 `AUTOSTART_FAILED` → Toast + 回滚到原值；重启时 `is_enabled()` 校准写回。
 - 查看日志：❌ P2 未实现（接入系统目录打开能力后开放）。
 
 ---
@@ -527,7 +527,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | G-03 | FAULT_EVENT 接线 → `device-fault` | ✅ 已实现（2026-08-21；实机冒烟 U-01 待完成） |
 | G-04 | 托盘实装（图标 + 菜单；口径已定 P1） | ✅ 已实现（2026-08-21；图标占位待替换，U-05 待实机） |
 | G-05 | `portPreference` 读取与热重启 | P1 |
-| G-06 | `autostart` 接入 tauri-plugin-autostart | P2 |
+| G-06 | `autostart` 接入 tauri-plugin-autostart | ✅ 已实现（2026-08-21；三平台实机 U-08 待完成） |
 | U-01 | btleplug 三平台冒烟（mac/win/linux） | P1 阻塞 release |
 | U-02 | axum 编译/启动验证 | P1 |
 | U-05 | 托盘图标三平台差异 | P1（托盘实装后） |
@@ -724,6 +724,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.13 | 2026-08-21 | G-06 开机自启实装对账（KAD-09 / ADR-0004）：§9.4 系统设置由"P1 禁用态"改为真实切换（`update_config` 先 OS 后 config、`AUTOSTART_FAILED` 失败路径、启动校准）；§14 G-06 标记完成。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致（含新增 `AUTOSTART_FAILED`）；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003/0004、KAD-03/06/08/09 引用有效。同步修正版本头漂移（V1.10 → V1.13）。 |
 | V1.12 | 2026-08-21 | 断连 UX 闭环：§2.1 `device-connection-changed` payload 扩展 `reason` / `reconnecting`（值域 `link_lost` / `reconnect_failed`）；A.4 断连宽限标注前端 `Reconnecting` 视觉态与 Toast 已实装。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003、KAD-03/06/08 引用有效。 |
 | V1.11 | 2026-08-21 | 产品形态调整：§10.1 首次启动改为"托盘常驻 + 启动即显示主窗口"（RunEvent::Ready → show + focus；macOS Dock 不显示），关窗后由托盘唤回。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003、KAD-03/06/08 引用有效。 |
 | V1.10 | 2026-08-21 | G-04 托盘实装对账：§2.1 新增 `config-changed` / `open-config` 事件（均 ✅）；§12 托盘更新为已实装（P1 口径确认，原 V2 标注作废），图标占位待替换、U-05 待实机；§14 G-04 标记完成。5 项语义硬检查通过：Source Events 均存在于 ipc-contract §5；AppError.code 与 ipc-contract §4 一致；蓝牙 result code 与 V0.4 §3.6 一致；主题字段与 theme-format 字段表一致；ADR-0001/0002/0003、KAD-03/06/08 引用有效。 |

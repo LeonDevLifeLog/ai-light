@@ -1030,6 +1030,13 @@ input[type="range"] {
   border: 0;
   border-radius: 99px;
 }
+.switch[aria-checked="true"] {
+  background: var(--accent);
+}
+.switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
 .switch span {
   position: absolute;
   top: 3px;
@@ -1038,6 +1045,10 @@ input[type="range"] {
   height: 16px;
   background: white;
   border-radius: 50%;
+  transition: transform 0.15s ease;
+}
+.switch[aria-checked="true"] span {
+  transform: translateX(16px);
 }
 .settings-note {
   font-size: 11px;

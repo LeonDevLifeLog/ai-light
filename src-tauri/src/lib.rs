@@ -6,6 +6,7 @@ mod tray;
 use std::sync::{Arc, RwLock};
 
 use tauri::{Emitter, Manager};
+use tauri_plugin_autostart::ManagerExt;
 
 use ailight_core::arbiter::ArbitrationMode;
 use ailight_core::ble::DeviceIo;
@@ -40,6 +41,13 @@ pub fn run() {
                 let _ = w.set_focus();
             }
         }))
+        // 开机自启（设计方案 D-03/D-07）：官方插件，macOS 走 LaunchAgent；
+        // `--autostart` 参数使登录启动可辨识，本期行为与手动启动一致。
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .args(["--autostart"])
+                .build(),
+        )
         .setup(|app| {
             // macOS：仅菜单栏常驻（Accessory），Dock 不显示图标——关窗 = 隐藏、退出只经托盘
             // （KAD-06：托盘常驻与窗口生命周期解耦，避免从 Dock 退出连带终止托盘）
@@ -53,7 +61,7 @@ pub fn run() {
             let config_dir = app.path().app_config_dir()?;
             std::fs::create_dir_all(&config_dir)?;
             let cfg_path = config_dir.join("config.json");
-            let (config, warn) = if cfg_path.exists() {
+            let (mut config, warn) = if cfg_path.exists() {
                 match std::fs::read_to_string(&cfg_path) {
                     Ok(c) => AppConfig::load(&c),
                     Err(e) => (AppConfig::default(), Some(format!("读取 config 失败: {e}"))),
@@ -113,6 +121,23 @@ pub fn run() {
                     }
                 }
             });
+
+            // 开机自启校准（设计方案 D-05）：OS 登录项为唯一事实源，config 只做启动校准缓存。
+            // 插件 setup 已在 Builder::build 阶段（initialize_plugins）完成，此处可安全读取；
+            // is_enabled 失败不阻塞启动，保留本地缓存值。
+            match app.autolaunch().is_enabled() {
+                Ok(os_enabled) => {
+                    if os_enabled != config.autostart {
+                        tracing::info!(
+                            os_enabled,
+                            cached = config.autostart,
+                            "autostart 校准：以 OS 登录项为准"
+                        );
+                        config.autostart = os_enabled;
+                    }
+                }
+                Err(e) => eprintln!("autostart 校准失败（保留本地缓存）: {e}"),
+            }
 
             app.manage(AppState { shared, engine, device_io, config: RwLock::new(config) });
 
