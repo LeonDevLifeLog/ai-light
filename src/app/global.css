@@ -321,6 +321,7 @@ pre,
   min-height: 40px;
   padding: 0 14px;
   color: var(--foreground);
+  white-space: nowrap;
   background: transparent;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -352,6 +353,18 @@ pre,
 .action-button--danger {
   color: var(--danger-text);
   border-color: var(--danger-border);
+}
+.scan-action-button {
+  width: max-content;
+}
+.scan-action-button__labels {
+  display: grid;
+}
+.scan-action-button__labels > span {
+  grid-area: 1 / 1;
+}
+.scan-action-button__labels > [aria-hidden="true"] {
+  visibility: hidden;
 }
 .action-button--danger:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.12);

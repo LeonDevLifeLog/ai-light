@@ -128,11 +128,15 @@ export function DevicesPage() {
         actions={
           <ActionButton
             busy={scanning}
+            className="scan-action-button"
             onClick={() => runAsync(scan())}
             tone="primary"
           >
-            <RefreshCw aria-hidden="true" size={16} />{" "}
-            {scanning ? "正在查找…" : "重新查找设备"}
+            {scanning ? null : <RefreshCw aria-hidden="true" size={16} />}
+            <span className="scan-action-button__labels">
+              <span aria-hidden={scanning}>重新查找设备</span>
+              <span aria-hidden={!scanning}>正在查找…</span>
+            </span>
           </ActionButton>
         }
         description="连接你附近的 AgentCore-Light 灯牌"
