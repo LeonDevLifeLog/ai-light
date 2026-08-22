@@ -21,10 +21,11 @@ jobs:
     timeout-minutes: 15
     outputs:
       app: ${{ steps.filter.outputs.app }}
+      core: ${{ steps.filter.outputs.core }}
       cross-platform: ${{ steps.filter.outputs.cross_platform }}
     steps:
       - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4.0.3
         id: filter
         with:
           filters: |
@@ -39,6 +40,8 @@ jobs:
               - "components.json"
               - "tsconfig*.json"
               - "vite.config.*"
+            core:
+              - "crates/ailight-core/**"
             cross_platform:
               - "crates/**"
               - "src-tauri/**"
@@ -93,7 +96,7 @@ jobs:
             ./src-tauri -> target
       - run: pnpm install --frozen-lockfile
       - name: Test core
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && (github.event_name == 'workflow_dispatch' || needs.quality.outputs.core == 'true')
         run: cargo test --manifest-path crates/ailight-core/Cargo.toml
       - uses: tauri-apps/tauri-action@v1
         with:

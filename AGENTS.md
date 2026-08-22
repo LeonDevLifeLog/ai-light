@@ -79,7 +79,7 @@ pnpm typecheck        # tsc --noEmit
 - Pull Request 和普通前端改动只执行 Linux Tauri build。
 - `crates/**`、`src-tauri/**`、依赖文件或 workflow 改动进入主分支时执行 Linux / macOS / Windows 三平台 build。
 - `workflow_dispatch` 始终执行三平台 build。
-- Linux Tauri job 必须执行 `ailight-core` 全量测试。
+- `ailight-core` 相关改动及手动全量运行时，Linux Tauri job 必须执行 core 全量测试；普通前端改动不重复运行 Rust 测试。
 - Release 始终构建正式发布矩阵，不得因 CI 已执行 `--no-bundle` 而省略发布目标。
 - 版本号需同步 `package.json` / `src-tauri/Cargo.toml` / `src-tauri/tauri.conf.json` 三处。
 
@@ -87,7 +87,7 @@ pnpm typecheck        # tsc --noEmit
 
 1. 先列出事件 × 文件类型 × 构建平台矩阵，确认没有意外扩大或缩小触发范围。
 2. 修改或新增根目录构建配置时，同步检查 `paths-filter`：
-   - `cross_platform` 必须是 `app` 的子集。
+   - `core` 与 `cross_platform` 必须是 `app` 的子集。
    - workflow 自身、Rust / Tauri、依赖锁文件必须触发跨平台验证。
    - 手动触发不得被文件过滤器跳过。
    - PR 事件通过 GitHub API 读取变更文件，必须保留 `pull-requests: read` 权限。
