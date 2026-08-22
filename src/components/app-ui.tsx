@@ -93,6 +93,19 @@ export function stateCopy(state: BusinessStateName) {
   return labels[state] ?? { title: state, subtitle: "自定义业务状态" };
 }
 
+const themeLabels: Record<string, string> = {
+  default: "默认主题",
+  minimal: "极简",
+  neon: "霓虹",
+  nature: "自然",
+  aurora: "极光",
+  focus: "专注",
+};
+
+export function themeDisplayName(theme: string) {
+  return themeLabels[theme] ?? theme;
+}
+
 export function TrafficBadge({
   state,
   orientation = "horizontal",
@@ -169,7 +182,7 @@ export function DeviceSummary({
   reconnecting?: boolean;
 }) {
   let title = "尚未连接设备";
-  let subtitle = "前往设备页查找附近灯牌";
+  let subtitle = "连接灯牌后即可同步状态灯效";
   if (connected) {
     title = name || "AgentCore-Light";
     subtitle = "蓝牙连接正常";

@@ -1,17 +1,24 @@
 import {
   Check,
+  ChevronDown,
   FileJson,
   Import,
+  Music2,
   Pencil,
   Plus,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
+  Volume2,
+  VolumeX,
+  Wand2,
 } from "lucide-react";
 import {
   type ChangeEvent,
   type ReactNode,
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { useAppState } from "@/app/app-context";
@@ -32,7 +39,7 @@ import {
   type ThemeFile,
   type ThemeMeta,
 } from "@/lib/ailight";
-import { runAsync } from "@/lib/utils";
+import { cn, runAsync } from "@/lib/utils";
 
 const standardStates = [
   "IDLE",
@@ -118,7 +125,298 @@ const motionPresets: Array<{
   { value: "fade-out", label: "渐弱", hint: "从亮到暗", curve: "SAW_DOWN" },
 ];
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the creator keeps state, presets, preview, and progressive controls in one flow.
+const stateLabels: Record<
+  string,
+  { title: string; tagline: string; accent: string }
+> = {
+  IDLE: { title: "空闲", tagline: "等待任务", accent: "#94a3b8" },
+  WORKING: { title: "工作中", tagline: "正在处理", accent: "#22c55e" },
+  WAITING: { title: "等待中", tagline: "需要输入", accent: "#f59e0b" },
+  SUCCESS: { title: "已完成", tagline: "已顺利完成", accent: "#4ade80" },
+  ERROR: { title: "出错了", tagline: "遇到问题", accent: "#ef4444" },
+};
+
+const customAccent = "#a78bfa";
+
+const HEX_COLOR_RE = /^#?([0-9a-f]{6})$/i;
+
+function speedTierOf(periodMs: number): "slow" | "medium" | "fast" {
+  if (periodMs >= 2200) {
+    return "slow";
+  }
+  if (periodMs >= 800) {
+    return "medium";
+  }
+  return "fast";
+}
+
+function renderLightEl(
+  el: HTMLDivElement,
+  track: LedTrack | null,
+  now: number
+) {
+  if (!track) {
+    el.style.backgroundColor = "transparent";
+    el.style.boxShadow = "none";
+    el.style.opacity = "0.1";
+    return;
+  }
+  const rgb = trackRgbAt(track, now, 0) ?? [0, 0, 0];
+  const color = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+  el.style.backgroundColor = color;
+  el.style.boxShadow = `0 0 ${Math.max(8, (track.brightness ?? 0) * 0.45)}px ${color}`;
+  el.style.opacity = "1";
+}
+
+function renderBuzzEl(
+  el: HTMLDivElement,
+  buzzer: ThemeFile["scenes"][string]["buzzer"],
+  now: number
+) {
+  let active = false;
+  if (buzzer?.segments.length) {
+    const total = buzzer.segments.reduce(
+      (sum, segment) => sum + segment.duration_ms,
+      0
+    );
+    const loop =
+      buzzer.repeat && buzzer.repeat > 0 ? total * buzzer.repeat : total;
+    const at = now % (loop || total);
+    let cursor = 0;
+    for (const segment of buzzer.segments) {
+      if (at >= cursor && at < cursor + segment.duration_ms) {
+        active = segment.frequency_hz > 0;
+        break;
+      }
+      cursor += segment.duration_ms;
+    }
+  }
+  el.style.opacity = active ? "1" : "0.2";
+  el.style.transform = active ? "scaleY(1)" : "scaleY(0.35)";
+}
+
+/** 按协议 §7.2 的曲线函数计算 0~1 波形值（不含 SINE，V0.4 未实现）。 */
+function curveValue(
+  curve: LedTrack["curve"],
+  t: number,
+  dutyPercent: number
+): number {
+  switch (curve) {
+    case "CONSTANT":
+      return 1;
+    case "SQUARE":
+      return t < dutyPercent / 100 ? 1 : 0;
+    case "TRIANGLE":
+      return t < 0.5 ? 2 * t : 2 - 2 * t;
+    case "SAW_UP":
+      return t;
+    case "SAW_DOWN":
+      return 1 - t;
+    default:
+      return 1;
+  }
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const match = HEX_COLOR_RE.exec(hex);
+  if (!match) {
+    return [0, 0, 0];
+  }
+  const value = Number.parseInt(match[1], 16);
+  const r = Math.floor(value / 65_536);
+  const g = Math.floor((value % 65_536) / 256);
+  const b = value % 256;
+  return [r, g, b];
+}
+
+function rgbToHex(rgb: [number, number, number]): string {
+  const [r, g, b] = rgb.map((channel) =>
+    Math.max(0, Math.min(255, Math.round(channel)))
+  );
+  const value = r * 65_536 + g * 256 + b;
+  return `#${value.toString(16).padStart(6, "0")}`;
+}
+
+function darkenHex(hex: string, factor: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  return rgbToHex([r * factor, g * factor, b * factor]);
+}
+
+/** 计算单条灯轨在某一时刻应显示的实际 RGB（协议 §7.1 的模拟实现）。 */
+function trackRgbAt(
+  track: LedTrack | null,
+  elapsedMs: number,
+  epochMs = 0
+): [number, number, number] | null {
+  if (!track) {
+    return null;
+  }
+  const high = hexToRgb(track.high);
+  const low = hexToRgb(track.low ?? "#000000");
+  const brightness = (track.brightness ?? 0) / 100;
+  if (track.curve === "CONSTANT" || !track.period_ms) {
+    return high.map((channel) => Math.round(channel * brightness)) as [
+      number,
+      number,
+      number,
+    ];
+  }
+  const period = track.period_ms;
+  const phaseMs = (period * (track.phase_deg ?? 0)) / 360;
+  const sceneTime = elapsedMs - epochMs;
+  const position = ((sceneTime + phaseMs) % period) / period;
+  const value = curveValue(track.curve, position, track.duty_percent ?? 50);
+  return [0, 1, 2].map((index) =>
+    Math.round(low[index] + (high[index] - low[index]) * value * brightness)
+  ) as [number, number, number];
+}
+
+/** 在软件端即时模拟三灯 + 蜂鸣动画，让"看得见"先行于"连设备"。 */
+function LivePreview({ scene }: { scene: ThemeFile["scenes"][string] | null }) {
+  const lightRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const buzzRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const reduceMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    const renderFrame = (now: number) => {
+      scene?.leds.forEach((track, index) => {
+        const el = lightRefs.current[index];
+        if (el) {
+          renderLightEl(el, track, now);
+        }
+      });
+      const buzzEl = buzzRef.current;
+      if (buzzEl) {
+        renderBuzzEl(buzzEl, scene?.buzzer, now);
+      }
+    };
+
+    const tick = (now: number) => {
+      renderFrame(now);
+      raf = requestAnimationFrame(tick);
+    };
+
+    let raf = 0;
+    if (reduceMotion) {
+      renderFrame(0);
+    } else {
+      raf = requestAnimationFrame(tick);
+    }
+    return () => cancelAnimationFrame(raf);
+  }, [scene]);
+
+  return (
+    <div className="te-preview">
+      <div
+        aria-label="三灯与蜂鸣预览"
+        className="te-preview__device"
+        role="img"
+      >
+        {["顶灯", "中灯", "底灯"].map((label, index) => {
+          const track = scene?.leds[index] ?? null;
+          return (
+            <div className="te-preview__light-wrap" key={label}>
+              <span className="te-preview__label">{label}</span>
+              <div
+                className="te-preview__light"
+                ref={(node) => {
+                  lightRefs.current[index] = node;
+                }}
+                style={{
+                  backgroundColor: track ? track.high : "transparent",
+                  opacity: track
+                    ? Math.max(0.08, (track.brightness ?? 70) / 100)
+                    : 0.1,
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div className="te-preview__buzz">
+        <div className="te-preview__buzz-bars" ref={buzzRef}>
+          <i />
+          <i />
+          <i />
+        </div>
+        <span>{scene?.buzzer?.segments.length ? "提示音已开启" : "无声"}</span>
+      </div>
+    </div>
+  );
+}
+
+function MotionGlyph({
+  curve,
+  active,
+}: {
+  curve: LedTrack["curve"];
+  active: boolean;
+}) {
+  const color = active ? "var(--accent)" : "var(--text-tertiary)";
+  const paths: Record<LedTrack["curve"], string> = {
+    CONSTANT: "M1 8 H47",
+    SQUARE: "M1 14 H11 L11 2 H39 L39 14 H47",
+    TRIANGLE: "M1 14 L24 2 L47 14",
+    SAW_UP: "M1 14 L47 2",
+    SAW_DOWN: "M1 2 L47 14",
+  };
+  return (
+    <svg
+      aria-hidden="true"
+      className="te-motion-card__glyph"
+      viewBox="0 0 48 16"
+    >
+      <path
+        d={paths[curve]}
+        fill="none"
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+      />
+    </svg>
+  );
+}
+
+const SOUND_PRESETS: Record<
+  "silent" | "gentle" | "confirm" | "alert",
+  ThemeFile["scenes"][string]["buzzer"]
+> = {
+  silent: null,
+  gentle: {
+    repeat: 1,
+    segments: [{ frequency_hz: 1200, duration_ms: 100, volume: 30 }],
+  },
+  confirm: {
+    repeat: 1,
+    segments: [
+      { frequency_hz: 880, duration_ms: 100, volume: 45 },
+      { frequency_hz: 1320, duration_ms: 140, volume: 45 },
+    ],
+  },
+  alert: {
+    repeat: 3,
+    segments: [
+      { frequency_hz: 2000, duration_ms: 140, volume: 70 },
+      { frequency_hz: 0, duration_ms: 100, volume: 0 },
+    ],
+  },
+};
+
+const soundOptions: Array<{
+  value: keyof typeof SOUND_PRESETS;
+  label: string;
+  hint: string;
+}> = [
+  { value: "silent", label: "无声", hint: "关闭蜂鸣" },
+  { value: "gentle", label: "轻提示", hint: "短促一声" },
+  { value: "confirm", label: "确认音", hint: "两音上行" },
+  { value: "alert", label: "警报音", hint: "急促三响" },
+];
+
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the editor maps a flat, end-user vocabulary onto a single SCENE.
 function ThemeEditor({
   availableThemes,
   open,
@@ -134,19 +432,24 @@ function ThemeEditor({
 }) {
   const { notify, snapshot } = useAppState();
   const [draft, setDraft] = useState<ThemeFile | null>(null);
-  const [selectedState, setSelectedState] = useState<string>("WORKING");
+  const [selectedState, setSelectedState] = useState("WORKING");
   const [selectedLed, setSelectedLed] = useState(0);
-  const [mode, setMode] = useState<"quick" | "workbench">("quick");
+  const [advanced, setAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [newState, setNewState] = useState("");
+  const [mixOpen, setMixOpen] = useState(false);
   const [mixTheme, setMixTheme] = useState("default");
   const [mixState, setMixState] = useState("WORKING");
+  const [confirmingClose, setConfirmingClose] = useState(false);
 
   useEffect(() => {
     if (source && open) {
       const next = cloneTheme(source);
-      next.theme.name = `${source.theme.name}-custom`;
+      next.theme.name =
+        source.theme.name === "default"
+          ? "my-theme"
+          : `${source.theme.name}-copy`;
       const saved = localStorage.getItem(
         `ailight-theme-draft:${source.theme.name}`
       );
@@ -160,8 +463,11 @@ function ThemeEditor({
         setDraft(next);
       }
       setSelectedState("WORKING");
-      setMode("quick");
+      setAdvanced(false);
       setNewState("");
+      setMixTheme("default");
+      setMixState("WORKING");
+      setConfirmingClose(false);
     }
   }, [source, open]);
 
@@ -181,6 +487,8 @@ function ThemeEditor({
   const scene = mapping ? draft.scenes[mapping.scene] : null;
   const track = scene?.leds[selectedLed] ?? null;
   const trackCurve = track?.curve ?? "CONSTANT";
+  const sceneMotionCurve: LedTrack["curve"] =
+    scene?.leds.find((led) => led !== null)?.curve ?? "CONSTANT";
   const sceneReferences = mapping
     ? Object.entries(draft.states)
         .filter(([, value]) => value.scene === mapping.scene)
@@ -192,6 +500,33 @@ function ThemeEditor({
     volume: 60,
   };
 
+  const period = track?.period_ms ?? 1200;
+  const speedTier = speedTierOf(period);
+  const activeMotion =
+    motionPresets.find((preset) => preset.curve === sceneMotionCurve)?.value ??
+    "steady";
+  const currentBuzzer = JSON.stringify(scene?.buzzer ?? null);
+  const activeSound = soundOptions.find(
+    (option) => JSON.stringify(SOUND_PRESETS[option.value]) === currentBuzzer
+  )?.value;
+  const relationPhases = {
+    sync: [0, 0, 0],
+    "top-down": [0, 120, 240],
+    "bottom-up": [240, 120, 0],
+    staggered: [0, 180, 90],
+  } as const;
+  const currentPhases = scene
+    ? scene.leds.map((led) =>
+        led && led.curve !== "CONSTANT" ? (led.phase_deg ?? 0) : 0
+      )
+    : [0, 0, 0];
+  const activeRelation = (
+    Object.keys(relationPhases) as Array<keyof typeof relationPhases>
+  ).find(
+    (relation) =>
+      JSON.stringify(relationPhases[relation]) === JSON.stringify(currentPhases)
+  );
+
   const updateTrack = (patch: Partial<LedTrack>) => {
     if (!scene) {
       return;
@@ -200,6 +535,29 @@ function ThemeEditor({
     const nextScene = next.scenes[mapping.scene];
     const current = nextScene.leds[selectedLed] ?? defaultTrack("#22C55E");
     nextScene.leds[selectedLed] = normalizeTrack(current, patch);
+    setDraft(next);
+  };
+
+  const updateLedColor = (index: number, patch: Partial<LedTrack>) => {
+    if (!scene) {
+      return;
+    }
+    const next = cloneTheme(draft);
+    const nextScene = next.scenes[mapping.scene];
+    const current = nextScene.leds[index] ?? defaultTrack("#22C55E");
+    nextScene.leds[index] = normalizeTrack(current, patch);
+    setDraft(next);
+  };
+
+  const toggleLed = (index: number) => {
+    if (!scene) {
+      return;
+    }
+    const next = cloneTheme(draft);
+    const nextScene = next.scenes[mapping.scene];
+    nextScene.leds[index] = nextScene.leds[index]
+      ? null
+      : defaultTrack(["#EF4444", "#F59E0B", "#22C55E"][index]);
     setDraft(next);
   };
 
@@ -218,7 +576,11 @@ function ThemeEditor({
     nextScene.leds = nextScene.leds.map((item, index) => {
       const current =
         item ?? defaultTrack(["#EF4444", "#F59E0B", "#22C55E"][index]);
-      const normalized = normalizeTrack(current, { curve: preset.curve });
+      const patch: Partial<LedTrack> = { curve: preset.curve };
+      if (preset.curve !== "CONSTANT" && !current.low) {
+        patch.low = darkenHex(current.high, 0.4);
+      }
+      const normalized = normalizeTrack(current, patch);
       if (normalized.curve !== "CONSTANT") {
         normalized.phase_deg = preset.value === "flow" ? index * 120 : 0;
       }
@@ -241,34 +603,16 @@ function ThemeEditor({
     setDraft(next);
   };
 
-  const applySound = (preset: "silent" | "gentle" | "confirm" | "alert") => {
+  const applySound = (preset: keyof typeof SOUND_PRESETS) => {
     if (!scene) {
       return;
     }
-    const sounds: Record<typeof preset, ThemeFile["scenes"][string]["buzzer"]> =
-      {
-        silent: null,
-        gentle: {
-          repeat: 1,
-          segments: [{ frequency_hz: 1200, duration_ms: 100, volume: 30 }],
-        },
-        confirm: {
-          repeat: 1,
-          segments: [
-            { frequency_hz: 880, duration_ms: 100, volume: 45 },
-            { frequency_hz: 1320, duration_ms: 140, volume: 45 },
-          ],
-        },
-        alert: {
-          repeat: 3,
-          segments: [
-            { frequency_hz: 2000, duration_ms: 140, volume: 70 },
-            { frequency_hz: 0, duration_ms: 100, volume: 0 },
-          ],
-        },
-      };
     const next = cloneTheme(draft);
-    next.scenes[mapping.scene].buzzer = sounds[preset];
+    next.scenes[mapping.scene].buzzer = SOUND_PRESETS[preset]
+      ? (JSON.parse(JSON.stringify(SOUND_PRESETS[preset])) as NonNullable<
+          ThemeFile["scenes"][string]["buzzer"]
+        >)
+      : null;
     setDraft(next);
   };
 
@@ -339,32 +683,12 @@ function ThemeEditor({
     }
     const next = cloneTheme(draft);
     const nextScene = next.scenes[mapping.scene];
-    const phases = {
-      sync: [0, 0, 0],
-      "top-down": [0, 120, 240],
-      "bottom-up": [240, 120, 0],
-      staggered: [0, 180, 90],
-    }[relation];
+    const phases = relationPhases[relation];
     nextScene.leds = nextScene.leds.map((item, index) =>
       item && item.curve !== "CONSTANT"
         ? { ...item, phase_deg: phases[index] }
         : item
     ) as ThemeFile["scenes"][string]["leds"];
-    setDraft(next);
-  };
-
-  const setBuzzerEnabled = (enabled: boolean) => {
-    if (!scene) {
-      return;
-    }
-    const next = cloneTheme(draft);
-    next.scenes[mapping.scene].buzzer = enabled
-      ? {
-          start_delay_ms: 0,
-          repeat: 1,
-          segments: [{ frequency_hz: 1800, duration_ms: 150, volume: 60 }],
-        }
-      : null;
     setDraft(next);
   };
 
@@ -414,12 +738,16 @@ function ThemeEditor({
       return;
     }
     const initial = cloneTheme(source);
-    initial.theme.name = `${source.theme.name}-custom`;
+    initial.theme.name =
+      source.theme.name === "default"
+        ? "my-theme"
+        : `${source.theme.name}-copy`;
     const changed = JSON.stringify(initial) !== JSON.stringify(draft);
-    // biome-ignore lint/suspicious/noAlert: native confirmation prevents accidental loss before the dedicated draft dialog lands.
-    if (!changed || window.confirm("放弃尚未保存的主题修改？")) {
+    if (!changed) {
       onClose();
+      return;
     }
+    setConfirmingClose(true);
   };
 
   const previewDraft = async () => {
@@ -465,21 +793,49 @@ function ThemeEditor({
       setDraft(next);
       notify({
         tone: "success",
-        title: "效果已混搭",
-        message: `${mixTheme} · ${mixState} → ${selectedState}`,
+        title: "已借用效果",
+        message: `${displayNames[mixTheme] ?? mixTheme} · ${stateLabels[mixState]?.title ?? mixState} → ${stateLabels[selectedState]?.title ?? selectedState}`,
       });
     } catch (error) {
       notify({
         tone: "error",
-        title: "无法混搭效果",
+        title: "无法借用效果",
         message: asAppError(error).message,
       });
     }
   };
 
+  const selectedIsStandard = standardStates.includes(
+    selectedState as (typeof standardStates)[number]
+  );
+
+  if (confirmingClose) {
+    return (
+      <Dialog
+        footer={
+          <>
+            <ActionButton onClick={() => setConfirmingClose(false)}>
+              继续编辑
+            </ActionButton>
+            <ActionButton onClick={onClose} tone="danger">
+              放弃修改
+            </ActionButton>
+          </>
+        }
+        onClose={() => setConfirmingClose(false)}
+        open={open}
+        title="放弃尚未保存的修改？"
+      >
+        <p className="te-discard-copy">
+          当前主题的修改尚未保存，关闭后将丢失。
+        </p>
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog
-      description="从喜欢的主题开始，先选感觉，再按需要调整每颗灯。"
+      description="为每个状态挑一套灯光与声音，所见即所得。"
       footer={
         <>
           <ActionButton onClick={requestClose}>取消</ActionButton>
@@ -497,9 +853,9 @@ function ThemeEditor({
       size="large"
       title="主题创作器"
     >
-      <div className="editor-toolbar">
+      <div className="te-topbar">
         <div className="field field--grow">
-          <label htmlFor="theme-name">主题名称</label>
+          <label htmlFor="theme-name">主题标识</label>
           <input
             id="theme-name"
             onChange={(event) =>
@@ -510,179 +866,399 @@ function ThemeEditor({
             }
             value={draft.theme.name}
           />
+          <small>用于保存和导入；支持字母、数字、下划线和连字符</small>
         </div>
-        <fieldset aria-label="编辑模式" className="segmented-control">
-          <button
-            aria-pressed={mode === "quick"}
-            onClick={() => setMode("quick")}
-            type="button"
-          >
-            快速创作
-          </button>
-          <button
-            aria-pressed={mode === "workbench"}
-            onClick={() => setMode("workbench")}
-            type="button"
-          >
-            轨道工作台
-          </button>
-        </fieldset>
       </div>
-      <div aria-label="业务状态" className="editor-state-tabs" role="tablist">
-        {Object.keys(draft.states).map((state) => (
-          <button
-            aria-selected={selectedState === state}
-            key={state}
-            onClick={() => setSelectedState(state)}
-            role="tab"
-            type="button"
-          >
-            <TrafficBadge compact state={state} />
-            <span>{state}</span>
-          </button>
-        ))}
-      </div>
-      <div className="custom-state-row">
-        <div className="field field--grow">
-          <label htmlFor="new-custom-state">增加个性化状态</label>
-          <input
-            id="new-custom-state"
-            onChange={(event) => setNewState(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                addCustomState();
-              }
-            }}
-            placeholder="例如 REVIEW、DEPLOY"
-            value={newState}
-          />
+
+      <section className="te-section">
+        <div className="te-section__head">
+          <h3>为哪个状态设计？</h3>
+          <p>标准状态固定保留，你也可以添加自己的状态。</p>
         </div>
-        <ActionButton disabled={!newState.trim()} onClick={addCustomState}>
-          <Plus size={16} /> 添加状态
-        </ActionButton>
-        {standardStates.includes(
-          selectedState as (typeof standardStates)[number]
-        ) ? null : (
-          <ActionButton onClick={deleteCustomState}>
-            <Trash2 size={16} /> 删除当前状态
-          </ActionButton>
-        )}
-      </div>
-      <details className="theme-mixer">
-        <summary>从其他主题借用一个效果</summary>
-        <div>
-          <div className="field">
-            <label htmlFor="mix-theme">来源主题</label>
-            <select
-              id="mix-theme"
-              onChange={(event) => setMixTheme(event.target.value)}
-              value={mixTheme}
-            >
-              {availableThemes.map((theme) => (
-                <option key={theme.name} value={theme.name}>
-                  {displayNames[theme.name] ?? theme.name}
-                </option>
-              ))}
-            </select>
+        <div aria-label="业务状态" className="te-state-chips" role="tablist">
+          {Object.keys(draft.states).map((state) => {
+            const meta = stateLabels[state] ?? {
+              title: state,
+              tagline: "自定义状态",
+              accent: customAccent,
+            };
+            return (
+              <button
+                aria-selected={selectedState === state}
+                className={cn(
+                  "te-state-chip",
+                  selectedState === state && "is-active"
+                )}
+                key={state}
+                onClick={() => setSelectedState(state)}
+                role="tab"
+                type="button"
+              >
+                <span
+                  aria-hidden="true"
+                  className="te-state-chip__dot"
+                  style={{ background: meta.accent }}
+                />
+                <span className="te-state-chip__title">{meta.title}</span>
+                {standardStates.includes(
+                  state as (typeof standardStates)[number]
+                ) ? null : (
+                  <span className="te-state-chip__code">{state}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <div className="te-state-actions">
+          <div className="te-state-new">
+            <input
+              aria-label="新增自定义状态"
+              onChange={(event) => setNewState(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  addCustomState();
+                }
+              }}
+              placeholder="状态标识，例如 REVIEW（等待审核）"
+              value={newState}
+            />
+            <ActionButton disabled={!newState.trim()} onClick={addCustomState}>
+              <Plus size={16} /> 添加
+            </ActionButton>
           </div>
-          <div className="field">
-            <label htmlFor="mix-state">借用状态</label>
-            <select
-              id="mix-state"
-              onChange={(event) => setMixState(event.target.value)}
-              value={mixState}
-            >
-              {standardStates.map((state) => (
-                <option key={state}>{state}</option>
-              ))}
-            </select>
-          </div>
-          <ActionButton onClick={() => runAsync(mixFromTheme())}>
-            应用到 {selectedState}
-          </ActionButton>
+          {selectedIsStandard ? null : (
+            <ActionButton onClick={deleteCustomState} tone="danger">
+              <Trash2 size={16} /> 删除这个状态
+            </ActionButton>
+          )}
         </div>
-      </details>
+      </section>
+
       {scene ? (
-        <div className="editor-layout">
-          <div className="editor-controls">
-            {sceneReferences.length > 1 ? (
-              <div className="shared-scene-notice">
-                <InlineAlert title="这个效果被多个状态共用" tone="info">
-                  修改会同时影响 {sceneReferences.join("、")}。
-                </InlineAlert>
-                <ActionButton onClick={makeSceneIndependent}>
-                  复制为当前状态的独立效果
-                </ActionButton>
-              </div>
-            ) : null}
-            {mode === "quick" ? (
-              <>
-                <fieldset>
-                  <legend>想让灯光怎么动？</legend>
-                  <div className="motion-preset-grid">
-                    {motionPresets.map((preset) => (
-                      <button
-                        key={preset.value}
-                        onClick={() => applyMotion(preset)}
-                        type="button"
+        <div className="te-layout">
+          <div className="te-controls">
+            <div className="te-borrow">
+              <button
+                aria-expanded={mixOpen}
+                className="te-borrow__trigger"
+                onClick={() => setMixOpen((value) => !value)}
+                type="button"
+              >
+                <Wand2 aria-hidden="true" size={16} />
+                <span className="te-borrow__heading">
+                  <strong>借用主题效果</strong>
+                  <small>复制其他主题的灯光与声音到当前状态</small>
+                </span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={cn("te-chevron", mixOpen && "is-open")}
+                  size={16}
+                />
+              </button>
+              {mixOpen ? (
+                <div className="te-borrow__panel">
+                  <div className="te-borrow__fields">
+                    <div className="field">
+                      <label htmlFor="mix-theme">来源主题</label>
+                      <select
+                        id="mix-theme"
+                        onChange={(event) => setMixTheme(event.target.value)}
+                        value={mixTheme}
                       >
-                        <strong>{preset.label}</strong>
-                        <span>{preset.hint}</span>
-                      </button>
-                    ))}
+                        {availableThemes.map((theme) => (
+                          <option key={theme.name} value={theme.name}>
+                            {displayNames[theme.name] ?? theme.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="mix-state">来源状态</label>
+                      <select
+                        id="mix-state"
+                        onChange={(event) => setMixState(event.target.value)}
+                        value={mixState}
+                      >
+                        {["IDLE", "WORKING", "WAITING", "SUCCESS", "ERROR"].map(
+                          (state) => (
+                            <option key={state} value={state}>
+                              {stateLabels[state]?.title ?? state}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </div>
                   </div>
-                </fieldset>
-                <fieldset>
-                  <legend>变化速度</legend>
-                  <div className="segmented-control segmented-control--wide">
-                    <button onClick={() => applySpeed(2800)} type="button">
-                      舒缓
-                    </button>
-                    <button onClick={() => applySpeed(1400)} type="button">
-                      适中
-                    </button>
-                    <button onClick={() => applySpeed(600)} type="button">
-                      活跃
-                    </button>
+                  <div className="te-borrow__action">
+                    <span>
+                      将覆盖：当前主题 ·{" "}
+                      {stateLabels[selectedState]?.title ?? selectedState}
+                    </span>
+                    <ActionButton onClick={() => runAsync(mixFromTheme())}>
+                      借用此效果
+                    </ActionButton>
                   </div>
-                </fieldset>
-              </>
-            ) : (
-              <p className="editor-help">
-                分别选择顶灯、中灯和底灯，调整各自的运动、颜色和出场时间。
-              </p>
-            )}
-            <fieldset>
-              <legend>
-                {mode === "quick" ? "选择要换颜色的灯" : "正在调整"}
-              </legend>
-              <div className="segmented-control segmented-control--wide">
-                {[0, 1, 2].map((index) => (
-                  <button
-                    aria-pressed={selectedLed === index}
-                    key={index}
-                    onClick={() => setSelectedLed(index)}
-                    type="button"
-                  >
-                    {["顶灯", "中灯", "底灯"][index]}
-                  </button>
-                ))}
+                </div>
+              ) : null}
+            </div>
+
+            <fieldset className="te-group">
+              <legend>灯光怎么动？</legend>
+              <div className="te-motion-grid">
+                {motionPresets.map((preset) => {
+                  const active = activeMotion === preset.value;
+                  return (
+                    <button
+                      aria-pressed={active}
+                      className={cn("te-motion-card", active && "is-active")}
+                      key={preset.value}
+                      onClick={() => applyMotion(preset)}
+                      type="button"
+                    >
+                      <MotionGlyph active={active} curve={preset.curve} />
+                      <strong>{preset.label}</strong>
+                      <span>{preset.hint}</span>
+                    </button>
+                  );
+                })}
               </div>
             </fieldset>
-            {mode === "workbench" ? (
-              <div className="field">
-                <label htmlFor="curve">运动方式</label>
-                <select
-                  id="curve"
-                  onChange={(event) =>
-                    updateTrack({
-                      curve: event.target.value as LedTrack["curve"],
-                    })
-                  }
-                  value={trackCurve}
-                >
-                  {["CONSTANT", "SQUARE", "TRIANGLE", "SAW_UP", "SAW_DOWN"].map(
-                    (curve) => (
+
+            {sceneMotionCurve === "CONSTANT" ? null : (
+              <fieldset className="te-group">
+                <legend>变化速度</legend>
+                <div className="te-seg te-seg--3">
+                  {[
+                    {
+                      value: "slow",
+                      label: "舒缓",
+                      hint: "约 2.8 秒",
+                      ms: 2800,
+                    },
+                    {
+                      value: "medium",
+                      label: "适中",
+                      hint: "约 1.4 秒",
+                      ms: 1400,
+                    },
+                    {
+                      value: "fast",
+                      label: "活跃",
+                      hint: "约 0.6 秒",
+                      ms: 600,
+                    },
+                  ].map((option) => (
+                    <button
+                      aria-pressed={speedTier === option.value}
+                      className={cn(
+                        "te-seg__item",
+                        speedTier === option.value && "is-active"
+                      )}
+                      key={option.value}
+                      onClick={() => applySpeed(option.ms)}
+                      type="button"
+                    >
+                      <strong>{option.label}</strong>
+                      <span>{option.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+
+            <fieldset className="te-group">
+              <legend>三颗灯的颜色与亮度</legend>
+              <div className="te-led-rows">
+                {[0, 1, 2].map((index) => {
+                  const item = scene.leds[index] ?? null;
+                  const label = ["顶", "中", "底"][index];
+                  return (
+                    <div className="te-led-row" key={index}>
+                      <div className="te-led-row__head">
+                        <span className="te-led-row__name">{label}灯</span>
+                        <div className="te-led-row__meta">
+                          {item ? (
+                            <span className="te-led-row__motion">
+                              {item.curve === "CONSTANT"
+                                ? "常亮"
+                                : (motionPresets.find(
+                                    (preset) => preset.curve === item.curve
+                                  )?.label ?? item.curve)}
+                            </span>
+                          ) : (
+                            <span className="te-led-row__motion te-led-row__motion--off">
+                              熄灭
+                            </span>
+                          )}
+                          <button
+                            className="te-led-row__toggle"
+                            onClick={() => toggleLed(index)}
+                            type="button"
+                          >
+                            {item ? "熄灭此灯" : "点亮此灯"}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="te-led-row__body">
+                        {item ? (
+                          <>
+                            <label
+                              className="te-swatch"
+                              style={{ background: item.high }}
+                            >
+                              <input
+                                aria-label={`${label}灯颜色`}
+                                onChange={(event) =>
+                                  updateLedColor(index, {
+                                    high: event.target.value,
+                                  })
+                                }
+                                type="color"
+                                value={item.high}
+                              />
+                            </label>
+                            <label className="te-range">
+                              <span>亮度</span>
+                              <input
+                                max="100"
+                                min="0"
+                                onChange={(event) =>
+                                  updateLedColor(index, {
+                                    brightness: Number(event.target.value),
+                                  })
+                                }
+                                type="range"
+                                value={item.brightness}
+                              />
+                              <output>{item.brightness}%</output>
+                            </label>
+                          </>
+                        ) : (
+                          <p className="te-led-row__off-hint">
+                            点亮此灯后可设置颜色和亮度。
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            {sceneMotionCurve === "CONSTANT" ? null : (
+              <fieldset className="te-group">
+                <legend>三灯怎么依次出现？</legend>
+                <div className="te-seg te-seg--4">
+                  {[
+                    { value: "sync", label: "一起" },
+                    { value: "top-down", label: "上→下" },
+                    { value: "bottom-up", label: "下→上" },
+                    { value: "staggered", label: "交错" },
+                  ].map((option) => (
+                    <button
+                      aria-pressed={activeRelation === option.value}
+                      className={cn(
+                        "te-seg__item",
+                        activeRelation === option.value && "is-active"
+                      )}
+                      key={option.value}
+                      onClick={() =>
+                        applyRelation(
+                          option.value as
+                            | "sync"
+                            | "top-down"
+                            | "bottom-up"
+                            | "staggered"
+                        )
+                      }
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+
+            <fieldset className="te-group">
+              <legend>
+                <Music2 aria-hidden="true" size={14} /> 提示声音
+              </legend>
+              <div className="te-sound-grid">
+                {soundOptions.map((option) => {
+                  const active = activeSound === option.value;
+                  const Icon = option.value === "silent" ? VolumeX : Volume2;
+                  return (
+                    <button
+                      aria-pressed={active}
+                      className={cn("te-sound-card", active && "is-active")}
+                      key={option.value}
+                      onClick={() => applySound(option.value)}
+                      type="button"
+                    >
+                      <Icon aria-hidden="true" size={18} />
+                      <strong>{option.label}</strong>
+                      <span>{option.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            <button
+              aria-expanded={advanced}
+              className="te-advanced-toggle"
+              onClick={() => setAdvanced((value) => !value)}
+              type="button"
+            >
+              <SlidersHorizontal aria-hidden="true" size={16} />
+              <span>
+                <strong>逐灯精确调整</strong>
+                <small>单独调整每颗灯的运动、周期和切换参数</small>
+              </span>
+              <ChevronDown
+                aria-hidden="true"
+                className={cn("te-chevron", advanced && "is-open")}
+                size={16}
+              />
+            </button>
+
+            {advanced ? (
+              <section className="te-advanced">
+                <div className="te-seg te-seg--3">
+                  {[0, 1, 2].map((index) => (
+                    <button
+                      aria-pressed={selectedLed === index}
+                      className={cn(
+                        "te-seg__item",
+                        selectedLed === index && "is-active"
+                      )}
+                      key={index}
+                      onClick={() => setSelectedLed(index)}
+                      type="button"
+                    >
+                      {["顶", "中", "底"][index]}灯
+                    </button>
+                  ))}
+                </div>
+                <div className="field">
+                  <label htmlFor="curve">为此灯选择运动方式</label>
+                  <select
+                    id="curve"
+                    onChange={(event) =>
+                      updateTrack({
+                        curve: event.target.value as LedTrack["curve"],
+                      })
+                    }
+                    value={trackCurve}
+                  >
+                    {[
+                      "CONSTANT",
+                      "SQUARE",
+                      "TRIANGLE",
+                      "SAW_UP",
+                      "SAW_DOWN",
+                    ].map((curve) => (
                       <option key={curve} value={curve}>
                         {
                           {
@@ -694,128 +1270,109 @@ function ThemeEditor({
                           }[curve]
                         }
                       </option>
-                    )
-                  )}
-                </select>
-              </div>
-            ) : null}
-            <div className="color-grid">
-              <div className="field">
-                <label htmlFor="high-color">高点颜色</label>
-                <input
-                  id="high-color"
-                  onChange={(event) =>
-                    updateTrack({ high: event.target.value })
-                  }
-                  type="color"
-                  value={track?.high ?? "#22c55e"}
-                />
-              </div>
-              {mode === "workbench" && trackCurve !== "CONSTANT" ? (
-                <div className="field">
-                  <label htmlFor="low-color">低点颜色</label>
-                  <input
-                    id="low-color"
-                    onChange={(event) =>
-                      updateTrack({ low: event.target.value })
-                    }
-                    type="color"
-                    value={track?.low ?? "#000000"}
-                  />
+                    ))}
+                  </select>
                 </div>
-              ) : null}
-            </div>
-            <label className="range-field">
-              亮度 <output>{track?.brightness ?? 70}%</output>
-              <input
-                max="100"
-                min="0"
-                onChange={(event) =>
-                  updateTrack({ brightness: Number(event.target.value) })
-                }
-                type="range"
-                value={track?.brightness ?? 70}
-              />
-            </label>
-            {mode === "workbench" && trackCurve !== "CONSTANT" ? (
-              <label className="range-field">
-                周期 <output>{track?.period_ms ?? 1200} ms</output>
-                <input
-                  max="5000"
-                  min="100"
-                  onChange={(event) =>
-                    updateTrack({ period_ms: Number(event.target.value) })
-                  }
-                  step="100"
-                  type="range"
-                  value={track?.period_ms ?? 1200}
-                />
-              </label>
-            ) : null}
-            {mode === "workbench" && trackCurve !== "CONSTANT" ? (
-              <>
-                <label className="range-field">
-                  出场时间 <output>{track?.phase_deg ?? 0}°</output>
-                  <input
-                    max="360"
-                    min="0"
-                    onChange={(event) =>
-                      updateTrack({ phase_deg: Number(event.target.value) })
-                    }
-                    type="range"
-                    value={track?.phase_deg ?? 0}
-                  />
-                </label>
-                <div className="field">
-                  <label htmlFor="repeat">重复次数（0 = 持续）</label>
-                  <input
-                    id="repeat"
-                    min="0"
-                    onChange={(event) =>
-                      updateTrack({ repeat: Number(event.target.value) })
-                    }
-                    type="number"
-                    value={track?.repeat ?? 0}
-                  />
-                </div>
-              </>
-            ) : null}
-            <fieldset>
-              <legend>灯光怎么依次出现？</legend>
-              <div className="segmented-control segmented-control--wide">
-                <button onClick={() => applyRelation("sync")} type="button">
-                  一起
-                </button>
-                <button
-                  disabled={trackCurve === "CONSTANT"}
-                  onClick={() => applyRelation("top-down")}
-                  type="button"
-                >
-                  从上往下
-                </button>
-                <button
-                  disabled={trackCurve === "CONSTANT"}
-                  onClick={() => applyRelation("bottom-up")}
-                  type="button"
-                >
-                  从下往上
-                </button>
-                <button
-                  disabled={trackCurve === "CONSTANT"}
-                  onClick={() => applyRelation("staggered")}
-                  type="button"
-                >
-                  交错
-                </button>
-              </div>
-            </fieldset>
-            {mode === "workbench" ? (
-              <>
-                <div className="editor-number-grid">
+                <div className="te-grid2">
                   <div className="field">
-                    <label htmlFor="transition-ms">过渡时长 (ms)</label>
+                    <label htmlFor="low-color">低点颜色</label>
+                    <input
+                      id="low-color"
+                      onChange={(event) =>
+                        updateTrack({ low: event.target.value })
+                      }
+                      type="color"
+                      value={track?.low ?? "#000000"}
+                    />
+                  </div>
+                  <label className="te-range">
+                    <span>周期</span>
+                    <input
+                      max="5000"
+                      min="100"
+                      onChange={(event) =>
+                        updateTrack({ period_ms: Number(event.target.value) })
+                      }
+                      step="100"
+                      type="range"
+                      value={track?.period_ms ?? 1200}
+                    />
+                    <output>{track?.period_ms ?? 1200} ms</output>
+                  </label>
+                  <label className="te-range">
+                    <span>出场时间</span>
+                    <input
+                      max="360"
+                      min="0"
+                      onChange={(event) =>
+                        updateTrack({ phase_deg: Number(event.target.value) })
+                      }
+                      type="range"
+                      value={track?.phase_deg ?? 0}
+                    />
+                    <output>{track?.phase_deg ?? 0}°</output>
+                  </label>
+                  {trackCurve === "SQUARE" ? (
+                    <label className="te-range">
+                      <span>占空比</span>
+                      <input
+                        max="99"
+                        min="1"
+                        onChange={(event) =>
+                          updateTrack({
+                            duty_percent: Number(event.target.value),
+                          })
+                        }
+                        type="range"
+                        value={track?.duty_percent ?? 50}
+                      />
+                      <output>{track?.duty_percent ?? 50}%</output>
+                    </label>
+                  ) : null}
+                </div>
+                <div className="te-grid2">
+                  <div className="field">
+                    <label htmlFor="repeat">播放次数（0 = 持续）</label>
+                    <input
+                      id="repeat"
+                      min="0"
+                      onChange={(event) =>
+                        updateTrack({ repeat: Number(event.target.value) })
+                      }
+                      type="number"
+                      value={track?.repeat ?? 0}
+                    />
+                  </div>
+                  {trackCurve === "CONSTANT" ? null : (
+                    <div className="field">
+                      <label htmlFor="end-level">结束后的灯位</label>
+                      <select
+                        id="end-level"
+                        onChange={(event) =>
+                          updateTrack({
+                            end_level: event.target
+                              .value as LedTrack["end_level"],
+                          })
+                        }
+                        value={track?.end_level ?? "OFF"}
+                      >
+                        <option value="OFF">熄灭</option>
+                        <option value="LOW">停在暗色</option>
+                        <option value="HIGH">停在亮色</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                <div className="te-section__head">
+                  <h3>状态切换</h3>
+                </div>
+                <div className="te-grid2">
+                  <div className="field">
+                    <label htmlFor="transition-ms">过渡时长</label>
                     <input
                       id="transition-ms"
+                      max="2500"
                       min="0"
                       onChange={(event) =>
                         updateMapping({
@@ -825,9 +1382,10 @@ function ThemeEditor({
                       type="number"
                       value={mapping.transition_ms ?? 0}
                     />
+                    <small>切换到这个状态时，灯光柔和过渡的时长。</small>
                   </div>
                   <div className="field">
-                    <label htmlFor="hold-ms">终态驻留 (ms)</label>
+                    <label htmlFor="hold-ms">终态驻留</label>
                     <input
                       disabled={
                         selectedState !== "SUCCESS" && selectedState !== "ERROR"
@@ -835,46 +1393,23 @@ function ThemeEditor({
                       id="hold-ms"
                       min="0"
                       onChange={(event) =>
-                        updateMapping({ hold_ms: Number(event.target.value) })
+                        updateMapping({
+                          hold_ms: Number(event.target.value),
+                        })
                       }
                       type="number"
                       value={mapping.hold_ms ?? 0}
                     />
+                    <small>亮起后停留多久再回落空闲；0 表示不自动回落。</small>
                   </div>
                 </div>
-                {trackCurve !== "CONSTANT" && (track?.repeat ?? 0) > 0 ? (
-                  <div className="field">
-                    <label htmlFor="end-level">重复结束后的灯位</label>
-                    <select
-                      id="end-level"
-                      onChange={(event) =>
-                        updateTrack({
-                          end_level: event.target
-                            .value as LedTrack["end_level"],
-                        })
-                      }
-                      value={track?.end_level ?? "OFF"}
-                    >
-                      <option value="OFF">熄灭</option>
-                      <option value="LOW">低点</option>
-                      <option value="HIGH">高点</option>
-                    </select>
-                  </div>
-                ) : null}
-                <fieldset className="buzzer-editor">
-                  <legend>蜂鸣轨道</legend>
-                  <label className="checkbox-row">
-                    <input
-                      checked={Boolean(scene.buzzer)}
-                      onChange={(event) =>
-                        setBuzzerEnabled(event.target.checked)
-                      }
-                      type="checkbox"
-                    />
-                    启用蜂鸣
-                  </label>
-                  {scene.buzzer ? (
-                    <div className="editor-number-grid">
+
+                <div className="te-section__head">
+                  <h3>提示音细节</h3>
+                </div>
+                {scene.buzzer ? (
+                  <fieldset className="te-group te-buzz">
+                    <div className="te-grid2">
                       <div className="field">
                         <label htmlFor="buzzer-frequency">频率 (Hz)</label>
                         <input
@@ -913,8 +1448,8 @@ function ThemeEditor({
                           value={buzzerSegment.duration_ms}
                         />
                       </div>
-                      <label className="range-field">
-                        音量 <output>{buzzerSegment.volume}%</output>
+                      <label className="te-range">
+                        <span>音量</span>
                         <input
                           max="100"
                           min="0"
@@ -931,102 +1466,104 @@ function ThemeEditor({
                           type="range"
                           value={buzzerSegment.volume}
                         />
+                        <output>{buzzerSegment.volume}%</output>
                       </label>
+                      <div className="field">
+                        <label htmlFor="buzzer-repeat">重复次数</label>
+                        <input
+                          id="buzzer-repeat"
+                          min="0"
+                          onChange={(event) =>
+                            updateBuzzer({ repeat: Number(event.target.value) })
+                          }
+                          type="number"
+                          value={scene.buzzer.repeat ?? 0}
+                        />
+                      </div>
                     </div>
-                  ) : null}
-                </fieldset>
-              </>
-            ) : (
-              <fieldset>
-                <legend>提示声音</legend>
-                <div className="segmented-control segmented-control--wide">
-                  <button onClick={() => applySound("silent")} type="button">
-                    无声
-                  </button>
-                  <button onClick={() => applySound("gentle")} type="button">
-                    轻提示
-                  </button>
-                  <button onClick={() => applySound("confirm")} type="button">
-                    确认音
-                  </button>
-                  <button onClick={() => applySound("alert")} type="button">
-                    警报音
-                  </button>
-                </div>
-              </fieldset>
-            )}
+                  </fieldset>
+                ) : (
+                  <p className="te-hint">
+                    当前无声；选择一种声音后可在此微调。
+                  </p>
+                )}
+
+                {sceneReferences.length > 1 ? (
+                  <div className="te-shared">
+                    <span>
+                      多个状态共用这套效果：{sceneReferences.join("、")}
+                    </span>
+                    <ActionButton onClick={makeSceneIndependent}>
+                      让本状态独立
+                    </ActionButton>
+                  </div>
+                ) : null}
+
+                <details className="te-json">
+                  <summary>
+                    查看效果库（共 {Object.keys(draft.scenes).length} 个）
+                  </summary>
+                  <dl>
+                    {Object.keys(draft.scenes).map((sceneName) => {
+                      const references = Object.entries(draft.states)
+                        .filter(([, value]) => value.scene === sceneName)
+                        .map(([state]) => state);
+                      return (
+                        <div key={sceneName}>
+                          <dt>{sceneName}</dt>
+                          <dd>
+                            {references.length
+                              ? references.join("、")
+                              : "尚未使用"}
+                          </dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                </details>
+                <details className="te-json">
+                  <summary>查看生成的主题 JSON</summary>
+                  <pre>
+                    <code>{JSON.stringify(draft, null, 2)}</code>
+                  </pre>
+                </details>
+              </section>
+            ) : null}
           </div>
-          <div className="editor-preview">
-            <span>当前颜色与灯位</span>
-            <div
-              aria-label="三灯颜色预览"
-              className="light-preview-stack"
-              role="img"
-            >
-              {["顶灯", "中灯", "底灯"].map((label, index) => {
-                const item = scene.leds[index];
-                return (
-                  <i
-                    aria-hidden="true"
-                    key={label}
-                    style={{
-                      backgroundColor: item?.high ?? "#000000",
-                      boxShadow: item
-                        ? `0 0 ${Math.max(8, item.brightness / 2)}px ${item.high}`
-                        : "none",
-                      opacity: item
-                        ? Math.max(0.08, item.brightness / 100)
-                        : 0.08,
-                    }}
-                  />
-                );
-              })}
+
+          <aside className="te-stage">
+            <div className="te-stage__head">
+              <span>当前预览</span>
+              <strong>
+                {stateLabels[selectedState]?.title ?? selectedState}
+              </strong>
             </div>
-            <code>{mapping.scene}</code>
-            <small>
-              软件预览用于确认颜色与灯位，真实动态和声音以设备为准。
-            </small>
+            <LivePreview scene={scene} />
+            {sceneReferences.length > 1 ? (
+              <div className="te-shared te-shared--stage">
+                <span>{sceneReferences.length} 个状态共用</span>
+                <ActionButton onClick={makeSceneIndependent}>独立</ActionButton>
+              </div>
+            ) : null}
             <ActionButton
               busy={previewing}
+              className="te-stage__listen"
               disabled={!snapshot?.device.connected}
               onClick={() => runAsync(previewDraft())}
               tone="primary"
             >
               {snapshot?.device.connected ? "在设备上试听" : "连接设备后可试听"}
             </ActionButton>
-          </div>
+            <small className="te-stage__note">
+              软件预览会模拟真实动效；连上灯牌即可体验实际灯光与声音。
+            </small>
+          </aside>
         </div>
       ) : (
-        <InlineAlert title="当前状态没有映射">
-          请在 JSON 进阶编辑中添加对应 SCENE。
+        <InlineAlert title="这个状态还没有灯效" tone="info">
+          在本主题里为这个状态选择一套动效即可开始。
         </InlineAlert>
       )}
-      <details className="scene-library">
-        <summary>查看效果库（{Object.keys(draft.scenes).length} 个）</summary>
-        <dl>
-          {Object.keys(draft.scenes).map((sceneName) => {
-            const references = Object.entries(draft.states)
-              .filter(([, value]) => value.scene === sceneName)
-              .map(([state]) => state);
-            return (
-              <div key={sceneName}>
-                <dt>{sceneName}</dt>
-                <dd>
-                  {references.length ? references.join("、") : "尚未使用"}
-                </dd>
-              </div>
-            );
-          })}
-        </dl>
-      </details>
-      {mode === "workbench" ? (
-        <details className="json-preview">
-          <summary>查看生成的主题 JSON</summary>
-          <pre>
-            <code>{JSON.stringify(draft, null, 2)}</code>
-          </pre>
-        </details>
-      ) : null}
     </Dialog>
   );
 }
@@ -1219,8 +1756,8 @@ export function ThemesPage() {
               <span className="section-kicker">主题详情</span>
               <h2>{selectedTheme.theme.name}</h2>
               <p>
-                {Object.keys(selectedTheme.scenes).length} 个 SCENE ·{" "}
-                {Object.keys(selectedTheme.states).length} 个状态映射
+                {Object.keys(selectedTheme.scenes).length} 组灯光与声音效果 ·{" "}
+                {Object.keys(selectedTheme.states).length} 个状态
               </p>
             </div>
             <dl>

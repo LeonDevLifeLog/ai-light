@@ -37,7 +37,11 @@ export function DevicesPage() {
     setScanning(true);
     setScanError(null);
     try {
-      setDevices(await api.scanDevices());
+      const [found] = await Promise.all([
+        api.scanDevices(),
+        new Promise((resolve) => window.setTimeout(resolve, 400)),
+      ]);
+      setDevices(found);
     } catch (error) {
       setScanError(asAppError(error).message);
     } finally {
@@ -124,11 +128,15 @@ export function DevicesPage() {
         actions={
           <ActionButton
             busy={scanning}
+            className="scan-action-button"
             onClick={() => runAsync(scan())}
             tone="primary"
           >
-            <RefreshCw aria-hidden="true" size={16} />{" "}
-            {scanning ? "正在查找" : "重新查找"}
+            {scanning ? null : <RefreshCw aria-hidden="true" size={16} />}
+            <span className="scan-action-button__labels">
+              <span aria-hidden={scanning}>重新查找设备</span>
+              <span aria-hidden={!scanning}>正在查找…</span>
+            </span>
           </ActionButton>
         }
         description="连接你附近的 AgentCore-Light 灯牌"
@@ -172,7 +180,7 @@ export function DevicesPage() {
             <EmptyState
               action={
                 <ActionButton onClick={() => runAsync(scan())}>
-                  <RefreshCw size={16} /> 再试一次
+                  <RefreshCw size={16} /> 重新查找设备
                 </ActionButton>
               }
               description="请确认灯牌已上电、处于广播范围内，并允许 AI-Light 使用蓝牙。"

@@ -13,7 +13,12 @@ import {
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useAppState } from "@/app/app-context";
-import { Card, PageHeader, StatusTag } from "@/components/app-ui";
+import {
+  Card,
+  PageHeader,
+  StatusTag,
+  themeDisplayName,
+} from "@/components/app-ui";
 import type { AppConfig, ThemeFile } from "@/lib/ailight";
 import { api, asAppError } from "@/lib/ailight";
 import { cn, runAsync } from "@/lib/utils";
@@ -161,21 +166,12 @@ export function SettingsPage() {
         </h2>
         <Card className="settings-card">
           <SettingRow
-            description="智能体工具连接本机服务的端口，一般无需修改"
-            icon={<Server />}
-            title="服务端口"
-          >
-            <code className="setting-value">
-              {snapshot?.service.port ?? config.portPreference}
-            </code>
-          </SettingRow>
-          <SettingRow
-            description="多个工具同时活跃时，决定灯效由谁控制"
+            description="多个工具同时运行时，决定优先显示哪个状态"
             icon={<Radio />}
             stacked
-            title="仲裁模式"
+            title="多个工具同时运行时"
           >
-            <fieldset aria-label="仲裁模式" className="mode-options">
+            <fieldset aria-label="状态显示规则" className="mode-options">
               <button
                 aria-pressed={config.arbitrationMode === "priority"}
                 className={cn(
@@ -193,8 +189,8 @@ export function SettingsPage() {
                 <span aria-hidden="true" className="mode-option__indicator" />
                 <span className="mode-option__body">
                   <span className="mode-option__title">
-                    <span className="mode-option__name">优先级抢占</span>
-                    <span className="mode-option__tag">默认</span>
+                    <span className="mode-option__name">重要状态优先</span>
+                    <span className="mode-option__tag">推荐</span>
                   </span>
                   <span className="mode-option__desc">
                     重要状态优先：错误 &gt; 完成 &gt; 进行中 &gt; 等待 &gt; 空闲
@@ -221,7 +217,7 @@ export function SettingsPage() {
                 <span aria-hidden="true" className="mode-option__indicator" />
                 <span className="mode-option__body">
                   <span className="mode-option__title">
-                    <span className="mode-option__name">最近活跃</span>
+                    <span className="mode-option__name">最近活动优先</span>
                   </span>
                   <span className="mode-option__desc">
                     最后上报状态的工具接管灯效
@@ -231,16 +227,28 @@ export function SettingsPage() {
             </fieldset>
           </SettingRow>
           <SettingRow
-            description="状态上报是否需要密钥认证"
+            description="工具只能从这台电脑连接；当前无需额外密钥"
             icon={<ShieldCheck />}
-            title="接入保护"
+            title="连接安全"
           >
             <StatusTag
               tone={snapshot?.service.tokenEnabled ? "warning" : "success"}
             >
-              {snapshot?.service.tokenEnabled ? "Token 已启用" : "仅限本机"}
+              {snapshot?.service.tokenEnabled ? "已启用身份验证" : "仅限本机"}
             </StatusTag>
           </SettingRow>
+          <details className="settings-advanced">
+            <summary>高级服务信息</summary>
+            <SettingRow
+              description="工具连接 AI-Light 本机服务时使用"
+              icon={<Server />}
+              title="服务端口"
+            >
+              <code className="setting-value">
+                {snapshot?.service.port ?? config.portPreference}
+              </code>
+            </SettingRow>
+          </details>
         </Card>
       </section>
       <section aria-labelledby="appearance-settings">
@@ -336,7 +344,7 @@ export function SettingsPage() {
                 </span>
               ) : null}
               <span className="setting-theme__name">
-                {snapshot?.activeTheme ?? config.activeTheme}
+                {themeDisplayName(snapshot?.activeTheme ?? config.activeTheme)}
               </span>
               {preview?.hasSound ? (
                 <span className="setting-theme__sound">
