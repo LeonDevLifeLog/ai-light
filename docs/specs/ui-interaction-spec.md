@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.19 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.19，2026-08-22） |
+| 文档版本 | V1.20 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.20，2026-08-22） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -703,6 +703,7 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 - 自启动：✅ 已实装（tauri-plugin-autostart 2.5.1，KAD-09）；失败路径 `AUTOSTART_FAILED` → Toast + 控件回滚到原值；OS 登录项为唯一事实源，config 为启动校准缓存
 - 状态显示规则：ModeOption 卡片独占选择（`aria-pressed`）；「重要状态优先」带「推荐」标签；切换经 `update_config(arbitrationMode)` 即时生效
 - 服务端口放在「高级服务信息」原生 disclosure 中，默认收起
+- 接口文档与服务端口同处「高级服务信息」；按钮根据 `service.port` 打开 `http://127.0.0.1:{port}/docs/`，调用中进入 loading 并禁用，状态未就绪时 disabled，打开失败 Toast，成功不额外反馈
 
 **6.6.6 无障碍**
 - 行名 = 可见 `<strong>`；控件自带 `aria-label`（如"仲裁模式""开机自启"）
@@ -861,7 +862,7 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 
 **联动**：每 SettingGroup 内的 SettingRow 互不联动；Group 间独立。
 
-**7.6.1 服务组**：状态显示规则 = 两张 ModeOption 卡片（「重要状态优先 / 最近活动优先」，整行铺开，单选圆点 + 效果说明 + 「推荐」标签）；连接安全 = 状态标签（「仅限本机 / 已启用身份验证」）；服务端口位于默认收起的「高级服务信息」中，只读展示。
+**7.6.1 服务组**：状态显示规则 = 两张 ModeOption 卡片（「重要状态优先 / 最近活动优先」，整行铺开，单选圆点 + 效果说明 + 「推荐」标签）；连接安全 = 状态标签（「仅限本机 / 已启用身份验证」）；默认收起的「高级服务信息」包含服务端口与接口文档入口。接口文档按钮使用系统默认浏览器打开实际监听端口下的 `/docs/` Swagger UI，不使用可能因启动退避而失真的 `portPreference`。
 
 **7.6.2 显示组**：外观模式 = 三张 ModeOption 卡片（亮色 / 暗色 / 跟随系统，图标 + 一句说明），切换经 `update_config(themeMode)` 持久化，`html[data-theme]` 即时更新；"跟随系统"下 `data-theme` 随 `prefers-color-scheme` 变化。灯组朝向（SegControl 横排/纵向）；当前主题 = 主题预览入口（Link → /themes）：3 个灯色圆点（取当前主题 WORKING/SUCCESS/ERROR 场景实际 `leds.high`/`low` 色）+ 主题名 + 可选「提示音」标记 + ChevronRight。预览随 `config.activeTheme` 变化刷新；主题读取失败回退为纯名称。
 
@@ -1791,6 +1792,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.20 | 2026-08-22 | §6.6/§7.6 新增 Hook API 文档快捷入口契约：使用实际 `service.port` 在默认浏览器打开 `/docs/`，补齐 loading、disabled 与失败 Toast。对齐报告：§3 Source Events 未变且均存在于 ipc-contract §5；§4.1 未新增 AppError.code；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段，与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10 引用有效。 |
 | V1.19 | 2026-08-22 | 设备与服务闭环：§3.2 扩展主动断开/忘记 reason；§3.6 新增 `portPreference` 热重启联动；§5.2/§6.3 实装断开、忘记与连接代次取消重连。对齐报告：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10 引用有效。 |
 | V1.18 | 2026-08-22 | 全页面 UX review 优化：§6.1 将版本/端口折叠为高级信息；§6.5 更新 incompatible/reserved 支持状态和动作可用性；§6.6/§7.6 将仲裁与接入保护改写为用户语言并折叠服务端口；§7.2 补扫描最短反馈；§7.4 隐藏未支持客户端的无效操作；§7.5 区分状态模拟与设备试听；§8.5 熄灯态隐藏不可生效的颜色/亮度控件。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（错误路径未变）；§4.2 result code 与蓝牙 V0.4 §3.6 一致（协议行为未变）；§6~§8 的 `leds` / `high` / `brightness` 与 theme-format 字段一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
 | V1.17 | 2026-08-22 | 主题创作器关闭与熄灯交互修复：§5.4 取消/关闭/Esc 改为应用内放弃修改确认 Dialog；§8.5 明确颜色不支持 alpha，“透明/无颜色”以灯轨 `null` 表达并提供点亮/熄灭双向控制。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（错误路径未变）；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 的 `leds` / `high` 与 theme-format 字段一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-shell";
 
 export type BusinessStateName =
   | "IDLE"
@@ -226,6 +227,17 @@ async function call<T>(
 }
 
 export const api = {
+  openExternal: async (url: string) => {
+    if (isTauri()) {
+      await open(url);
+      return;
+    }
+    const opened = window.open(url, "_blank");
+    if (!opened) {
+      throw new Error("浏览器阻止了新窗口，请允许弹出窗口后重试");
+    }
+    opened.opener = null;
+  },
   getAppState: async () =>
     isTauri() ? call<AppSnapshot>("get_app_state") : mockSnapshot,
   getThemes: async () =>

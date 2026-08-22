@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.20 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.20，2026-08-22） |
+| 文档版本 | V1.21 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.21，2026-08-22） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -363,7 +363,9 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
   - 最近活动优先：最后上报状态的工具接管灯效
   - 切换经 `update_config(arbitrationMode)` 即时生效（引擎热切换）。
 - 连接安全：用户说明强调工具只能从本机连接；状态标签为「仅限本机」/「已启用身份验证」。第一版 UI 不开放 Token 编辑入口（服务端 Bearer 校验见 hook-api §7）。
-- 高级服务信息：默认折叠；端口输入允许 1024~65535，默认 25679。[保存并重启服务] 先精确绑定新端口并持久化，再替换旧 Hook Server，不重启应用或 BLE；失败时保留旧端口与原配置并引导用户换端口。
+- 高级服务信息：默认折叠，包含服务端口与接口文档两个同级行：
+  - 服务端口：输入允许 1024~65535，默认 25679。[保存并重启服务] 先精确绑定新端口并持久化，再替换旧 Hook Server，不重启应用或 BLE；失败时保留旧端口与原配置并引导用户换端口。
+  - 接口文档：[打开 API 文档] 使用系统默认浏览器打开当前实际监听地址 `http://127.0.0.1:{service.port}/docs/`。打开中显示「正在打开…」并屏蔽重复触发；应用状态尚未就绪时禁用。成功不额外提示，打开失败显示原因 Toast。
 
 ### 9.2 显示
 
@@ -476,6 +478,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | 设备连接失败 | Toast（含原因）+ 保留在 /devices |
 | 主动断开失败 | Toast（含原因）+ 保留连接与记忆设备 |
 | 端口热重启失败 | Toast（端口与失败原因）+ 输入回滚，旧 Hook Server 继续运行 |
+| API 文档打开失败 | Toast「无法打开 API 文档」+ 系统或浏览器返回的具体原因 |
 | 未连接设备试听 | Toast「请先连接设备后再试听灯效」（`DEVICE_NOT_CONNECTED`） |
 | 设备断连 | Toast「设备已断开」+ 设备卡显示「未连接」|
 | 设备重连成功 | Toast「设备已重新连接」+ 设备卡恢复 |
@@ -746,6 +749,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.21 | 2026-08-22 | 设置页高级服务信息新增「接口文档」快捷入口：基于 `service.port` 用系统浏览器打开 Hook Server `/docs/` Swagger UI，包含 loading/disabled/失败 Toast，避免端口退避或热切换后打开旧地址。对齐报告：§3 Source Events 未变且均存在于 ipc-contract §5；§4.1 未新增 AppError.code，既有清单一致；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增主题字段，与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10 引用有效。 |
 | V1.20 | 2026-08-22 | 设备与服务闭环：§4.3 实装主动断开、忘记设备及连接代次取消重连；§9.1 实装默认 25679、精确端口热重启及失败回滚；§11 补充 `DEVICE_DISCONNECT_FAILED` / `PORT_UNAVAILABLE` / `DEVICE_NOT_CONNECTED` 反馈。对齐报告：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；蓝牙 result code 未变且仍与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10 引用有效。 |
 | V1.19 | 2026-08-22 | 全页面 UX review 优化：§1.1 将版本/端口收进「高级信息」；§4.1 补扫描最短可感知反馈并统一重试文案；§5 更新客户端支持状态、复制反馈并隐藏暂不支持项的无效操作；§7 将名称约束明确为「主题标识」；§8 区分状态模拟与灯牌试听、统一五态中文名；§9 将仲裁/保护改写为用户语言并折叠服务端口。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（错误路径未变）；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（协议行为未变）；§6~§8 使用的 `leds` / `high` / `brightness` 字段与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
 | V1.18 | 2026-08-22 | 主题创作器关闭与熄灯交互修复：§7.2 每颗灯新增“熄灭此灯 / 点亮此灯”，透明语义映射为协议支持的 `leds[i] = null`；取消、右上角关闭与 Esc 统一走应用内放弃修改确认 Dialog，替换 WebView 中无稳定反馈的原生 `window.confirm`。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（错误路径未变）；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（熄灯仍编译为合法 SCENE）；§6~§8 使用的 `leds` / `high` 字段与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |

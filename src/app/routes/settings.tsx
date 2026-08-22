@@ -1,5 +1,7 @@
 import {
+  BookOpen,
   ChevronRight,
+  ExternalLink,
   Monitor,
   Moon,
   Palette,
@@ -14,6 +16,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useAppState } from "@/app/app-context";
 import {
+  ActionButton,
   Card,
   PageHeader,
   StatusTag,
@@ -103,6 +106,7 @@ const themeModeOptions: Array<{
 export function SettingsPage() {
   const { snapshot, config, patchConfig, notify, refresh } = useAppState();
   const [saving, setSaving] = useState<string | null>(null);
+  const [openingDocs, setOpeningDocs] = useState(false);
   const [portInput, setPortInput] = useState("");
   const [preview, setPreview] = useState<{
     swatches: Array<{ state: string; color: string }>;
@@ -189,6 +193,24 @@ export function SettingsPage() {
       });
     } finally {
       setSaving(null);
+    }
+  };
+
+  const openApiDocs = async () => {
+    if (!snapshot) {
+      return;
+    }
+    setOpeningDocs(true);
+    try {
+      await api.openExternal(`http://127.0.0.1:${snapshot.service.port}/docs/`);
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "无法打开 API 文档",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setOpeningDocs(false);
     }
   };
 
@@ -304,6 +326,22 @@ export function SettingsPage() {
                   {saving === "portPreference" ? "正在切换…" : "保存并重启服务"}
                 </button>
               </div>
+            </SettingRow>
+            <SettingRow
+              description="在浏览器中查看 Hook API，可调试接口并生成自定义调用"
+              icon={<BookOpen />}
+              title="接口文档"
+            >
+              <ActionButton
+                busy={openingDocs}
+                disabled={!snapshot}
+                onClick={() => runAsync(openApiDocs())}
+              >
+                {openingDocs ? "正在打开…" : "打开 API 文档"}
+                {openingDocs ? null : (
+                  <ExternalLink aria-hidden="true" size={15} />
+                )}
+              </ActionButton>
             </SettingRow>
           </details>
         </Card>
