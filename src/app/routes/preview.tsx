@@ -129,22 +129,27 @@ export function PreviewPage() {
         >
           <div className="field field--grow">
             <label htmlFor="custom-state">状态名称</label>
-            <input
-              id="custom-state"
-              maxLength={64}
-              onChange={(event) => setCustomState(event.target.value)}
-              placeholder="例如 REVIEW（等待审核）"
-              value={customState}
-            />
-            <small>当前主题没有对应效果时，将使用“空闲”效果。</small>
+            <div className="custom-state-controls">
+              <input
+                aria-describedby="custom-state-help"
+                id="custom-state"
+                maxLength={64}
+                onChange={(event) => setCustomState(event.target.value)}
+                placeholder="例如 REVIEW（等待审核）"
+                value={customState}
+              />
+              <ActionButton
+                disabled={!customState.trim()}
+                tone="primary"
+                type="submit"
+              >
+                <Send aria-hidden="true" size={16} /> 触发
+              </ActionButton>
+            </div>
+            <small id="custom-state-help">
+              当前主题没有对应效果时，将使用“空闲”效果。
+            </small>
           </div>
-          <ActionButton
-            disabled={!customState.trim()}
-            tone="primary"
-            type="submit"
-          >
-            <Send aria-hidden="true" size={16} /> 触发
-          </ActionButton>
         </form>
         {recent.length > 0 ? (
           <div className="recent-states">

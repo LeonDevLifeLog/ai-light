@@ -1,5 +1,7 @@
 import {
+  BookOpen,
   ChevronRight,
+  ExternalLink,
   Monitor,
   Moon,
   Palette,
@@ -14,6 +16,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useAppState } from "@/app/app-context";
 import {
+  ActionButton,
   Card,
   PageHeader,
   StatusTag,
@@ -101,13 +104,21 @@ const themeModeOptions: Array<{
 ];
 
 export function SettingsPage() {
-  const { snapshot, config, patchConfig, notify } = useAppState();
+  const { snapshot, config, patchConfig, notify, refresh } = useAppState();
   const [saving, setSaving] = useState<string | null>(null);
+  const [openingDocs, setOpeningDocs] = useState(false);
+  const [portInput, setPortInput] = useState("");
   const [preview, setPreview] = useState<{
     swatches: Array<{ state: string; color: string }>;
     hasSound: boolean;
   } | null>(null);
   const activeTheme = config?.activeTheme;
+
+  useEffect(() => {
+    if (config) {
+      setPortInput(String(config.portPreference));
+    }
+  }, [config]);
 
   useEffect(() => {
     if (!activeTheme) {
@@ -151,6 +162,55 @@ export function SettingsPage() {
       });
     } finally {
       setSaving(null);
+    }
+  };
+
+  const updatePort = async () => {
+    const port = Number(portInput);
+    if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
+      notify({
+        tone: "error",
+        title: "端口格式不正确",
+        message: "请输入 1024 到 65535 之间的整数",
+      });
+      return;
+    }
+    setSaving("portPreference");
+    try {
+      await patchConfig({ portPreference: port });
+      await refresh();
+      notify({
+        tone: "success",
+        title: "Hook 服务已切换端口",
+        message: `当前监听 127.0.0.1:${port}`,
+      });
+    } catch (error) {
+      setPortInput(String(config.portPreference));
+      notify({
+        tone: "error",
+        title: "端口切换失败",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const openApiDocs = async () => {
+    if (!snapshot) {
+      return;
+    }
+    setOpeningDocs(true);
+    try {
+      await api.openExternal(`http://127.0.0.1:${snapshot.service.port}/docs/`);
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "无法打开 API 文档",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setOpeningDocs(false);
     }
   };
 
@@ -240,13 +300,48 @@ export function SettingsPage() {
           <details className="settings-advanced">
             <summary>高级服务信息</summary>
             <SettingRow
-              description="工具连接 AI-Light 本机服务时使用"
+              description={`当前监听端口：${snapshot?.service.port ?? config.portPreference}`}
               icon={<Server />}
               title="服务端口"
             >
-              <code className="setting-value">
-                {snapshot?.service.port ?? config.portPreference}
-              </code>
+              <div className="port-control">
+                <input
+                  aria-label="Hook 服务端口"
+                  disabled={saving === "portPreference"}
+                  max={65_535}
+                  min={1024}
+                  onChange={(event) => setPortInput(event.target.value)}
+                  type="number"
+                  value={portInput}
+                />
+                <button
+                  className="action-button action-button--secondary"
+                  disabled={
+                    saving === "portPreference" ||
+                    portInput === String(config.portPreference)
+                  }
+                  onClick={() => runAsync(updatePort())}
+                  type="button"
+                >
+                  {saving === "portPreference" ? "正在切换…" : "保存并重启服务"}
+                </button>
+              </div>
+            </SettingRow>
+            <SettingRow
+              description="在浏览器中查看 Hook API，可调试接口并生成自定义调用"
+              icon={<BookOpen />}
+              title="接口文档"
+            >
+              <ActionButton
+                busy={openingDocs}
+                disabled={!snapshot}
+                onClick={() => runAsync(openApiDocs())}
+              >
+                {openingDocs ? "正在打开…" : "打开 API 文档"}
+                {openingDocs ? null : (
+                  <ExternalLink aria-hidden="true" size={15} />
+                )}
+              </ActionButton>
             </SettingRow>
           </details>
         </Card>
@@ -272,6 +367,7 @@ export function SettingsPage() {
                     aria-pressed={config.themeMode === value}
                     className={cn(
                       "mode-option",
+                      "mode-option--appearance",
                       config.themeMode === value && "mode-option--active"
                     )}
                     disabled={saving === "themeMode"}

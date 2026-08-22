@@ -3,7 +3,7 @@
 //! - `POST /hook`：状态事件上报（source/event/state/session/ts/meta）
 //! - `GET /api/status`：业务状态 + 设备状态 + 服务信息快照
 //! - `GET /api/health`：健康检查
-//! - 仅监听 127.0.0.1；端口 47800 起退避至 47810；可选 Bearer token
+//! - 仅监听 127.0.0.1；默认端口 25679，启动占用时向后退避；可选 Bearer token
 
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
@@ -18,13 +18,10 @@ use utoipa::{Modify, OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::arbiter::{Arbiter, ArbitrationMode};
-use crate::config::DEFAULT_PORT;
+use crate::config::{DEFAULT_PORT, PORT_FALLBACK_ATTEMPTS};
 use crate::engine;
 use crate::protocol::OutputScene;
 use crate::theme::ThemeFile;
-
-/// 端口退避上限（hook-api §1）
-pub const MAX_PORT: u16 = 47810;
 
 /// 状态名/source 命名约束（hook-api §6）
 pub fn valid_name(s: &str) -> bool {
@@ -95,7 +92,7 @@ pub struct ServiceSnapshot {
     #[schema(example = "0.1.1")]
     pub version: String,
     /// Hook Server 实际监听端口。
-    #[schema(example = 47800, minimum = 47800, maximum = 47810)]
+    #[schema(example = 25679, minimum = 1024, maximum = 65535)]
     pub port: u16,
     /// 是否已经启用 Bearer Token 校验。
     #[schema(example = false)]
@@ -459,31 +456,45 @@ async fn health_handler(State(state): State<Arc<SharedState>>) -> Json<HealthRes
     })
 }
 
-/// 启动 HTTP 服务（端口 47800 起退避至 47810，hook-api §1）
-///
-/// 返回 (实际端口, JoinHandle)。端口耗尽返回 Err。
-pub async fn serve(state: Arc<SharedState>) -> Result<(u16, tokio::task::JoinHandle<()>), String> {
+pub struct HookServer {
+    pub port: u16,
+    handle: tokio::task::JoinHandle<()>,
+}
+
+impl HookServer {
+    pub fn stop(self) {
+        self.handle.abort();
+    }
+}
+
+/// 在指定端口启动 HTTP 服务；端口占用时直接返回错误。
+pub async fn serve_on(state: Arc<SharedState>, port: u16) -> Result<HookServer, String> {
     let app = router(state.clone());
-    for port in DEFAULT_PORT..=MAX_PORT {
-        let addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
-        match tokio::net::TcpListener::bind(addr).await {
-            Ok(listener) => {
-                *state.port.write().map_err(|_| "port 锁失败")? = port;
-                let handle = tokio::spawn(async move {
-                    if let Err(e) = axum::serve(listener, app).await {
-                        tracing::error!("hook server 异常退出: {e}");
-                    }
-                });
-                tracing::info!("hook server 监听 127.0.0.1:{port}");
-                return Ok((port, handle));
-            }
-            Err(_) => {
-                tracing::warn!("端口 {port} 被占用，尝试下一端口");
-                continue;
-            }
+    let addr: SocketAddr = format!("127.0.0.1:{port}")
+        .parse()
+        .map_err(|e| format!("端口非法: {e}"))?;
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .map_err(|e| format!("端口 {port} 无法使用: {e}"))?;
+    let handle = tokio::spawn(async move {
+        if let Err(e) = axum::serve(listener, app).await {
+            tracing::error!("hook server 异常退出: {e}");
+        }
+    });
+    tracing::info!("hook server 监听 127.0.0.1:{port}");
+    Ok(HookServer { port, handle })
+}
+
+/// 启动期从首选端口向后退避；最多尝试首选端口及其后 10 个端口。
+pub async fn serve(state: Arc<SharedState>, preferred: u16) -> Result<HookServer, String> {
+    let last = preferred.saturating_add(PORT_FALLBACK_ATTEMPTS);
+    for port in preferred..=last {
+        match serve_on(state.clone(), port).await {
+            Ok(server) => return Ok(server),
+            Err(e) => tracing::warn!("{e}，尝试下一端口"),
         }
     }
-    Err(format!("端口 {DEFAULT_PORT}~{MAX_PORT} 全部被占用"))
+    Err(format!("端口 {preferred}~{last} 全部被占用"))
 }
 
 #[cfg(test)]
@@ -750,15 +761,13 @@ mod tests {
 
     #[tokio::test]
     async fn port_fallback() {
-        // 占用 47800，服务应退避到 47801
-        let _blocker = tokio::net::TcpListener::bind("127.0.0.1:47800")
-            .await
-            .unwrap();
+        let blocker = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let occupied = blocker.local_addr().unwrap().port();
         let state = test_state();
-        let (port, _handle) = serve(state.clone()).await.unwrap();
-        assert_eq!(port, 47801);
-        // 停掉服务释放端口
-        drop(_blocker);
+        let server = serve(state.clone(), occupied).await.unwrap();
+        assert_eq!(server.port, occupied + 1);
+        server.stop();
+        drop(blocker);
     }
 
     #[test]

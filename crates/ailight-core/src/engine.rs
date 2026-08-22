@@ -206,15 +206,28 @@ async fn transport_set_scene(
     transport: &Transport,
     scene: &OutputScene,
 ) -> Result<(), EngineError> {
+    let mut wire_scene = scene.clone();
+    for led in &mut wire_scene.leds {
+        // 临时兼容当前固件：即使是黑色空轨，brightness 也必须是 1..=100。
+        led.brightness = led.brightness.max(1);
+    }
+    for segment in &mut wire_scene.buzzer.segments {
+        // 静音间隔必须保持 frequency=0, volume=0；有声段暂按 1..=100。
+        segment.volume = if segment.frequency_hz == 0 {
+            0
+        } else {
+            segment.volume.max(1)
+        };
+    }
     let frame = transport
-        .set_scene(scene)
+        .set_scene(&wire_scene)
         .await
         .map_err(EngineError::Transport)?;
     // 应答语义对账（协议 §8.5）：非 OK 结果码告警（低电量/参数拒绝等）
     let rc = protocol::parse_set_scene_response(&frame.data);
     if let Ok((rc, _)) = rc {
         if rc != protocol::ResultCode::Ok {
-            tracing::warn!("SET_SCENE 被设备拒绝: {rc}");
+            tracing::warn!(?wire_scene, "SET_SCENE 被设备拒绝: {rc}");
         }
     }
     Ok(())
@@ -368,7 +381,11 @@ mod tests {
         // 主题未映射 MY_CUSTOM？—— default 主题也没有 → 兜底全灭
         let parsed = crate::protocol::parse_frame(&io.writes()[0]).unwrap().0;
         let scene = OutputScene::decode_data(&parsed.data).unwrap();
-        assert_eq!(scene, OutputScene::none());
+        assert!(scene
+            .leds
+            .iter()
+            .all(|led| led.high == protocol::Rgb(0, 0, 0) && led.brightness == 1));
+        assert!(scene.buzzer.segments.is_empty());
     }
 
     #[tokio::test]
@@ -413,7 +430,7 @@ mod tests {
         let parsed = crate::protocol::parse_frame(&io.writes()[0]).unwrap().0;
         let scene = OutputScene::decode_data(&parsed.data).unwrap();
         assert_eq!(scene.apply_mode, crate::protocol::RESTART_SCENE);
-        assert_eq!(scene.leds[0].brightness, 0);
+        assert_eq!(scene.leds[0].brightness, 1);
         assert_eq!(shared.theme_name.read().unwrap().as_str(), "default");
     }
 
@@ -467,7 +484,11 @@ mod tests {
         let parsed = crate::protocol::parse_frame(&io.writes()[2]).unwrap().0;
         assert_eq!(parsed.cmd, crate::protocol::CMD_SET_SCENE);
         let scene = OutputScene::decode_data(&parsed.data).unwrap();
-        assert_eq!(scene, OutputScene::none()); // IDLE → 全灭
+        assert!(scene
+            .leds
+            .iter()
+            .all(|led| led.high == protocol::Rgb(0, 0, 0) && led.brightness == 1));
+        assert!(scene.buzzer.segments.is_empty()); // IDLE → 全灭
     }
 
     /// 反向测试：复现 macOS 启动期 abort 路径（KAD-08 / ADR-0003）。

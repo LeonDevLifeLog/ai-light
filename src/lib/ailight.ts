@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-shell";
 
 export type BusinessStateName =
   | "IDLE"
@@ -117,7 +118,7 @@ export interface ThemeFile {
 }
 
 const mockSnapshot: AppSnapshot = {
-  service: { version: "0.1.0", port: 47_800, tokenEnabled: false },
+  service: { version: "0.1.0", port: 25_679, tokenEnabled: false },
   device: {
     connected: false,
     address: null,
@@ -145,7 +146,7 @@ const mockConfig: AppConfig = {
   version: 1,
   arbitrationMode: "priority",
   activeTheme: "default",
-  portPreference: 47_800,
+  portPreference: 25_679,
   rememberedDevice: null,
   token: "",
   autostart: false,
@@ -226,6 +227,17 @@ async function call<T>(
 }
 
 export const api = {
+  openExternal: async (url: string) => {
+    if (isTauri()) {
+      await open(url);
+      return;
+    }
+    const opened = window.open(url, "_blank");
+    if (!opened) {
+      throw new Error("浏览器阻止了新窗口，请允许弹出窗口后重试");
+    }
+    opened.opener = null;
+  },
   getAppState: async () =>
     isTauri() ? call<AppSnapshot>("get_app_state") : mockSnapshot,
   getThemes: async () =>
@@ -245,6 +257,10 @@ export const api = {
   scanDevices: async () =>
     isTauri() ? call<ScannedDevice[]>("scan_devices") : [],
   connectDevice: (address: string) => call<void>("connect_device", { address }),
+  disconnectDevice: async () =>
+    isTauri() ? call<{ ok: boolean }>("disconnect_device") : { ok: true },
+  forgetDevice: async () =>
+    isTauri() ? call<{ ok: boolean }>("forget_device") : { ok: true },
   triggerState: async (state: string) =>
     isTauri() ? call<boolean>("trigger_state", { state, meta: null }) : true,
   previewScene: (state: string, theme?: string) =>

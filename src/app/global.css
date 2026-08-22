@@ -665,8 +665,7 @@ pre,
   flex-direction: column;
   gap: 10px;
 }
-.device-row,
-.connected-device {
+.device-row {
   display: flex;
   gap: 14px;
   align-items: center;
@@ -684,23 +683,79 @@ pre,
   font-size: 11px;
   color: var(--text-tertiary);
 }
-.device-stats {
-  display: flex;
-  gap: 26px;
-  margin: 0 20px 0 0;
+.connected-device {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+  border-color: var(--status-success-border);
 }
-.device-stats div {
+.connected-device::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  content: "";
+  background: var(--accent);
+}
+.connected-device__identity {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 20px 22px 18px;
+}
+.connected-device__identity .status-tag {
+  margin-left: auto;
+}
+.connected-device__name strong {
+  font-size: 16px;
+  line-height: 1.35;
+}
+.connected-device__name .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connected-device__details {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  padding: 16px 22px 18px;
+  background: var(--overlay-hover);
+  border-top: 1px solid var(--border-soft);
+}
+.device-stats {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(3, minmax(100px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.device-stats > div {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+}
+.device-stat__icon {
+  flex: none;
+  color: var(--text-tertiary);
+}
+.device-stat__copy {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 .device-stats dt {
   font-size: 10px;
   color: var(--text-tertiary);
+  white-space: nowrap;
 }
 .device-stats dd {
-  margin: 3px 0 0;
+  margin: 1px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .inline-alert {
   display: flex;
@@ -917,9 +972,16 @@ pre {
   color: var(--text-tertiary);
 }
 .custom-state-form {
-  display: flex;
-  gap: 12px;
-  align-items: flex-end;
+  display: block;
+}
+.custom-state-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+.custom-state-controls .action-button {
+  min-width: 104px;
 }
 .field {
   display: flex;
@@ -982,6 +1044,14 @@ input[type="range"] {
   border: 1px solid var(--border-soft);
   border-radius: 99px;
 }
+@media (max-width: 640px) {
+  .custom-state-controls {
+    grid-template-columns: 1fr;
+  }
+  .custom-state-controls .action-button {
+    width: 100%;
+  }
+}
 .preview-actions-card {
   display: flex;
   align-items: center;
@@ -1019,6 +1089,38 @@ input[type="range"] {
   margin-top: 2px;
   font-size: 11px;
   color: var(--text-tertiary);
+}
+
+.device-actions,
+.port-control {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.device-actions {
+  flex: none;
+  margin-left: auto;
+}
+.connected-device .device-actions .action-button--ghost {
+  color: var(--text-secondary);
+}
+
+@media (max-width: 1100px) {
+  .connected-device__details {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .connected-device .device-actions {
+    justify-content: flex-end;
+    padding-top: 14px;
+    margin-left: 0;
+    border-top: 1px solid var(--border-soft);
+  }
+}
+
+.port-control input {
+  width: 112px;
 }
 
 .settings-card {
@@ -1099,7 +1201,7 @@ input[type="range"] {
   border: 0;
 }
 .mode-options--tri {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 .mode-option {
   display: flex;
@@ -1157,6 +1259,22 @@ input[type="range"] {
   font-size: 11px;
   line-height: 1.5;
   color: var(--text-tertiary);
+}
+.mode-option--appearance {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px 12px;
+  align-items: center;
+  min-height: 92px;
+  padding: 13px 14px;
+}
+.mode-option--appearance .mode-option__indicator {
+  justify-self: end;
+  margin-top: 0;
+}
+.mode-option--appearance .mode-option__body {
+  grid-column: 1 / -1;
+  gap: 4px;
 }
 .mode-option--active {
   color: var(--foreground);
@@ -2498,6 +2616,9 @@ input[type="range"] {
   color: var(--text-secondary);
 }
 @media (max-width: 900px) {
+  .mode-options--tri {
+    grid-template-columns: 1fr;
+  }
   .te-layout {
     grid-template-columns: 1fr;
   }

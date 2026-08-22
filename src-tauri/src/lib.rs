@@ -3,6 +3,7 @@
 mod commands;
 mod tray;
 
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, RwLock};
 
 use tauri::{Emitter, Manager};
@@ -21,6 +22,10 @@ pub struct AppState {
     pub engine: Engine,
     pub device_io: Arc<DeviceIo>,
     pub config: RwLock<AppConfig>,
+    pub hook_server: tokio::sync::Mutex<Option<ailight_core::hook_server::HookServer>>,
+    pub active_ble: tokio::sync::Mutex<Option<Arc<ailight_core::ble::BleIo>>>,
+    pub connection_lock: tokio::sync::Mutex<()>,
+    pub connection_generation: AtomicU64,
 }
 
 fn now_ms() -> u64 {
@@ -74,16 +79,19 @@ pub fn run() {
             }
 
             // 共享状态 + 主题
-            let mode =
-                ArbitrationMode::from_str(&config.arbitration_mode).unwrap_or(ArbitrationMode::Priority);
+            let mode = ArbitrationMode::from_str(&config.arbitration_mode)
+                .unwrap_or(ArbitrationMode::Priority);
             let shared = SharedState::new(env!("CARGO_PKG_VERSION"), mode, now_ms);
             let theme = theme::load_builtin(&config.active_theme)
                 .or_else(|| theme::load_builtin("default"))
                 .expect("内置 default 主题必须合法");
             *shared.theme.write().unwrap() = Some(theme);
             *shared.theme_name.write().unwrap() = config.active_theme.clone();
-            *shared.token.write().unwrap() =
-                if config.token.is_empty() { None } else { Some(config.token.clone()) };
+            *shared.token.write().unwrap() = if config.token.is_empty() {
+                None
+            } else {
+                Some(config.token.clone())
+            };
 
             // 设备代理 + 引擎
             let device_io = DeviceIo::new();
@@ -94,15 +102,6 @@ pub fn run() {
                 let _guard = tauri::async_runtime::handle().inner().enter();
                 Engine::new(shared.clone(), device_io.clone())
             };
-
-            // L1 HTTP 接入服务
-            let hs_shared = shared.clone();
-            tauri::async_runtime::spawn(async move {
-                match ailight_core::hook_server::serve(hs_shared).await {
-                    Ok((port, _)) => tracing::info!("hook server 127.0.0.1:{port}"),
-                    Err(e) => eprintln!("hook server 启动失败: {e}"),
-                }
-            });
 
             // events 桥接：轮询仲裁状态（含 hold 回落）→ 前端 emit
             let handle = app.handle().clone();
@@ -139,7 +138,39 @@ pub fn run() {
                 Err(e) => eprintln!("autostart 校准失败（保留本地缓存）: {e}"),
             }
 
-            app.manage(AppState { shared, engine, device_io, config: RwLock::new(config) });
+            let preferred_port = config.port_preference;
+            app.manage(AppState {
+                shared,
+                engine,
+                device_io,
+                config: RwLock::new(config),
+                hook_server: tokio::sync::Mutex::new(None),
+                active_ble: tokio::sync::Mutex::new(None),
+                connection_lock: tokio::sync::Mutex::new(()),
+                connection_generation: AtomicU64::new(0),
+            });
+
+            // L1 HTTP 接入服务：启动期允许从首选端口向后退避。
+            let hs_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let state = hs_handle.state::<AppState>();
+                match ailight_core::hook_server::serve(state.shared.clone(), preferred_port).await {
+                    Ok(server) => {
+                        let port = server.port;
+                        let mut slot = state.hook_server.lock().await;
+                        if slot.is_some() {
+                            server.stop();
+                            return;
+                        }
+                        if let Ok(mut current) = state.shared.port.write() {
+                            *current = port;
+                        }
+                        *slot = Some(server);
+                        tracing::info!("hook server 127.0.0.1:{port}");
+                    }
+                    Err(e) => eprintln!("hook server 启动失败: {e}"),
+                }
+            });
 
             // 托盘常驻（KAD-06）：图标 + 菜单 + 动态状态文字
             let tray_state = tray::init(app.handle())?;
@@ -163,12 +194,29 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 if let Some(dev) = remembered {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    match commands::connect_device_internal(&auto_handle, &dev.address, &dev.name).await
+                    let generation = auto_handle
+                        .state::<AppState>()
+                        .connection_generation
+                        .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+                        + 1;
+                    match commands::connect_device_internal(
+                        &auto_handle,
+                        &dev.address,
+                        &dev.name,
+                        generation,
+                    )
+                    .await
                     {
                         Ok(()) => tracing::info!("已自动连接设备 {}", dev.name),
                         Err(e) => {
                             tracing::warn!("自动连接失败: {e}，进入退避重连");
-                            commands::spawn_reconnect(auto_handle, dev.address, dev.name, 1);
+                            commands::spawn_reconnect(
+                                auto_handle,
+                                dev.address,
+                                dev.name,
+                                1,
+                                generation,
+                            );
                         }
                     }
                 }
@@ -191,6 +239,8 @@ pub fn run() {
             commands::import_theme,
             commands::scan_devices,
             commands::connect_device,
+            commands::disconnect_device,
+            commands::forget_device,
             commands::trigger_state,
             commands::preview_scene,
             commands::reset_outputs,

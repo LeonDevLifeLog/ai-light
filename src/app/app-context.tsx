@@ -118,6 +118,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               notify({ tone: "info", title: "设备已断开，正在重连…" });
             } else if (device.reason === "reconnect_failed") {
               notify({ tone: "error", title: "重连失败，请检查设备" });
+            } else if (
+              device.reason === "manual_disconnect" ||
+              device.reason === "forgotten"
+            ) {
+              return;
             } else {
               notify({ tone: "info", title: "设备已断开" });
             }

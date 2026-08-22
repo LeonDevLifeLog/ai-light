@@ -44,7 +44,7 @@
 
 **目标**：提供标准 API 服务，各智能体客户端通过自身 hook 机制调用，形成可插拔的事件接入。
 
-**正式规范**：`docs/specs/hook-api.md`（V1.0）——本地 HTTP `127.0.0.1:47800`，`POST /hook` + `GET /api/status` + `GET /api/health`；标准 5 态事件模型；幂等对账（applied）；可选 token。
+**正式规范**：`docs/specs/hook-api.md`（V1.0）——本地 HTTP `127.0.0.1:25679`，`POST /hook` + `GET /api/status` + `GET /api/health`；标准 5 态事件模型；幂等对账（applied）；可选 token。
 
 **第一期支持清单**（🟢 配置级接入）：
 - Claude Code（本机 CLI 2.1.31）——hooks 原生支持 HTTP handler

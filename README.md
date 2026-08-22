@@ -26,10 +26,10 @@ Hook API → 状态仲裁 → 主题映射 → 场景编译 → BLE 状态灯
 
 ## 快速体验 Hook API
 
-应用启动后，Hook Server 默认监听 `http://127.0.0.1:47800`。如果端口被占用，会依次尝试到 `47810`。
+应用启动后，Hook Server 默认监听 `http://127.0.0.1:25679`。如果首选端口被占用，会向后尝试最多 10 个端口；也可在设置页保存新端口并单独热重启 Hook Server。
 
 ```bash
-curl http://127.0.0.1:47800/hook \
+curl http://127.0.0.1:25679/hook \
   --request POST \
   --header 'Content-Type: application/json' \
   --data '{
@@ -41,10 +41,10 @@ curl http://127.0.0.1:47800/hook \
 
 运行时接口：
 
-- OpenAPI JSON：`http://127.0.0.1:47800/openapi.json`
-- Swagger UI：`http://127.0.0.1:47800/docs`
-- 当前状态：`http://127.0.0.1:47800/api/status`
-- 健康检查：`http://127.0.0.1:47800/api/health`
+- OpenAPI JSON：`http://127.0.0.1:25679/openapi.json`
+- Swagger UI：`http://127.0.0.1:25679/docs`
+- 当前状态：`http://127.0.0.1:25679/api/status`
+- 健康检查：`http://127.0.0.1:25679/api/health`
 
 完整说明见 [Hook API 使用指南](./docs/specs/hook-api.md)。
 
