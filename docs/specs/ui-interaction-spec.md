@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.14 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.14，2026-08-21） |
+| 文档版本 | V1.15 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.15，2026-08-22） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -925,18 +925,20 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 
 ---
 
-### 8.3 `StateTab`（主题创作器状态切换）
+### 8.3 `StateChip`（主题创作器状态切换）
 
 **8.3.1 用途**
-主题创作器内标准 5 态 + 用户自定义状态 tab。
+主题创作器内标准 5 态 + 用户自定义状态芯片；显示中文名、英文编码与状态色点。
 
 **8.3.2 对外契约**
 
 | 类别 | 项 | 说明 |
 |---|---|---|
 | Props | `state` | `BusinessState` |
+| Props | `label` | 中文名（`IDLE→空闲` 等；自定义状态回退为 `state`） |
+| Props | `code` | 状态英文编码 |
+| Props | `accent` | 状态色点颜色（`idle/waiting→gray/amber`、`working/success→green`、`error→red`、自定义→violet） |
 | Props | `isActive` | boolean |
-| Props | `previewColors` | `[color × 3]`（3 灯色块缩略） |
 | Emit | `onClick(state)` | 切换 editingState |
 
 **8.3.3 视觉态全集**
@@ -952,22 +954,23 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 | Source Event | 字段 | 同步方式 |
 |---|---|---|
 | 用户点击 | `editingState` | patch |
-| `theme-changed` | 预览色块 | patch |
+| `theme-changed` | 色点 / 状态列表 | patch |
 
 **8.3.5 边界条件**
 - 标准 5 态严格按固定顺序且不可删除
 - 自定义状态显示在标准状态之后，可添加、删除
+- 状态名仅 `[A-Za-z0-9_-]{1,64}`；新增时校验
 
 **8.3.6 无障碍**
-- 5 个 tab = `<button>` + `aria-pressed`
-- `role="tablist"` 父容器（若实现完整 ARIA tabs 模式）
+- 芯片 = `<button>` + `aria-selected`
+- 父容器 `role="tablist"`，子项 `role="tab"`
 
 ---
 
 ### 8.4 `MotionPresetCard`（6 个运动预设）
 
 **8.4.1 用途**
-快速创作第一步：常亮 / 呼吸 / 闪烁 / 流动 / 渐亮 / 渐弱。协议曲线名不对用户展示。
+第一步动效：常亮 / 呼吸 / 闪烁 / 流动 / 渐亮 / 渐弱。协议曲线名不对用户展示；卡片内嵌波形图示（`MotionGlyph`）。
 
 **8.4.2 对外契约**
 
@@ -975,7 +978,7 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 |---|---|---|
 | Props | `motion` | `steady / breathe / blink / flow / fade-in / fade-out` |
 | Props | `isActive` | boolean |
-| Props | `previewColor` | string（hex） |
+| Props | `curve` | `LedTrack["curve"]`（用于波形图示） |
 | Emit | `onClick(motion)` | 生成对应三灯轨道参数 |
 
 **8.4.3 视觉态全集**
@@ -986,10 +989,11 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 | `active` | `isActive == true` | accent-soft + accent border + box-shadow 1px accent |
 | `hover` | 鼠标悬停 | border 提升 |
 
-**8.4.4 联动矩阵**：纯展示 + 触发。
+**8.4.4 联动矩阵**：纯展示 + 触发。`isActive` 由当前场景**主导曲线**（第一条非熄灭灯轨的 `curve`）推导，不随选中灯切换。
 
 **8.4.5 边界条件**
 - 6 种运动效果严格按固定顺序
+- 点击任一预设会把当前场景**全部三条灯轨**设为该曲线（非 `CONSTANT` 时自动补"低点颜色"为高点色的 0.4 倍暗色）
 - SINE 协议枚举预留但 UI 不暴露（V0.4 §7.2）
 
 **8.4.6 无障碍**
@@ -997,28 +1001,29 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 
 ---
 
-### 8.5 `ColorPickerRow`（灯轨色行）
+### 8.5 `LedColorRow`（单灯颜色行）
 
 **8.5.1 用途**
-灯轨颜色编辑：low color picker + high color picker + brightness slider。
+顶 / 中 / 底三灯各一行的颜色与亮度编辑；熄灭灯显示"熄灭"虚线色板与提示。
 
 **8.5.2 对外契约**
 
 | 类别 | 项 | 说明 |
 |---|---|---|
 | Props | `trackLabel` | `'顶' \| '中' \| '底'` |
-| Props | `lowColor` | string |
 | Props | `highColor` | string |
 | Props | `brightness` | number (0~100) |
-| Props | `quickMode` | boolean（隐藏精确协议参数） |
-| Emit | `onChangeLow(color)` / `onChangeHigh(color)` / `onChangeBrightness(b)` | — |
+| Props | `off` | boolean（`leds[i] == null`） |
+| Props | `advanced` | boolean（显示低点颜色等精确参数） |
+| Emit | `onChangeHigh(color)` / `onChangeBrightness(b)` | — |
 
 **8.5.3 视觉态全集**
 
 | 态 | 触发条件 | 视觉 |
 |---|---|---|
-| `default` | 初始 | 60px 标签 + 3 列 picker / slider |
-| `quickMode` | `quickMode == true` | 只显示用户可理解的颜色与强度控制 |
+| `default` | 灯有颜色 | 色板 + 亮度滑块 |
+| `off` | `leds[i] == null` | 虚线/斜纹色板 + "熄灭"标签 + 亮度值进入该灯后生效 |
+| `advanced` | `advanced == true` | 展开低点颜色、周期、出场时间等 |
 
 **8.5.4 联动矩阵**
 
@@ -1027,13 +1032,13 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 | `editingState` 切换 | 重置为新状态的当前值 | full |
 
 **8.5.5 边界条件**
-- CONSTANT 波形时：`lowColor` picker 禁用 + 提示 "CONSTANT 模式下忽略"
-- `brightness == 0` → 视觉上等于 off；tooltip "亮度为 0 = 全黑"
-- 颜色非法（如空字符串）→ fallback `#000000`
+- `leds[i] == null` → 该灯在预览熄灭；用户点选颜色即用 `CONSTANT` 默认灯轨点亮
+- `CONSTANT` 波形：低点颜色隐藏；`SQUARE` 额外显示占空比
+- `brightness == 0` → 视觉上等于 off；`leds[i] == null` 与 `brightness == 0` 语义不同（前者灯轨不存在）
 
 **8.5.6 无障碍**
-- 颜色 picker = `<input type="color">` + `<label>`
-- 滑块 = `<input type="range">` + `aria-label`
+- 颜色 picker = `<input type="color">` + `aria-label`
+- 滑块 = `<input type="range">` + `aria-label`（父 label 文本）
 
 ---
 
@@ -1769,6 +1774,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.15 | 2026-08-22 | 主题创作器组件契约重构（以代码为事实源，用户触发审计）：§8.3 `StateTab` 改名为 `StateChip`，契约改为中文名+编码+状态色点；§8.4 `MotionPresetCard` 补充 `curve` prop 与"主导曲线判定 + 三灯一起应用"边界；§8.5 `ColorPickerRow` 改名为 `LedColorRow`，新增 `off` 态（`leds[i]==null` → 虚线色板 + 熄灭标签）与 `advanced` 态；§8.4/8.5 注明软件动画预览（LivePreview）按真实曲线/周期/相位/亮度模拟。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（沿用 `THEME_INVALID` / `CONFLICT` / `BAD_REQUEST` / `INTERNAL`）；§4.2 result code 与蓝牙 V0.4 §3.6 一致（本次未触碰蓝牙章节）；§6~§8 主题字段与 theme-format 字段表一致（仅 UI 改名，字段未变）：`curve / low / high / brightness / period_ms / phase_deg / duty_percent / repeat / end_level / transition_ms / hold_ms / buzzer.segments` 均在 DTO Schema；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
 | V1.14 | 2026-08-21 | 外观模式实装（亮/暗/跟随系统，用户触发）：§3.6 配置层联动表新增 `themeMode` 行（`html[data-theme]` + Settings 卡片选中态）；§7.6 Settings 区域显示组加入 themeMode；§7.6.2 补充三张 ModeOption 卡片契约（`update_config(themeMode)` 持久化 + `prefers-color-scheme` 实时响应）；§8.11 SegControl 用途示例更新（外观模式改用卡片）。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4（沿用 `BAD_REQUEST`）；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
 | V1.13 | 2026-08-21 | 设置页 UI 对账（以代码为事实源，用户触发审计）：§3.6 `arbitrationMode` 联动目标更新为选项卡片；§6.6 `SettingRow` 契约改为 `icon/title/description?/stacked?/children`；§7.6 Settings 区域补充仲裁模式选项卡片（ModeOption）与当前主题预览入口；§8.12 Switch 补开启态视觉；§8.13 Select 注明仲裁模式已改用卡片；§7.5 快捷键引用从失效的 §13.8 修正为附录 A.8。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5（含新增 `open-config`）；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003/0004、KAD-04/06/08/09 引用有效。 |
 | V1.12 | 2026-08-21 | G-06 开机自启实装对账（KAD-09 / ADR-0004）：§3.6 配置层联动表新增 `autostart` 行并移除 P2 标注；§6.6.5 边界条件改为真实切换 + `AUTOSTART_FAILED` 失败路径；§7 Settings 组 autostart 由禁用态改为可切换。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4（含新增 `AUTOSTART_FAILED`）；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003/0004、KAD-04/06/08/09 引用有效。同步修正版本头漂移（V1.10 → V1.12）。 |
