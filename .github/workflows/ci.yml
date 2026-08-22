@@ -64,7 +64,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'pull_request' || (github.event_name != 'workflow_dispatch' && needs.quality.outputs.cross-platform != 'true') && '[{"name":"Linux","platform":"ubuntu-22.04"}]' || '[{"name":"Linux","platform":"ubuntu-22.04"},{"name":"macOS","platform":"macos-latest"},{"name":"Windows","platform":"windows-latest"}]') }}
+        include: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name != 'workflow_dispatch' && needs.quality.outputs.cross-platform != 'true')) && '[{"name":"Linux","platform":"ubuntu-22.04"}]' || '[{"name":"Linux","platform":"ubuntu-22.04"},{"name":"macOS","platform":"macos-latest"},{"name":"Windows","platform":"windows-latest"}]') }}
     steps:
       - uses: actions/checkout@v7
       - name: Switch apt sources (azure mirror workaround)

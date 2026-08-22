@@ -91,6 +91,7 @@ pnpm typecheck        # tsc --noEmit
    - workflow 自身、Rust / Tauri、依赖锁文件必须触发跨平台验证。
    - 手动触发不得被文件过滤器跳过。
    - PR 事件通过 GitHub API 读取变更文件，必须保留 `pull-requests: read` 权限。
+   - 动态矩阵交给 `fromJSON` 的条件表达式必须整体加括号，确保结果是 JSON 字符串而非布尔值。
 3. 不直接使用 workflow 顶层 `paths-ignore` 跳过 required workflow，避免分支保护检查长期 pending。
 4. 优先复用现有 job 输出，避免为轻量变更检测新增按分钟计费的独立 job。
 5. Linux 系统依赖必须使用 `awalsh128/cache-apt-pkgs-action`，不得退回手写 `apt-get`（azure 镜像不可达会导致超时）。
