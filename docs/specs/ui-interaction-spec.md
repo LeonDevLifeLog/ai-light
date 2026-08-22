@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.15 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.15，2026-08-22） |
+| 文档版本 | V1.17 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.17，2026-08-22） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -421,7 +421,10 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 - `editingState` 切换**不丢**当前模式的字段
 - 标准 5 态不可删除；允许创建和删除自定义状态
 - 用户界面不以“相位”为主要标签，使用“灯光顺序 / 出场时间”
-- 取消/关闭 Dialog 时存在未保存修改 → 必须确认后才丢弃
+- 取消、右上角关闭或 Esc 时存在未保存修改 → 主编辑器切换为应用内确认 Dialog；[继续编辑] 恢复编辑器，[放弃修改] 才关闭，禁止依赖原生 `window.confirm`
+- [逐灯精确调整] 位于基础编辑内容末尾，以 `aria-expanded` 控制紧邻其后的精确字段；展开态不得使用主操作色
+- [借用主题效果] 为完整 accordion：标题/说明全宽触发，展开后按“来源主题 + 来源状态”与“覆盖目标 + 借用此效果”两行排列
+- 右侧预览标题持续显示当前 `editingState` 的中文名，状态切换时同步 patch
 
 ---
 
@@ -1033,6 +1036,7 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 
 **8.5.5 边界条件**
 - `leds[i] == null` → 该灯在预览熄灭；用户点选颜色即用 `CONSTANT` 默认灯轨点亮
+- 颜色控件不接受 alpha；[熄灭此灯] 将灯轨设为 `null`，[点亮此灯] 创建合法默认灯轨，作为“透明/无颜色”的协议内表达
 - `CONSTANT` 波形：低点颜色隐藏；`SQUARE` 额外显示占空比
 - `brightness == 0` → 视觉上等于 off；`leds[i] == null` 与 `brightness == 0` 语义不同（前者灯轨不存在）
 
@@ -1774,6 +1778,8 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.17 | 2026-08-22 | 主题创作器关闭与熄灯交互修复：§5.4 取消/关闭/Esc 改为应用内放弃修改确认 Dialog；§8.5 明确颜色不支持 alpha，“透明/无颜色”以灯轨 `null` 表达并提供点亮/熄灭双向控制。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（错误路径未变）；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 的 `leds` / `high` 与 theme-format 字段一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
+| V1.16 | 2026-08-22 | 主题创作器布局 review 优化：§5.4 补充逐灯精确调整 disclosure、借用效果 accordion 与预览状态标题契约；进阶入口移至基础编辑末尾，展开内容与触发器相邻，且不使用主操作色。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（错误路径未变）；§4.2 result code 与蓝牙 V0.4 §3.6 一致（协议行为未变）；§6~§8 主题字段与 theme-format 字段表一致（未增删字段）；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
 | V1.15 | 2026-08-22 | 主题创作器组件契约重构（以代码为事实源，用户触发审计）：§8.3 `StateTab` 改名为 `StateChip`，契约改为中文名+编码+状态色点；§8.4 `MotionPresetCard` 补充 `curve` prop 与"主导曲线判定 + 三灯一起应用"边界；§8.5 `ColorPickerRow` 改名为 `LedColorRow`，新增 `off` 态（`leds[i]==null` → 虚线色板 + 熄灭标签）与 `advanced` 态；§8.4/8.5 注明软件动画预览（LivePreview）按真实曲线/周期/相位/亮度模拟。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（沿用 `THEME_INVALID` / `CONFLICT` / `BAD_REQUEST` / `INTERNAL`）；§4.2 result code 与蓝牙 V0.4 §3.6 一致（本次未触碰蓝牙章节）；§6~§8 主题字段与 theme-format 字段表一致（仅 UI 改名，字段未变）：`curve / low / high / brightness / period_ms / phase_deg / duty_percent / repeat / end_level / transition_ms / hold_ms / buzzer.segments` 均在 DTO Schema；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
 | V1.14 | 2026-08-21 | 外观模式实装（亮/暗/跟随系统，用户触发）：§3.6 配置层联动表新增 `themeMode` 行（`html[data-theme]` + Settings 卡片选中态）；§7.6 Settings 区域显示组加入 themeMode；§7.6.2 补充三张 ModeOption 卡片契约（`update_config(themeMode)` 持久化 + `prefers-color-scheme` 实时响应）；§8.11 SegControl 用途示例更新（外观模式改用卡片）。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4（沿用 `BAD_REQUEST`）；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
 | V1.13 | 2026-08-21 | 设置页 UI 对账（以代码为事实源，用户触发审计）：§3.6 `arbitrationMode` 联动目标更新为选项卡片；§6.6 `SettingRow` 契约改为 `icon/title/description?/stacked?/children`；§7.6 Settings 区域补充仲裁模式选项卡片（ModeOption）与当前主题预览入口；§8.12 Switch 补开启态视觉；§8.13 Select 注明仲裁模式已改用卡片；§7.5 快捷键引用从失效的 §13.8 修正为附录 A.8。5 项语义硬检查通过：§3 Source Events 均存在于 ipc-contract §5（含新增 `open-config`）；§4.1 AppError.code 均在 ipc-contract §4；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 字段表一致；ADR-0001/0003/0004、KAD-04/06/08/09 引用有效。 |

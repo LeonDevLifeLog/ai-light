@@ -441,6 +441,7 @@ function ThemeEditor({
   const [mixOpen, setMixOpen] = useState(false);
   const [mixTheme, setMixTheme] = useState("default");
   const [mixState, setMixState] = useState("WORKING");
+  const [confirmingClose, setConfirmingClose] = useState(false);
 
   useEffect(() => {
     if (source && open) {
@@ -463,6 +464,7 @@ function ThemeEditor({
       setNewState("");
       setMixTheme("default");
       setMixState("WORKING");
+      setConfirmingClose(false);
     }
   }, [source, open]);
 
@@ -541,6 +543,18 @@ function ThemeEditor({
     const nextScene = next.scenes[mapping.scene];
     const current = nextScene.leds[index] ?? defaultTrack("#22C55E");
     nextScene.leds[index] = normalizeTrack(current, patch);
+    setDraft(next);
+  };
+
+  const toggleLed = (index: number) => {
+    if (!scene) {
+      return;
+    }
+    const next = cloneTheme(draft);
+    const nextScene = next.scenes[mapping.scene];
+    nextScene.leds[index] = nextScene.leds[index]
+      ? null
+      : defaultTrack(["#EF4444", "#F59E0B", "#22C55E"][index]);
     setDraft(next);
   };
 
@@ -723,10 +737,11 @@ function ThemeEditor({
     const initial = cloneTheme(source);
     initial.theme.name = `${source.theme.name}-custom`;
     const changed = JSON.stringify(initial) !== JSON.stringify(draft);
-    // biome-ignore lint/suspicious/noAlert: native confirmation prevents accidental loss before the dedicated draft dialog lands.
-    if (!changed || window.confirm("放弃尚未保存的主题修改？")) {
+    if (!changed) {
       onClose();
+      return;
     }
+    setConfirmingClose(true);
   };
 
   const previewDraft = async () => {
@@ -772,7 +787,7 @@ function ThemeEditor({
       setDraft(next);
       notify({
         tone: "success",
-        title: "效果已借出",
+        title: "已借用效果",
         message: `${displayNames[mixTheme] ?? mixTheme} · ${stateLabels[mixState]?.title ?? mixState} → ${stateLabels[selectedState]?.title ?? selectedState}`,
       });
     } catch (error) {
@@ -787,6 +802,30 @@ function ThemeEditor({
   const selectedIsStandard = standardStates.includes(
     selectedState as (typeof standardStates)[number]
   );
+
+  if (confirmingClose) {
+    return (
+      <Dialog
+        footer={
+          <>
+            <ActionButton onClick={() => setConfirmingClose(false)}>
+              继续编辑
+            </ActionButton>
+            <ActionButton onClick={onClose} tone="danger">
+              放弃修改
+            </ActionButton>
+          </>
+        }
+        onClose={() => setConfirmingClose(false)}
+        open={open}
+        title="放弃尚未保存的修改？"
+      >
+        <p className="te-discard-copy">
+          当前主题的修改尚未保存，关闭后将丢失。
+        </p>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog
@@ -823,14 +862,6 @@ function ThemeEditor({
           />
           <small>仅支持字母、数字、下划线和连字符</small>
         </div>
-        <ActionButton
-          aria-pressed={advanced}
-          onClick={() => setAdvanced((value) => !value)}
-          tone={advanced ? "primary" : "ghost"}
-        >
-          <SlidersHorizontal size={16} />
-          {advanced ? "收起进阶参数" : "进阶参数"}
-        </ActionButton>
       </div>
 
       <section className="te-section">
@@ -897,53 +928,66 @@ function ThemeEditor({
         <div className="te-layout">
           <div className="te-controls">
             <div className="te-borrow">
-              <ActionButton
+              <button
                 aria-expanded={mixOpen}
+                className="te-borrow__trigger"
                 onClick={() => setMixOpen((value) => !value)}
-                tone="ghost"
+                type="button"
               >
-                <Wand2 size={16} /> 从其他主题借用效果
+                <Wand2 aria-hidden="true" size={16} />
+                <span className="te-borrow__heading">
+                  <strong>借用主题效果</strong>
+                  <small>复制其他主题的灯光与声音到当前状态</small>
+                </span>
                 <ChevronDown
                   aria-hidden="true"
                   className={cn("te-chevron", mixOpen && "is-open")}
                   size={16}
                 />
-              </ActionButton>
+              </button>
               {mixOpen ? (
                 <div className="te-borrow__panel">
-                  <div className="field">
-                    <label htmlFor="mix-theme">来源主题</label>
-                    <select
-                      id="mix-theme"
-                      onChange={(event) => setMixTheme(event.target.value)}
-                      value={mixTheme}
-                    >
-                      {availableThemes.map((theme) => (
-                        <option key={theme.name} value={theme.name}>
-                          {displayNames[theme.name] ?? theme.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label htmlFor="mix-state">借用状态</label>
-                    <select
-                      id="mix-state"
-                      onChange={(event) => setMixState(event.target.value)}
-                      value={mixState}
-                    >
-                      {["IDLE", "WORKING", "WAITING", "SUCCESS", "ERROR"].map(
-                        (state) => (
-                          <option key={state} value={state}>
-                            {stateLabels[state]?.title ?? state}
+                  <div className="te-borrow__fields">
+                    <div className="field">
+                      <label htmlFor="mix-theme">来源主题</label>
+                      <select
+                        id="mix-theme"
+                        onChange={(event) => setMixTheme(event.target.value)}
+                        value={mixTheme}
+                      >
+                        {availableThemes.map((theme) => (
+                          <option key={theme.name} value={theme.name}>
+                            {displayNames[theme.name] ?? theme.name}
                           </option>
-                        )
-                      )}
-                    </select>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="mix-state">来源状态</label>
+                      <select
+                        id="mix-state"
+                        onChange={(event) => setMixState(event.target.value)}
+                        value={mixState}
+                      >
+                        {["IDLE", "WORKING", "WAITING", "SUCCESS", "ERROR"].map(
+                          (state) => (
+                            <option key={state} value={state}>
+                              {stateLabels[state]?.title ?? state}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </div>
                   </div>
-                  <ActionButton onClick={() => runAsync(mixFromTheme())}>
-                    应用到 {stateLabels[selectedState]?.title ?? selectedState}
-                  </ActionButton>
+                  <div className="te-borrow__action">
+                    <span>
+                      将覆盖：当前主题 ·{" "}
+                      {stateLabels[selectedState]?.title ?? selectedState}
+                    </span>
+                    <ActionButton onClick={() => runAsync(mixFromTheme())}>
+                      借用此效果
+                    </ActionButton>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -1022,19 +1066,28 @@ function ThemeEditor({
                     <div className="te-led-row" key={index}>
                       <div className="te-led-row__head">
                         <span className="te-led-row__name">{label}灯</span>
-                        {item ? (
-                          <span className="te-led-row__motion">
-                            {item.curve === "CONSTANT"
-                              ? "常亮"
-                              : (motionPresets.find(
-                                  (preset) => preset.curve === item.curve
-                                )?.label ?? item.curve)}
-                          </span>
-                        ) : (
-                          <span className="te-led-row__motion te-led-row__motion--off">
-                            熄灭
-                          </span>
-                        )}
+                        <div className="te-led-row__meta">
+                          {item ? (
+                            <span className="te-led-row__motion">
+                              {item.curve === "CONSTANT"
+                                ? "常亮"
+                                : (motionPresets.find(
+                                    (preset) => preset.curve === item.curve
+                                  )?.label ?? item.curve)}
+                            </span>
+                          ) : (
+                            <span className="te-led-row__motion te-led-row__motion--off">
+                              熄灭
+                            </span>
+                          )}
+                          <button
+                            className="te-led-row__toggle"
+                            onClick={() => toggleLed(index)}
+                            type="button"
+                          >
+                            {item ? "熄灭此灯" : "点亮此灯"}
+                          </button>
+                        </div>
                       </div>
                       <div className="te-led-row__body">
                         <label
@@ -1134,12 +1187,26 @@ function ThemeEditor({
               </div>
             </fieldset>
 
+            <button
+              aria-expanded={advanced}
+              className="te-advanced-toggle"
+              onClick={() => setAdvanced((value) => !value)}
+              type="button"
+            >
+              <SlidersHorizontal aria-hidden="true" size={16} />
+              <span>
+                <strong>逐灯精确调整</strong>
+                <small>单独调整每颗灯的运动、周期和切换参数</small>
+              </span>
+              <ChevronDown
+                aria-hidden="true"
+                className={cn("te-chevron", advanced && "is-open")}
+                size={16}
+              />
+            </button>
+
             {advanced ? (
               <section className="te-advanced">
-                <div className="te-section__head">
-                  <h3>逐灯精确调整</h3>
-                  <p>标准状态共用的效果，可在此逐灯微调参数。</p>
-                </div>
                 <div className="te-seg te-seg--3">
                   {[0, 1, 2].map((index) => (
                     <button
@@ -1447,6 +1514,12 @@ function ThemeEditor({
           </div>
 
           <aside className="te-stage">
+            <div className="te-stage__head">
+              <span>当前预览</span>
+              <strong>
+                {stateLabels[selectedState]?.title ?? selectedState}
+              </strong>
+            </div>
             <LivePreview scene={scene} />
             {sceneReferences.length > 1 ? (
               <div className="te-shared te-shared--stage">

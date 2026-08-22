@@ -1875,9 +1875,7 @@ input[type="range"] {
 
 /* ===== 主题创作器（ThemeEditor）===== */
 .te-topbar {
-  display: flex;
-  gap: 16px;
-  align-items: flex-end;
+  display: block;
 }
 .te-topbar > .field {
   min-width: 0;
@@ -1971,6 +1969,7 @@ input[type="range"] {
   grid-template-columns: minmax(0, 1fr) 300px;
   gap: 18px;
   align-items: start;
+  margin-top: 18px;
 }
 .te-controls {
   display: flex;
@@ -1979,12 +1978,44 @@ input[type="range"] {
   min-width: 0;
 }
 .te-borrow {
+  overflow: hidden;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+}
+.te-borrow__trigger,
+.te-advanced-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 12px;
+  color: var(--foreground);
+  text-align: left;
+  background: transparent;
+  border: 0;
+}
+.te-borrow__trigger:hover,
+.te-advanced-toggle:hover {
+  background: var(--surface-hover);
+}
+.te-borrow__heading,
+.te-advanced-toggle > span {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
+  min-width: 0;
 }
-.te-borrow .action-button {
-  align-self: flex-start;
+.te-borrow__heading strong,
+.te-advanced-toggle strong {
+  font-size: 12px;
+  font-weight: 650;
+}
+.te-borrow__heading small,
+.te-advanced-toggle small {
+  font-size: 10px;
+  color: var(--text-tertiary);
 }
 .te-chevron {
   transition: transform 150ms ease;
@@ -1993,14 +2024,26 @@ input[type="range"] {
   transform: rotate(180deg);
 }
 .te-borrow__panel {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: 10px;
-  align-items: end;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   padding: 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  border-top: 1px solid var(--border-soft);
+}
+.te-borrow__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.te-borrow__action {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+.te-borrow__action > span {
+  font-size: 10px;
+  color: var(--text-tertiary);
 }
 .te-group {
   padding: 0;
@@ -2115,6 +2158,11 @@ input[type="range"] {
   font-size: 12px;
   font-weight: 650;
 }
+.te-led-row__meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 .te-led-row__motion {
   padding: 2px 7px;
   font-size: 9px;
@@ -2125,6 +2173,19 @@ input[type="range"] {
 .te-led-row__motion--off {
   color: var(--text-tertiary);
   border-style: dashed;
+}
+.te-led-row__toggle {
+  padding: 3px 7px;
+  font-size: 9px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: 99px;
+}
+.te-led-row__toggle:hover {
+  color: var(--foreground);
+  background: var(--surface-hover);
+  border-color: var(--border);
 }
 .te-led-row__body {
   display: flex;
@@ -2230,6 +2291,11 @@ input[type="range"] {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
 }
+.te-advanced-toggle {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+}
 .te-grid2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2292,6 +2358,23 @@ input[type="range"] {
     var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
+}
+.te-stage__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  width: 100%;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.te-stage__head span {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+.te-stage__head strong {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--foreground);
 }
 .te-preview {
   display: flex;
@@ -2368,6 +2451,11 @@ input[type="range"] {
   line-height: 1.5;
   color: var(--text-tertiary);
   text-align: center;
+}
+.te-discard-copy {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
 @media (max-width: 900px) {
   .te-layout {
