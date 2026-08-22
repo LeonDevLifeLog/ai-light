@@ -131,9 +131,9 @@ const stateLabels: Record<
 > = {
   IDLE: { title: "空闲", tagline: "等待任务", accent: "#94a3b8" },
   WORKING: { title: "工作中", tagline: "正在处理", accent: "#22c55e" },
-  WAITING: { title: "等你回复", tagline: "需要输入", accent: "#f59e0b" },
-  SUCCESS: { title: "完成", tagline: "已顺利完成", accent: "#4ade80" },
-  ERROR: { title: "出错", tagline: "遇到问题", accent: "#ef4444" },
+  WAITING: { title: "等待中", tagline: "需要输入", accent: "#f59e0b" },
+  SUCCESS: { title: "已完成", tagline: "已顺利完成", accent: "#4ade80" },
+  ERROR: { title: "出错了", tagline: "遇到问题", accent: "#ef4444" },
 };
 
 const customAccent = "#a78bfa";
@@ -446,7 +446,10 @@ function ThemeEditor({
   useEffect(() => {
     if (source && open) {
       const next = cloneTheme(source);
-      next.theme.name = `${source.theme.name}-custom`;
+      next.theme.name =
+        source.theme.name === "default"
+          ? "my-theme"
+          : `${source.theme.name}-copy`;
       const saved = localStorage.getItem(
         `ailight-theme-draft:${source.theme.name}`
       );
@@ -735,7 +738,10 @@ function ThemeEditor({
       return;
     }
     const initial = cloneTheme(source);
-    initial.theme.name = `${source.theme.name}-custom`;
+    initial.theme.name =
+      source.theme.name === "default"
+        ? "my-theme"
+        : `${source.theme.name}-copy`;
     const changed = JSON.stringify(initial) !== JSON.stringify(draft);
     if (!changed) {
       onClose();
@@ -849,7 +855,7 @@ function ThemeEditor({
     >
       <div className="te-topbar">
         <div className="field field--grow">
-          <label htmlFor="theme-name">主题名称</label>
+          <label htmlFor="theme-name">主题标识</label>
           <input
             id="theme-name"
             onChange={(event) =>
@@ -860,7 +866,7 @@ function ThemeEditor({
             }
             value={draft.theme.name}
           />
-          <small>仅支持字母、数字、下划线和连字符</small>
+          <small>用于保存和导入；支持字母、数字、下划线和连字符</small>
         </div>
       </div>
 
@@ -894,7 +900,11 @@ function ThemeEditor({
                   style={{ background: meta.accent }}
                 />
                 <span className="te-state-chip__title">{meta.title}</span>
-                <span className="te-state-chip__code">{state}</span>
+                {standardStates.includes(
+                  state as (typeof standardStates)[number]
+                ) ? null : (
+                  <span className="te-state-chip__code">{state}</span>
+                )}
               </button>
             );
           })}
@@ -909,7 +919,7 @@ function ThemeEditor({
                   addCustomState();
                 }
               }}
-              placeholder="新增状态，例如 REVIEW / DEPLOY"
+              placeholder="状态标识，例如 REVIEW（等待审核）"
               value={newState}
             />
             <ActionButton disabled={!newState.trim()} onClick={addCustomState}>
@@ -1090,36 +1100,44 @@ function ThemeEditor({
                         </div>
                       </div>
                       <div className="te-led-row__body">
-                        <label
-                          className={cn("te-swatch", !item && "is-off")}
-                          style={{ background: item ? item.high : undefined }}
-                        >
-                          <input
-                            aria-label={`${label}灯颜色`}
-                            onChange={(event) =>
-                              updateLedColor(index, {
-                                high: event.target.value,
-                              })
-                            }
-                            type="color"
-                            value={item?.high ?? "#22c55e"}
-                          />
-                        </label>
-                        <label className="te-range">
-                          <span>亮度</span>
-                          <input
-                            max="100"
-                            min="0"
-                            onChange={(event) =>
-                              updateLedColor(index, {
-                                brightness: Number(event.target.value),
-                              })
-                            }
-                            type="range"
-                            value={item?.brightness ?? 70}
-                          />
-                          <output>{item?.brightness ?? 70}%</output>
-                        </label>
+                        {item ? (
+                          <>
+                            <label
+                              className="te-swatch"
+                              style={{ background: item.high }}
+                            >
+                              <input
+                                aria-label={`${label}灯颜色`}
+                                onChange={(event) =>
+                                  updateLedColor(index, {
+                                    high: event.target.value,
+                                  })
+                                }
+                                type="color"
+                                value={item.high}
+                              />
+                            </label>
+                            <label className="te-range">
+                              <span>亮度</span>
+                              <input
+                                max="100"
+                                min="0"
+                                onChange={(event) =>
+                                  updateLedColor(index, {
+                                    brightness: Number(event.target.value),
+                                  })
+                                }
+                                type="range"
+                                value={item.brightness}
+                              />
+                              <output>{item.brightness}%</output>
+                            </label>
+                          </>
+                        ) : (
+                          <p className="te-led-row__off-hint">
+                            点亮此灯后可设置颜色和亮度。
+                          </p>
+                        )}
                       </div>
                     </div>
                   );
@@ -1738,8 +1756,8 @@ export function ThemesPage() {
               <span className="section-kicker">主题详情</span>
               <h2>{selectedTheme.theme.name}</h2>
               <p>
-                {Object.keys(selectedTheme.scenes).length} 个 SCENE ·{" "}
-                {Object.keys(selectedTheme.states).length} 个状态映射
+                {Object.keys(selectedTheme.scenes).length} 组灯光与声音效果 ·{" "}
+                {Object.keys(selectedTheme.states).length} 个状态
               </p>
             </div>
             <dl>

@@ -80,10 +80,13 @@ export function AppShell() {
               {snapshot?.device.connected ? "设备已连接" : "设备未连接"}
             </div>
           )}
-          <span className="sidebar__meta">
-            v{snapshot?.service.version ?? "—"} · 端口{" "}
-            {snapshot?.service.port ?? "—"}
-          </span>
+          <details className="sidebar__advanced">
+            <summary>高级信息</summary>
+            <span className="sidebar__meta">
+              版本 {snapshot?.service.version ?? "—"} · 服务端口{" "}
+              {snapshot?.service.port ?? "—"}
+            </span>
+          </details>
         </div>
       </aside>
       <main className="main-content" id="main-content" tabIndex={-1}>

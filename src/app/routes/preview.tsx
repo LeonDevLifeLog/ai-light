@@ -8,6 +8,7 @@ import {
   PageHeader,
   stateCopy,
   TrafficBadge,
+  themeDisplayName,
 } from "@/components/app-ui";
 import { api, asAppError, type BusinessStateName } from "@/lib/ailight";
 import { runAsync } from "@/lib/utils";
@@ -36,10 +37,17 @@ export function PreviewPage() {
       } else {
         await api.triggerState(state);
       }
+      const stateTitle = stateCopy(state).title;
+      let message = `软件状态已切换为“${stateTitle}”，连接灯牌后即可显示效果`;
+      if (preview) {
+        message = `正在展示“${stateTitle}”效果`;
+      } else if (connected) {
+        message = `灯牌将展示“${stateTitle}”效果`;
+      }
       notify({
         tone: "success",
-        title: preview ? "试听已发送" : "状态已触发",
-        message: state,
+        title: preview ? "灯效已发送到灯牌" : "状态已切换",
+        message,
       });
     } catch (error) {
       notify({
@@ -80,17 +88,19 @@ export function PreviewPage() {
       <PageHeader
         description={
           <>
-            手动触发灯效，验证当前主题{" "}
+            模拟业务状态，或在灯牌上测试{" "}
             <strong className="accent-text">
-              {snapshot?.activeTheme ?? "—"}
+              {snapshot?.activeTheme
+                ? themeDisplayName(snapshot.activeTheme)
+                : "当前主题"}
             </strong>
           </>
         }
-        title="试听"
+        title="状态与灯效测试"
       />
       {connected ? null : (
         <InlineAlert title="当前没有连接设备" tone="info">
-          业务状态触发仍可使用；直接试听 SCENE 需要先连接灯牌。
+          你仍可模拟业务状态；连接灯牌后才能看到实际灯光和听到提示音。
         </InlineAlert>
       )}
       <Card>
@@ -107,7 +117,6 @@ export function PreviewPage() {
             >
               <TrafficBadge compact state={state} />
               <strong>{stateCopy(state).title}</strong>
-              <span>{state}</span>
             </button>
           ))}
         </div>
@@ -124,10 +133,10 @@ export function PreviewPage() {
               id="custom-state"
               maxLength={64}
               onChange={(event) => setCustomState(event.target.value)}
-              placeholder="例如 REVIEW"
+              placeholder="例如 REVIEW（等待审核）"
               value={customState}
             />
-            <small>主题未映射时会回退到 IDLE 灯效。</small>
+            <small>当前主题没有对应效果时，将使用“空闲”效果。</small>
           </div>
           <ActionButton
             disabled={!customState.trim()}
@@ -156,8 +165,8 @@ export function PreviewPage() {
         <div>
           <BellRing aria-hidden="true" />
           <span>
-            <strong>直接试听当前状态的 SCENE</strong>
-            <small>重播灯效，但不改变业务状态</small>
+            <strong>在灯牌上试听当前效果</strong>
+            <small>重新播放灯光和声音，不改变软件状态</small>
           </span>
         </div>
         <ActionButton
@@ -169,7 +178,7 @@ export function PreviewPage() {
       </Card>
       <div className="danger-zone">
         <div>
-          <strong>全部重置</strong>
+          <strong>恢复为空闲</strong>
           <span>停止灯效和蜂鸣，并将业务状态恢复为空闲。</span>
         </div>
         <ActionButton
@@ -191,7 +200,7 @@ export function PreviewPage() {
           }}
           tone="danger"
         >
-          <RotateCcw aria-hidden="true" size={16} /> 全部重置
+          <RotateCcw aria-hidden="true" size={16} /> 恢复为空闲
         </ActionButton>
       </div>
     </div>

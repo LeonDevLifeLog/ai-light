@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.17 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.17，2026-08-22） |
+| 文档版本 | V1.18 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.18，2026-08-22） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -155,7 +155,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `device-connection-changed` | `Sidebar.statusDot` | `connected` | patch |
 | `device-connection-changed` | `Devices.ScanResultList` | 对应卡片的 `state` 字段 | patch |
 | `device-connection-changed` | `ThemeEditor.previewSceneButton` | `disabled = !connected` | patch |
-| `device-connection-changed` | `Preview.resetOutputsButton` | `disabled = !connected` | patch |
+| `device-connection-changed` | `Preview.devicePreviewAction` | `disabled = !connected` | patch |
 
 **Payload**：
 ```typescript
@@ -265,7 +265,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `CONFLICT` | 导入主题与内置同名 | Dialog "导入失败：与内置主题 `<name>` 同名" | 重命名 / 取消 |
 | `THEME_BUILTIN` | 尝试删除内置主题 | Dialog "内置主题不可删除" | 关闭 |
 | `BAD_REQUEST` | 参数非法（如 trigger_state 状态名含非法字符） | Toast "请求参数非法：`<reason>`" | 修正输入 |
-| `DEVICE_NOT_CONNECTED` | preview_scene / trigger_state 时未连接 | Toast "请先连接设备" | 跳转 `/devices` |
+| `DEVICE_NOT_CONNECTED` | preview_scene 时未连接 | Toast "请先连接设备" | 跳转 `/devices` |
 | `INTERNAL` | Rust 侧异常（含 BLE 下发失败） | Toast "服务异常，请查看日志" | 打开日志目录 |
 
 ### 4.2 蓝牙协议 result code → UI 反馈（V0.4 §3.6）
@@ -435,7 +435,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 ### 6.1 `Sidebar`
 
 **6.1.1 用途**
-主窗口左侧固定 220px 宽侧边栏，提供 5 项一级导航 + 设置入口；底部展示连接状态 + 版本号 + 端口。
+主窗口左侧固定 220px 宽侧边栏，提供 5 项一级导航 + 设置入口；底部默认展示连接状态，版本号与端口位于「高级信息」折叠项。
 
 **6.1.2 对外契约**
 
@@ -468,9 +468,10 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 **6.1.5 边界条件**
 - 启动时 `serviceVersion = "0.0.0"` / `servicePort = 0`：显示 `--` 占位
 - 端口 0：表示 hook 服务启动失败；底部红点提示
+- 「高级信息」使用原生 `<details>/<summary>`，默认收起
 
 **6.1.6 无障碍**
-- 导航项 = `<button>` + `aria-current="page"`
+- 导航项 = `<a>` + `aria-current="page"`
 - Tab 顺序 = 视觉顺序
 - Esc 在导航项聚焦时无操作
 
@@ -626,7 +627,7 @@ Integrations 页的客户端配置卡（Claude Code / Codex / Qoder / Cursor）�
 | 类别 | 项 | 说明 |
 |---|---|---|
 | Props | `client` | `{ id, name, status, configPath, configSnippet, helpText }` |
-| Props | `status` | `'configured' \| 'unconfigured' \| 'reserved'` |
+| Props | `status` | `'configured' \| 'unconfigured' \| 'incompatible' \| 'reserved'` |
 | Emit | `onClickTestConnection(clientId)` | 触发测试连接 |
 | Emit | `onClickCopy(content)` | 复制配置代码 |
 | Invoke | `trigger_state('WORKING', { source: clientId })`（[测试连接]） | — |
@@ -637,7 +638,8 @@ Integrations 页的客户端配置卡（Claude Code / Codex / Qoder / Cursor）�
 |---|---|---|---|
 | `configured` | `status == 'configured'` | accent tag "已配置" + 测试连接 enabled | hover |
 | `unconfigured` | `status == 'unconfigured'` | warn tag "未配置" + 测试连接 enabled | hover |
-| `reserved` | `status == 'reserved'` | 灰 tag "预留" + opacity 0.6 | 禁用 |
+| `incompatible` | `status == 'incompatible'` | 灰 tag「仅支持 CLI」+ 平台限制说明 | 可复制配置；测试禁用 |
+| `reserved` | `status == 'reserved'` | 灰 tag「暂不支持」+ 原因说明 | 不渲染测试、复制和配置展开入口 |
 | `testing` | [测试连接] 点击后 | button = loading 态 | 禁用 |
 | `error` | 测试失败 | button 抖动 + Toast | hover |
 
@@ -649,13 +651,13 @@ Integrations 页的客户端配置卡（Claude Code / Codex / Qoder / Cursor）�
 | `update_config` | (none) | — |
 
 **6.5.5 边界条件**
-- Codex Desktop 用户：tag 改为 "不兼容" + 灰显（KAD-04 提示）
+- Codex Desktop 用户：tag 显示「仅支持 CLI」，说明 Desktop 暂不支持（KAD-04 提示）
 - 文件路径不存在：`status` 检测时显示 "配置文件未找到"
 - [测试连接] 失败 → Toast "测试失败：5 秒内未看到灯效变化"
 
 **6.5.6 无障碍**
 - 折叠区 = `<details>` / `<summary>`
-- 复制按钮 = `<button>` + `aria-live` 复制成功提示
+- 复制按钮 = `<button>` + `aria-live` 复制成功提示；Toast 同时说明粘贴目标路径
 
 ---
 
@@ -695,7 +697,8 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 **6.6.5 边界条件**
 - 端口切换：需重启服务 → Toast "服务重启中..." → 成功后 Toast "端口已切换"
 - 自启动：✅ 已实装（tauri-plugin-autostart 2.5.1，KAD-09）；失败路径 `AUTOSTART_FAILED` → Toast + 控件回滚到原值；OS 登录项为唯一事实源，config 为启动校准缓存
-- 仲裁模式：ModeOption 卡片独占选择（`aria-pressed`）；「优先级抢占」带「默认」标签；切换经 `update_config(arbitrationMode)` 即时生效
+- 状态显示规则：ModeOption 卡片独占选择（`aria-pressed`）；「重要状态优先」带「推荐」标签；切换经 `update_config(arbitrationMode)` 即时生效
+- 服务端口放在「高级服务信息」原生 disclosure 中，默认收起
 
 **6.6.6 无障碍**
 - 行名 = 可见 `<strong>`；控件自带 `aria-label`（如"仲裁模式""开机自启"）
@@ -733,7 +736,7 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 **组件顺序**：
 ```
 ┌─────────────────────────┐
-│  标题 + [重新查找] 按钮  │
+│ 标题 + [重新查找设备]按钮 │
 ├─────────────────────────┤
 │     ScanProgress        │ ← 扫描中显示
 ├─────────────────────────┤
@@ -752,6 +755,7 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 
 **边界条件**：
 - 扫描超时（5s 无结果）→ ScanProgress 隐藏 + ScanResultList 显示空态
+- 扫描进行态至少展示 400ms；页头与空态重试按钮统一为「重新查找设备」
 - 蓝牙权限被拒 → 顶部红色 Alert + [重试] 按钮
 - 扫描中点击 [重新查找] → 取消当前扫描 + 重新发起
 
@@ -793,7 +797,7 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 └─────────────────────────┘
 ```
 
-**联动**：4 个 IntegrationCard 完全独立；HelpFooter 纯静态。
+**联动**：4 个 IntegrationCard 完全独立；HelpFooter 纯静态。`reserved` 卡只解释当前限制，不渲染不可执行的按钮与配置折叠区；可配置卡使用「复制配置」「查看配置步骤」。
 
 ---
 
@@ -804,13 +808,17 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 ┌─────────────────────────┐
 │ 标题 + 当前主题显示      │
 ├─────────────────────────┤
-│ StandardStateButtonGroup│ 5 标准按钮（IDLE/WORKING/WAITING/SUCCESS/ERROR）
+│ 未连接说明（状态仍可模拟）│
+├─────────────────────────┤
+│ StandardStateButtonGroup│ 5 标准按钮（只显示统一中文名）
 ├─────────────────────────┤
 │   CustomStateInput      │ 输入框 + [触发]
 ├─────────────────────────┤
 │ CustomStateQuickList    │ 最近 5 个自定义状态
 ├─────────────────────────┤
-│  ResetOutputsButton     │ "全部重置"
+│ DevicePreviewAction     │ 连接后试听实际灯光与声音
+├─────────────────────────┤
+│  ResetOutputsButton     │ "恢复为空闲"
 └─────────────────────────┘
 ```
 
@@ -818,6 +826,7 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 - StandardStateButtonGroup 点击 → `trigger_state` → `business-state-changed` → TrafficBadge 联动（Dashboard 也会变）
 - CustomStateInput Enter 键 → 同点击 [触发]
 - CustomStateQuickList 点击 → 同上 + 同时把名字加入最近列表（FIFO）
+- DevicePreviewAction → `preview_scene`；设备未连接时禁用并由页面说明原因
 - ResetOutputsButton → `reset_outputs` → 全停 + 业务复位 IDLE
 
 **快捷键**（详见 [ui-interactions.md 附录 A.8](./ui-interactions.md)）：
@@ -826,8 +835,8 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 - `Esc`：清空输入框 focus
 
 **边界条件**：
-- 设备未连接 → 所有按钮 disabled + Tooltip "请先连接设备"
-- 主题映射缺失自定义状态 → Toast "该状态未在主题中映射"
+- 设备未连接 → 状态模拟按钮保持可用，仅 DevicePreviewAction 禁用
+- 主题映射缺失自定义状态 → 常驻 helper 说明回退为「空闲」效果
 
 ---
 
@@ -838,7 +847,7 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 ┌─────────────────────────┐
 │  标题                    │
 ├─────────────────────────┤
-│ SettingGroup: 服务       │ port（只读）+ arbitrationMode + 接入保护状态
+│ SettingGroup: 服务       │ 状态显示规则 + 连接安全 + 高级服务信息（折叠）
 ├─────────────────────────┤
 │ SettingGroup: 显示       │ themeMode + badgeOrientation + 当前主题
 ├─────────────────────────┤
@@ -848,7 +857,7 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 
 **联动**：每 SettingGroup 内的 SettingRow 互不联动；Group 间独立。
 
-**7.6.1 服务组**：服务端口（只读数值）；仲裁模式 = 两张 ModeOption 卡片（整行铺开，单选圆点 + 效果说明 + 「默认」标签）；接入保护 = 状态标签（"仅限本机" / "Token 已启用"）。
+**7.6.1 服务组**：状态显示规则 = 两张 ModeOption 卡片（「重要状态优先 / 最近活动优先」，整行铺开，单选圆点 + 效果说明 + 「推荐」标签）；连接安全 = 状态标签（「仅限本机 / 已启用身份验证」）；服务端口位于默认收起的「高级服务信息」中，只读展示。
 
 **7.6.2 显示组**：外观模式 = 三张 ModeOption 卡片（亮色 / 暗色 / 跟随系统，图标 + 一句说明），切换经 `update_config(themeMode)` 持久化，`html[data-theme]` 即时更新；"跟随系统"下 `data-theme` 随 `prefers-color-scheme` 变化。灯组朝向（SegControl 横排/纵向）；当前主题 = 主题预览入口（Link → /themes）：3 个灯色圆点（取当前主题 WORKING/SUCCESS/ERROR 场景实际 `leds.high`/`low` 色）+ 主题名 + 可选「提示音」标记 + ChevronRight。预览随 `config.activeTheme` 变化刷新；主题读取失败回退为纯名称。
 
@@ -1025,7 +1034,7 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 | 态 | 触发条件 | 视觉 |
 |---|---|---|
 | `default` | 灯有颜色 | 色板 + 亮度滑块 |
-| `off` | `leds[i] == null` | 虚线/斜纹色板 + "熄灭"标签 + 亮度值进入该灯后生效 |
+| `off` | `leds[i] == null` | 「熄灭」标签 + 「点亮此灯」按钮 + 提示文案；不渲染颜色与亮度控件 |
 | `advanced` | `advanced == true` | 展开低点颜色、周期、出场时间等 |
 
 **8.5.4 联动矩阵**
@@ -1035,7 +1044,7 @@ Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
 | `editingState` 切换 | 重置为新状态的当前值 | full |
 
 **8.5.5 边界条件**
-- `leds[i] == null` → 该灯在预览熄灭；用户点选颜色即用 `CONSTANT` 默认灯轨点亮
+- `leds[i] == null` → 该灯在预览熄灭；用户点击「点亮此灯」后创建 `CONSTANT` 默认灯轨，再显示颜色与亮度控件
 - 颜色控件不接受 alpha；[熄灭此灯] 将灯轨设为 `null`，[点亮此灯] 创建合法默认灯轨，作为“透明/无颜色”的协议内表达
 - `CONSTANT` 波形：低点颜色隐藏；`SQUARE` 额外显示占空比
 - `brightness == 0` → 视觉上等于 off；`leds[i] == null` 与 `brightness == 0` 语义不同（前者灯轨不存在）
@@ -1778,6 +1787,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.18 | 2026-08-22 | 全页面 UX review 优化：§6.1 将版本/端口折叠为高级信息；§6.5 更新 incompatible/reserved 支持状态和动作可用性；§6.6/§7.6 将仲裁与接入保护改写为用户语言并折叠服务端口；§7.2 补扫描最短反馈；§7.4 隐藏未支持客户端的无效操作；§7.5 区分状态模拟与设备试听；§8.5 熄灯态隐藏不可生效的颜色/亮度控件。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（错误路径未变）；§4.2 result code 与蓝牙 V0.4 §3.6 一致（协议行为未变）；§6~§8 的 `leds` / `high` / `brightness` 与 theme-format 字段一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
 | V1.17 | 2026-08-22 | 主题创作器关闭与熄灯交互修复：§5.4 取消/关闭/Esc 改为应用内放弃修改确认 Dialog；§8.5 明确颜色不支持 alpha，“透明/无颜色”以灯轨 `null` 表达并提供点亮/熄灭双向控制。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（错误路径未变）；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 的 `leds` / `high` 与 theme-format 字段一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
 | V1.16 | 2026-08-22 | 主题创作器布局 review 优化：§5.4 补充逐灯精确调整 disclosure、借用效果 accordion 与预览状态标题契约；进阶入口移至基础编辑末尾，展开内容与触发器相邻，且不使用主操作色。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（错误路径未变）；§4.2 result code 与蓝牙 V0.4 §3.6 一致（协议行为未变）；§6~§8 主题字段与 theme-format 字段表一致（未增删字段）；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
 | V1.15 | 2026-08-22 | 主题创作器组件契约重构（以代码为事实源，用户触发审计）：§8.3 `StateTab` 改名为 `StateChip`，契约改为中文名+编码+状态色点；§8.4 `MotionPresetCard` 补充 `curve` prop 与"主导曲线判定 + 三灯一起应用"边界；§8.5 `ColorPickerRow` 改名为 `LedColorRow`，新增 `off` 态（`leds[i]==null` → 虚线色板 + 熄灭标签）与 `advanced` 态；§8.4/8.5 注明软件动画预览（LivePreview）按真实曲线/周期/相位/亮度模拟。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（沿用 `THEME_INVALID` / `CONFLICT` / `BAD_REQUEST` / `INTERNAL`）；§4.2 result code 与蓝牙 V0.4 §3.6 一致（本次未触碰蓝牙章节）；§6~§8 主题字段与 theme-format 字段表一致（仅 UI 改名，字段未变）：`curve / low / high / brightness / period_ms / phase_deg / duty_percent / repeat / end_level / transition_ms / hold_ms / buzzer.segments` 均在 DTO Schema；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |

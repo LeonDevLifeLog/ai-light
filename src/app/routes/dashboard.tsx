@@ -8,6 +8,7 @@ import {
   StatusTag,
   stateCopy,
   TrafficBadge,
+  themeDisplayName,
 } from "@/components/app-ui";
 
 export function DashboardPage() {
@@ -82,7 +83,7 @@ export function DashboardPage() {
               <Palette aria-hidden="true" size={22} />
             </div>
             <div>
-              <strong>{snapshot.activeTheme}</strong>
+              <strong>{themeDisplayName(snapshot.activeTheme)}</strong>
               <span>当前灯效主题</span>
             </div>
             <ArrowRight aria-hidden="true" className="muted-icon" size={18} />

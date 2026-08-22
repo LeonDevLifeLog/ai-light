@@ -39,8 +39,7 @@ const integrations: Integration[] = [
   {
     name: "Codex",
     path: "~/.codex/hooks.json + config.toml",
-    description:
-      "配置 hooks 与 notify；Codex Desktop 可能重写 notify，请合并已有配置。",
+    description: "Codex CLI 可以通过通知脚本同步状态；Codex Desktop 暂不支持。",
     source: "X",
     accent: "green",
     status: "incompatible",
@@ -51,7 +50,7 @@ const integrations: Integration[] = [
   {
     name: "Qoder",
     path: "工具 Hook 设置",
-    description: "事件语义与 Claude Code 同构，可复用本地 HTTP 接入方式。",
+    description: "此工具的自动接入正在准备中。",
     source: "Q",
     accent: "slate",
     status: "reserved",
@@ -62,8 +61,8 @@ Content-Type: application/json
   },
   {
     name: "Cursor",
-    path: "桥接进程（后续版本）",
-    description: "当前缺少原生 Hook，计划通过本机桥接进程接入。",
+    path: "暂不支持自动接入",
+    description: "Cursor 当前无法自动同步状态。",
     source: "Cu",
     accent: "violet",
     status: "reserved",
@@ -73,8 +72,8 @@ Content-Type: application/json
   },
 ];
 const statusLabels: Record<Integration["status"], string> = {
-  incompatible: "Desktop 不兼容",
-  reserved: "预留",
+  incompatible: "仅支持 CLI",
+  reserved: "暂不支持",
   unconfigured: "未配置",
 };
 
@@ -87,7 +86,11 @@ export function IntegrationsPage() {
   const copy = async (integration: Integration) => {
     await navigator.clipboard.writeText(integration.config(port));
     setCopied(integration.name);
-    notify({ tone: "success", title: "配置已复制", message: integration.name });
+    notify({
+      tone: "success",
+      title: `${integration.name} 配置代码已复制`,
+      message: `请粘贴到 ${integration.path}`,
+    });
     window.setTimeout(() => setCopied(null), 2000);
   };
 
@@ -120,7 +123,7 @@ export function IntegrationsPage() {
       <Card className="endpoint-banner">
         <TerminalSquare aria-hidden="true" size={20} />
         <div>
-          <span>本地 Hook 地址</span>
+          <span>本机接收地址</span>
           <code>http://127.0.0.1:{port}/hook</code>
         </div>
         <StatusTag
@@ -153,33 +156,36 @@ export function IntegrationsPage() {
                   >
                     {statusLabels[integration.status]}
                   </StatusTag>
-                  <ActionButton
-                    busy={testing === integration.name}
-                    disabled={integration.status !== "unconfigured"}
-                    onClick={() => runAsync(testConnection(integration))}
-                  >
-                    测试连接
-                  </ActionButton>
-                  <ActionButton
-                    disabled={integration.status === "reserved"}
-                    onClick={() => runAsync(copy(integration))}
-                  >
-                    {copied === integration.name ? (
-                      <Check size={16} />
-                    ) : (
-                      <Clipboard size={16} />
-                    )}
-                    {copied === integration.name ? "已复制" : "复制"}
-                  </ActionButton>
+                  {integration.status === "reserved" ? null : (
+                    <>
+                      <ActionButton
+                        busy={testing === integration.name}
+                        disabled={integration.status !== "unconfigured"}
+                        onClick={() => runAsync(testConnection(integration))}
+                      >
+                        测试连接
+                      </ActionButton>
+                      <ActionButton onClick={() => runAsync(copy(integration))}>
+                        {copied === integration.name ? (
+                          <Check size={16} />
+                        ) : (
+                          <Clipboard size={16} />
+                        )}
+                        {copied === integration.name ? "已复制" : "复制配置"}
+                      </ActionButton>
+                    </>
+                  )}
                 </div>
               </div>
               <p>{integration.description}</p>
-              <details>
-                <summary>查看配置示例</summary>
-                <pre>
-                  <code>{integration.config(port)}</code>
-                </pre>
-              </details>
+              {integration.status === "reserved" ? null : (
+                <details>
+                  <summary>查看配置步骤</summary>
+                  <pre>
+                    <code>{integration.config(port)}</code>
+                  </pre>
+                </details>
+              )}
             </div>
           </Card>
         ))}
@@ -189,8 +195,8 @@ export function IntegrationsPage() {
         <div>
           <strong>这些配置在做什么？</strong>
           <p>
-            工具在开始、完成、出错或等待你回复时调用本机端点。AI-Light
-            仲裁状态，再由当前主题编译并下发灯效。
+            工具会在开始、完成、出错或等待你回复时通知
+            AI-Light，应用再按当前主题让灯牌显示对应效果。
           </p>
         </div>
         <FlaskConical aria-hidden="true" className="explain-card__decoration" />
