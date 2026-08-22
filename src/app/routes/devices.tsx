@@ -1,4 +1,16 @@
-import { Bluetooth, Radio, RefreshCw, Signal, WifiOff } from "lucide-react";
+import {
+  Battery,
+  Bluetooth,
+  CheckCircle2,
+  Cpu,
+  Microchip,
+  Radio,
+  RefreshCw,
+  Signal,
+  Trash2,
+  Unplug,
+  WifiOff,
+} from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { useAppState } from "@/app/app-context";
 import {
@@ -123,43 +135,77 @@ export function DevicesPage() {
           已连接
         </h2>
         <Card className="connected-device">
-          <div className="device-orb is-connected">
-            <Radio aria-hidden="true" />
+          <div className="connected-device__identity">
+            <div className="device-orb is-connected">
+              <Radio aria-hidden="true" />
+            </div>
+            <div className="connected-device__name">
+              <strong>{snapshot.device.name ?? "AgentCore-Light"}</strong>
+              <span className="mono">{snapshot.device.address}</span>
+            </div>
+            <StatusTag tone="success">
+              <CheckCircle2 aria-hidden="true" size={13} />
+              连接正常
+            </StatusTag>
           </div>
-          <div className="connected-device__name">
-            <strong>{snapshot.device.name ?? "AgentCore-Light"}</strong>
-            <span className="mono">{snapshot.device.address}</span>
-          </div>
-          <dl className="device-stats">
-            <div>
-              <dt>电量</dt>
-              <dd>{snapshot.device.batteryPercent ?? "—"}%</dd>
+          <div className="connected-device__details">
+            <dl className="device-stats">
+              <div>
+                <Battery
+                  aria-hidden="true"
+                  className="device-stat__icon"
+                  size={16}
+                />
+                <div className="device-stat__copy">
+                  <dt>电量</dt>
+                  <dd>
+                    {snapshot.device.batteryPercent == null
+                      ? "无电池"
+                      : `${snapshot.device.batteryPercent}%`}
+                  </dd>
+                </div>
+              </div>
+              <div>
+                <Cpu
+                  aria-hidden="true"
+                  className="device-stat__icon"
+                  size={16}
+                />
+                <div className="device-stat__copy">
+                  <dt>固件版本</dt>
+                  <dd>{snapshot.device.fwVersion ?? "—"}</dd>
+                </div>
+              </div>
+              <div>
+                <Microchip
+                  aria-hidden="true"
+                  className="device-stat__icon"
+                  size={16}
+                />
+                <div className="device-stat__copy">
+                  <dt>硬件型号</dt>
+                  <dd>{snapshot.device.hardwareVariant ?? "—"}</dd>
+                </div>
+              </div>
+            </dl>
+            <div className="device-actions">
+              <ActionButton
+                busy={deviceAction === "disconnect"}
+                disabled={deviceAction !== null}
+                onClick={() => runAsync(disconnect())}
+              >
+                <Unplug aria-hidden="true" size={16} />
+                断开连接
+              </ActionButton>
+              <ActionButton
+                disabled={deviceAction !== null}
+                onClick={() => setConfirmForget(true)}
+                tone="ghost"
+              >
+                <Trash2 aria-hidden="true" size={16} />
+                忘记设备
+              </ActionButton>
             </div>
-            <div>
-              <dt>固件</dt>
-              <dd>{snapshot.device.fwVersion ?? "—"}</dd>
-            </div>
-            <div>
-              <dt>硬件</dt>
-              <dd>{snapshot.device.hardwareVariant ?? "—"}</dd>
-            </div>
-          </dl>
-          <StatusTag tone="success">已连接</StatusTag>
-          <div className="device-actions">
-            <ActionButton
-              busy={deviceAction === "disconnect"}
-              disabled={deviceAction !== null}
-              onClick={() => runAsync(disconnect())}
-            >
-              断开连接
-            </ActionButton>
-            <ActionButton
-              disabled={deviceAction !== null}
-              onClick={() => setConfirmForget(true)}
-              tone="danger"
-            >
-              忘记设备
-            </ActionButton>
           </div>
         </Card>
       </section>
