@@ -18,8 +18,32 @@ jobs:
     name: Quality checks
     runs-on: ubuntu-22.04
     timeout-minutes: 15
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+      cross-platform: ${{ steps.filter.outputs.cross_platform }}
     steps:
       - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            app:
+              - "src/**"
+              - "crates/**"
+              - "src-tauri/**"
+              - ".github/workflows/**"
+              - "index.html"
+              - "package.json"
+              - "pnpm-lock.yaml"
+              - "components.json"
+              - "tsconfig*.json"
+              - "vite.config.*"
+            cross_platform:
+              - "crates/**"
+              - "src-tauri/**"
+              - ".github/workflows/**"
+              - "package.json"
+              - "pnpm-lock.yaml"
       - uses: pnpm/action-setup@v6.0.9
       - uses: actions/setup-node@v6
         with:
@@ -32,12 +56,14 @@ jobs:
 
   tauri-build:
     name: Tauri build (${{ matrix.name }})
+    needs: quality
+    if: github.event_name == 'workflow_dispatch' || needs.quality.outputs.app == 'true'
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"name":"Linux","platform":"ubuntu-22.04"}]' || '[{"name":"Linux","platform":"ubuntu-22.04"},{"name":"macOS","platform":"macos-latest"},{"name":"Windows","platform":"windows-latest"}]') }}
+        include: ${{ fromJSON(github.event_name == 'pull_request' || (github.event_name != 'workflow_dispatch' && needs.quality.outputs.cross-platform != 'true') && '[{"name":"Linux","platform":"ubuntu-22.04"}]' || '[{"name":"Linux","platform":"ubuntu-22.04"},{"name":"macOS","platform":"macos-latest"},{"name":"Windows","platform":"windows-latest"}]') }}
     steps:
       - uses: actions/checkout@v7
       - name: Switch apt sources (azure mirror workaround)
@@ -61,8 +87,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with:
-          workspaces: ./src-tauri -> target
+          workspaces: |
+            ./crates/ailight-core -> target
+            ./src-tauri -> target
       - run: pnpm install --frozen-lockfile
+      - name: Test core
+        if: runner.os == 'Linux'
+        run: cargo test --manifest-path crates/ailight-core/Cargo.toml
       - uses: tauri-apps/tauri-action@v1
         with:
           args: --no-bundle
