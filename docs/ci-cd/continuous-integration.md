@@ -31,7 +31,7 @@ pnpm build
 
 工作流先按变更文件决定构建范围：纯文档改动只执行质量检查，不启动 Tauri 构建；Pull Request 和普通前端改动仅在 `ubuntu-22.04` 上执行原生 Tauri release 编译；Rust、Tauri、依赖锁文件或 workflow 改动在推送至 `main`、`master`、`develop` 时通过矩阵执行 Linux、macOS、Windows 三平台编译。手动触发始终执行三平台编译。单个平台超时时间为 45 分钟。
 
-Linux Tauri job 在编译应用前执行 `ailight-core` 全量测试。Linux 系统依赖、pnpm 依赖和 Rust 构建产物均使用缓存；Release workflow 复用相同的 Linux 系统依赖缓存方案。
+`ailight-core` 相关改动及手动全量运行时，Linux Tauri job 在编译应用前执行 core 全量测试；普通前端改动不重复运行 Rust 测试。Linux 系统依赖、pnpm 依赖和 Rust 构建产物均使用缓存；Release workflow 复用相同的 Linux 系统依赖缓存方案。
 
 CI 使用 `--no-bundle` 校验前端与原生应用编译链路，不生成安装包；跨平台安装包由 Release 工作流统一生成。该策略让 PR 保留低成本的完整 Linux 编译门禁，并在代码进入主干后补充 macOS、Windows 兼容性反馈。
 

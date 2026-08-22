@@ -21,10 +21,11 @@ jobs:
     timeout-minutes: 15
     outputs:
       app: ${{ steps.filter.outputs.app }}
+      core: ${{ steps.filter.outputs.core }}
       cross-platform: ${{ steps.filter.outputs.cross_platform }}
     steps:
       - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4.0.3
         id: filter
         with:
           filters: |
@@ -39,6 +40,8 @@ jobs:
               - "components.json"
               - "tsconfig*.json"
               - "vite.config.*"
+            core:
+              - "crates/ailight-core/**"
             cross_platform:
               - "crates/**"
               - "src-tauri/**"
@@ -64,7 +67,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'pull_request' || (github.event_name != 'workflow_dispatch' && needs.quality.outputs.cross-platform != 'true') && '[{"name":"Linux","platform":"ubuntu-22.04"}]' || '[{"name":"Linux","platform":"ubuntu-22.04"},{"name":"macOS","platform":"macos-latest"},{"name":"Windows","platform":"windows-latest"}]') }}
+        include: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name != 'workflow_dispatch' && needs.quality.outputs.cross-platform != 'true')) && '[{"name":"Linux","platform":"ubuntu-22.04"}]' || '[{"name":"Linux","platform":"ubuntu-22.04"},{"name":"macOS","platform":"macos-latest"},{"name":"Windows","platform":"windows-latest"}]') }}
     steps:
       - uses: actions/checkout@v7
       - name: Switch apt sources (azure mirror workaround)
@@ -76,7 +79,7 @@ jobs:
       - name: Install Linux dependencies (cached)
         if: runner.os == 'Linux'
         timeout-minutes: 30
-        uses: awalsh128/cache-apt-pkgs-action@v1.1.3
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.3
         with:
           packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
           version: 1.0
@@ -93,7 +96,7 @@ jobs:
             ./src-tauri -> target
       - run: pnpm install --frozen-lockfile
       - name: Test core
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && (github.event_name == 'workflow_dispatch' || needs.quality.outputs.core == 'true')
         run: cargo test --manifest-path crates/ailight-core/Cargo.toml
       - uses: tauri-apps/tauri-action@v1
         with:
