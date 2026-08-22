@@ -48,7 +48,7 @@ pnpm typecheck        # tsc --noEmit
 
 ## 测试要求
 
-- 修改 `ailight-core` 必须 `cargo test` 全绿（当前 64 tests）。
+- 修改 `ailight-core` 必须执行 `cargo test --manifest-path crates/ailight-core/Cargo.toml`，且全部测试通过；不要记录易漂移的测试总数。
 - 协议层改动：golden tests 在 `protocol.rs`（对照协议文档 §17 全部帧示例，逐字节断言）。
 - `ble.rs` 的连接/发现路径依赖真硬件，无法单测——保持编译通过，实机验证（文档 U-01）。
 - 覆盖率基线：核心逻辑行覆盖 ~87%（排除硬件层），见 `cargo llvm-cov`。
@@ -70,11 +70,43 @@ pnpm typecheck        # tsc --noEmit
      - ui-interactions.md 与 ui-interaction-spec.md 对同一概念描述矛盾
   审计产出："对齐报告"追加到两份文档变更日志；严重漂移阻塞 PR。
 
-## CI
+## CI / Release 变更守则
 
-- GitHub Actions（`.github/workflows/ci.yml`）：quality job（`pnpm check` + `typecheck` + `build`）+ 三平台 tauri build。
-- Linux 构建依赖用 `awalsh128/cache-apt-pkgs-action`（apt 缓存）并已切换官方源——**不要回退**为手写 apt-get（azure 镜像不可达会导致超时）。
+### 当前验证边界
+
+- `quality` 始终执行：`pnpm check`、`pnpm typecheck`、`pnpm build`。
+- 纯文档改动不启动 Tauri build。
+- Pull Request 和普通前端改动只执行 Linux Tauri build。
+- `crates/**`、`src-tauri/**`、依赖文件或 workflow 改动进入主分支时执行 Linux / macOS / Windows 三平台 build。
+- `workflow_dispatch` 始终执行三平台 build。
+- Linux Tauri job 必须执行 `ailight-core` 全量测试。
+- Release 始终构建正式发布矩阵，不得因 CI 已执行 `--no-bundle` 而省略发布目标。
 - 版本号需同步 `package.json` / `src-tauri/Cargo.toml` / `src-tauri/tauri.conf.json` 三处。
+
+### 修改 workflow 前检查
+
+1. 先列出事件 × 文件类型 × 构建平台矩阵，确认没有意外扩大或缩小触发范围。
+2. 修改或新增根目录构建配置时，同步检查 `paths-filter`：
+   - `cross_platform` 必须是 `app` 的子集。
+   - workflow 自身、Rust / Tauri、依赖锁文件必须触发跨平台验证。
+   - 手动触发不得被文件过滤器跳过。
+   - PR 事件通过 GitHub API 读取变更文件，必须保留 `pull-requests: read` 权限。
+3. 不直接使用 workflow 顶层 `paths-ignore` 跳过 required workflow，避免分支保护检查长期 pending。
+4. 优先复用现有 job 输出，避免为轻量变更检测新增按分钟计费的独立 job。
+5. Linux 系统依赖必须使用 `awalsh128/cache-apt-pkgs-action`，不得退回手写 `apt-get`（azure 镜像不可达会导致超时）。
+6. Rust 缓存必须覆盖 `crates/ailight-core` 与 `src-tauri`。
+7. Release 的版本校验必须先于发布矩阵，四个发布目标不得静默缩减。
+
+### 修改后验收
+
+- `actionlint .github/workflows/ci.yml .github/workflows/release.yml`
+- `git diff --check`
+- `pnpm check`
+- `pnpm typecheck`
+- `pnpm build`
+- `cargo test --manifest-path crates/ailight-core/Cargo.toml`
+- 同步更新 `docs/ci-cd/continuous-integration.md` 或 Release 操作手册。
+- 最终人工复核纯文档、Pull Request、主分支推送、手动触发、tag Release 五条路径。
 
 ## 文档导航
 
