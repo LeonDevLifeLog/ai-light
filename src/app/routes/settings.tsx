@@ -329,6 +329,7 @@ export function SettingsPage() {
                     aria-pressed={config.themeMode === value}
                     className={cn(
                       "mode-option",
+                      "mode-option--appearance",
                       config.themeMode === value && "mode-option--active"
                     )}
                     disabled={saving === "themeMode"}
