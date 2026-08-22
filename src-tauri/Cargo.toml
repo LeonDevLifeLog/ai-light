@@ -3,7 +3,7 @@ name = "ai-light"
 version = "0.2.0"
 description = "AI-Light 智能体状态灯客户端（Tauri）"
 authors = ["Leon"]
-edition = "2026"
+edition = "2021"
 
 [lib]
 name = "ai_light_lib"
