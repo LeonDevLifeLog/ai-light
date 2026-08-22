@@ -204,18 +204,48 @@ pub(crate) async fn connect_device_internal(
     name: &str,
     generation: u64,
 ) -> Result<(), String> {
-    let adapter = ble::default_adapter().await.map_err(|e| e.to_string())?;
-    let _ = ble::scan(&adapter, 4).await.map_err(|e| e.to_string())?;
+    const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
     let addr_norm = ble::normalize_address(address);
-    let (ble_io, actual_name, handshake) = ble::connect_to_address(&adapter, &addr_norm)
+    tracing::info!(address = %addr_norm, generation, "BLE 连接请求开始");
+
+    let result = tokio::time::timeout(CONNECT_TIMEOUT, async {
+        let state = app.state::<AppState>();
+        let _connection_guard = state.connection_lock.lock().await;
+        if state.connection_generation.load(Ordering::SeqCst) != generation {
+            return Err("连接请求已取消".to_string());
+        }
+
+        tracing::info!(address = %addr_norm, "BLE 获取默认适配器");
+        let adapter = ble::default_adapter().await.map_err(|e| e.to_string())?;
+        tracing::info!(address = %addr_norm, "BLE 扫描设备（4 秒）");
+        let _ = ble::scan(&adapter, 4).await.map_err(|e| e.to_string())?;
+        tracing::info!(address = %addr_norm, "BLE 扫描完成，开始连接与握手");
+        let (ble_io, actual_name, handshake) = ble::connect_to_address(&adapter, &addr_norm)
+            .await
+            .map_err(|e| e.to_string())?;
+        let display_name = if name.is_empty() {
+            actual_name
+        } else {
+            name.to_string()
+        };
+        attach_device(
+            app,
+            ble_io,
+            handshake,
+            addr_norm.clone(),
+            display_name,
+            generation,
+        )
         .await
-        .map_err(|e| e.to_string())?;
-    let display_name = if name.is_empty() {
-        actual_name
-    } else {
-        name.to_string()
-    };
-    attach_device(app, ble_io, handshake, addr_norm, display_name, generation).await
+    })
+    .await
+    .map_err(|_| format!("连接超时（{} 秒）", CONNECT_TIMEOUT.as_secs()))?;
+
+    match &result {
+        Ok(()) => tracing::info!(address = %addr_norm, generation, "BLE 连接请求完成"),
+        Err(error) => tracing::warn!(address = %addr_norm, generation, %error, "BLE 连接请求失败"),
+    }
+    result
 }
 
 /// 连接成功后的统一装配：快照 → 事件 → 持久化 → 热切换 → resync → 设备事件循环

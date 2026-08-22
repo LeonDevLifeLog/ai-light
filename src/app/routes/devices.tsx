@@ -263,10 +263,7 @@ export function DevicesPage() {
         ) : (
           <div className="device-list">
             {devices.map((device) => (
-              <Card
-                className="device-row"
-                key={`${device.address}-${device.name}-${device.rssi}`}
-              >
+              <Card className="device-row" key={device.address}>
                 <div className="device-orb">
                   <Bluetooth aria-hidden="true" />
                 </div>

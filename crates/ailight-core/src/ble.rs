@@ -143,7 +143,7 @@ pub struct BleDeviceInfo {
     pub recognized: bool,
 }
 
-/// 归一化地址：`AA-BB-CC-DD-EE-FF` / `AA:BB:CC:DD:EE:FF` → 大写冒号形式
+/// 归一化设备标识：MAC 地址转大写冒号形式；macOS CoreBluetooth UUID 原样保留。
 pub fn normalize_address(s: &str) -> String {
     let clean: String = s.chars().filter(|c| c.is_ascii_hexdigit()).collect();
     let upper = clean.to_uppercase();
@@ -155,7 +155,7 @@ pub fn normalize_address(s: &str) -> String {
             .collect::<Vec<_>>()
             .join(":")
     } else {
-        s.to_string()
+        s.to_ascii_lowercase()
     }
 }
 
@@ -163,7 +163,8 @@ fn is_recognized(name: &Option<String>) -> bool {
     matches!(name, Some(n) if n.starts_with(NAME_PREFIX))
 }
 
-/// 扫描（默认 5s）。`recognized` = 名称前缀命中（服务 UUID 识别需连接后，见握手流程）
+/// 扫描（默认 5s）。`address` 使用平台 PeripheralId：macOS 为 CoreBluetooth UUID，
+/// Windows/Linux 通常为 MAC 地址，避免 macOS properties.address 恒为全零地址。
 pub async fn scan(adapter: &Adapter, timeout_secs: u64) -> Result<Vec<BleDeviceInfo>, BleError> {
     adapter
         .start_scan(ScanFilter::default())
@@ -179,7 +180,7 @@ pub async fn scan(adapter: &Adapter, timeout_secs: u64) -> Result<Vec<BleDeviceI
         if let Ok(Some(props)) = p.properties().await {
             out.push(BleDeviceInfo {
                 name: props.local_name.clone(),
-                address: normalize_address(&props.address.to_string()),
+                address: normalize_address(&p.id().to_string()),
                 rssi: props.rssi,
                 recognized: is_recognized(&props.local_name),
             });
@@ -213,12 +214,15 @@ pub async fn connect_to_address(
         .map_err(|e| BleError::Connect(e.to_string()))?;
     let addr_norm = normalize_address(address);
     let mut found: Option<(Peripheral, String)> = None;
+    tracing::info!(
+        requested = %addr_norm,
+        candidates = ?peripherals.iter().map(|p| normalize_address(&p.id().to_string())).collect::<Vec<_>>(),
+        "BLE 定位 peripheral"
+    );
     for p in peripherals {
         let props = p.properties().await.ok().flatten();
-        let addr = props
-            .as_ref()
-            .map(|pr| normalize_address(&pr.address.to_string()));
-        if addr.as_deref() == Some(addr_norm.as_str()) {
+        let peripheral_id = normalize_address(&p.id().to_string());
+        if peripheral_id == addr_norm {
             let name = props
                 .as_ref()
                 .and_then(|pr| pr.local_name.clone())
@@ -247,16 +251,33 @@ impl BleIo {
         adapter: Adapter,
         peripheral: Peripheral,
     ) -> Result<(Self, HandshakeInfo), BleError> {
+        tracing::info!(peripheral = ?peripheral.id(), "BLE peripheral.connect 开始");
         peripheral
             .connect()
             .await
             .map_err(|e| BleError::Connect(e.to_string()))?;
+        tracing::info!(peripheral = ?peripheral.id(), "BLE peripheral.connect 完成");
+        tracing::info!(peripheral = ?peripheral.id(), "BLE discover_services 开始");
         peripheral
             .discover_services()
             .await
             .map_err(|e| BleError::Connect(e.to_string()))?;
+        tracing::info!(
+            peripheral = ?peripheral.id(),
+            services = ?peripheral.services().iter().map(|service| service.uuid).collect::<Vec<_>>(),
+            "BLE discover_services 完成"
+        );
 
         let chars = peripheral.characteristics();
+        tracing::info!(
+            peripheral = ?peripheral.id(),
+            characteristics = ?chars.iter().map(|characteristic| (
+                characteristic.uuid,
+                characteristic.service_uuid,
+                characteristic.properties,
+            )).collect::<Vec<_>>(),
+            "BLE 已发现特征"
+        );
         let rx_char = chars
             .iter()
             .find(|c| c.uuid.to_string().to_uppercase() == GB_TRANS_RX_UUID)
@@ -268,15 +289,18 @@ impl BleIo {
             .ok_or(BleError::CharacteristicNotFound)?
             .clone();
 
-        // 订阅 TX Notify（btleplug 0.11：subscribe 无返回，notifications() 取流）
+        tracing::info!(uuid = %tx_char.uuid, "BLE subscribe TX 开始");
         peripheral
             .subscribe(&tx_char)
             .await
             .map_err(|e| BleError::Subscribe(e.to_string()))?;
+        tracing::info!(uuid = %tx_char.uuid, "BLE subscribe TX 完成");
+        tracing::info!("BLE notifications stream 获取开始");
         let mut stream = peripheral
             .notifications()
             .await
             .map_err(|e| BleError::Subscribe(e.to_string()))?;
+        tracing::info!("BLE notifications stream 获取完成");
         let tx_char_uuid = tx_char.uuid;
         let (tx, rx) = mpsc::unbounded_channel();
         let (ev_tx, ev_rx) = mpsc::unbounded_channel();
@@ -354,7 +378,7 @@ impl BleIo {
         let mut frames = self.frames.lock().await;
         let mut seq: u16 = 0;
 
-        // 1. 等 DEVICE_READY（固件版本与硬件变体以事件为准，协议 §11.1 单一数据源）
+        tracing::info!("BLE 握手：等待 DEVICE_READY");
         let ready = tokio::time::timeout(
             Duration::from_millis(HANDSHAKE_READY_TIMEOUT_MS),
             wait_device_ready(&mut events),
@@ -368,8 +392,13 @@ impl BleIo {
                 ready.protocol_version
             )));
         }
+        tracing::info!(
+            protocol_version = ready.protocol_version,
+            "BLE 握手：收到 DEVICE_READY"
+        );
 
         // 2. GET_DEVICE_INFO
+        tracing::info!("BLE 握手：GET_DEVICE_INFO");
         seq += 1;
         let info_frame = self
             .request_response(CMD_GET_DEVICE_INFO, seq, &mut frames)
@@ -381,6 +410,7 @@ impl BleIo {
         }
 
         // 3. GET_CAPABILITIES
+        tracing::info!("BLE 握手：GET_CAPABILITIES");
         seq += 1;
         let caps_frame = self
             .request_response(CMD_GET_CAPABILITIES, seq, &mut frames)
@@ -427,7 +457,7 @@ impl BleIo {
         let frame = protocol::build_frame(cmd, seq, &[]);
         // 握手帧短于 ATT 分片上限，单次写入
         self.peripheral
-            .write(&self.rx_char, &frame, WriteType::WithoutResponse)
+            .write(&self.rx_char, &frame, WriteType::WithResponse)
             .await
             .map_err(|e| BleError::Write(e.to_string()))?;
         tokio::time::timeout(
@@ -481,7 +511,7 @@ impl TransportIo for BleIo {
         // 按 ATT payload 上限分片（协议 §2.3：设备端缓存组帧，不依赖包边界）
         for chunk in bytes.chunks(ATT_PAYLOAD_MAX) {
             self.peripheral
-                .write(&self.rx_char, chunk, WriteType::WithoutResponse)
+                .write(&self.rx_char, chunk, WriteType::WithResponse)
                 .await
                 .map_err(|e| format!("BLE 写入失败: {e}"))?;
         }
@@ -554,8 +584,12 @@ mod tests {
         assert_eq!(normalize_address("AA-BB-CC-DD-EE-FF"), "AA:BB:CC:DD:EE:FF");
         assert_eq!(normalize_address("aa:bb:cc:dd:ee:ff"), "AA:BB:CC:DD:EE:FF");
         assert_eq!(normalize_address("AABBCCDDEEFF"), "AA:BB:CC:DD:EE:FF");
-        // 非标准格式原样返回
+        // 非 MAC 平台标识统一为小写，兼容 CoreBluetooth UUID 大小写差异
         assert_eq!(normalize_address("garbage"), "garbage");
+        assert_eq!(
+            normalize_address("72D5477D-F144-CD9A-3679-335DD3504DA8"),
+            "72d5477d-f144-cd9a-3679-335dd3504da8"
+        );
     }
 
     #[test]

@@ -24,6 +24,7 @@ pub struct AppState {
     pub config: RwLock<AppConfig>,
     pub hook_server: tokio::sync::Mutex<Option<ailight_core::hook_server::HookServer>>,
     pub active_ble: tokio::sync::Mutex<Option<Arc<ailight_core::ble::BleIo>>>,
+    pub connection_lock: tokio::sync::Mutex<()>,
     pub connection_generation: AtomicU64,
 }
 
@@ -145,6 +146,7 @@ pub fn run() {
                 config: RwLock::new(config),
                 hook_server: tokio::sync::Mutex::new(None),
                 active_ble: tokio::sync::Mutex::new(None),
+                connection_lock: tokio::sync::Mutex::new(()),
                 connection_generation: AtomicU64::new(0),
             });
 
