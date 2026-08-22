@@ -81,7 +81,7 @@ export function IntegrationsPage() {
   const { snapshot, notify } = useAppState();
   const [copied, setCopied] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
-  const port = snapshot?.service.port ?? 47_800;
+  const port = snapshot?.service.port ?? 25_679;
 
   const copy = async (integration: Integration) => {
     await navigator.clipboard.writeText(integration.config(port));

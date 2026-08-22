@@ -89,10 +89,12 @@ fn parse_event(frame: &Frame) -> Option<BleEvent> {
     match frame.cmd {
         EVT_DEVICE_READY => protocol::parse_device_ready(&frame.data).map(BleEvent::DeviceReady),
         EVT_POWER_CHANGED => protocol::parse_power_changed(&frame.data).map(BleEvent::PowerChanged),
-        EVT_BUTTON_EVENT => protocol::parse_button_event(&frame.data).map(|b| BleEvent::ButtonEvent {
-            event: b.event,
-            duration_ms: b.duration_ms,
-        }),
+        EVT_BUTTON_EVENT => {
+            protocol::parse_button_event(&frame.data).map(|b| BleEvent::ButtonEvent {
+                event: b.event,
+                duration_ms: b.duration_ms,
+            })
+        }
         EVT_FAULT_EVENT => protocol::parse_fault_event(&frame.data).map(|f| BleEvent::Fault {
             source: f.source,
             code: f.code,
@@ -449,8 +451,11 @@ impl BleIo {
         false // 由 BleDeviceInfo 携带；此处保留接口占位
     }
 
-    pub async fn disconnect(&self) {
-        let _ = self.peripheral.disconnect().await;
+    pub async fn disconnect(&self) -> Result<(), BleError> {
+        self.peripheral
+            .disconnect()
+            .await
+            .map_err(|e| BleError::Connect(format!("主动断开失败: {e}")))
     }
 }
 
@@ -572,15 +577,27 @@ mod tests {
         assert!(classify_frame(&frame(EVT_BUTTON_EVENT, vec![0x01])));
         assert!(classify_frame(&frame(EVT_FAULT_EVENT, vec![0x01])));
         // 请求应答（cmd | 0x80）
-        assert!(!classify_frame(&frame(protocol::response_cmd(CMD_GET_DEVICE_INFO), vec![0x00])));
-        assert!(!classify_frame(&frame(protocol::response_cmd(CMD_GET_CAPABILITIES), vec![0x00])));
-        assert!(!classify_frame(&frame(protocol::response_cmd(CMD_GET_POWER_STATUS), vec![0x00])));
+        assert!(!classify_frame(&frame(
+            protocol::response_cmd(CMD_GET_DEVICE_INFO),
+            vec![0x00]
+        )));
+        assert!(!classify_frame(&frame(
+            protocol::response_cmd(CMD_GET_CAPABILITIES),
+            vec![0x00]
+        )));
+        assert!(!classify_frame(&frame(
+            protocol::response_cmd(CMD_GET_POWER_STATUS),
+            vec![0x00]
+        )));
     }
 
     #[test]
     fn parse_events_from_wire_samples() {
         // 协议 §17.13 帧示例（data 区）
-        let ready = parse_event(&frame(EVT_DEVICE_READY, vec![0x04, 0x01, 0x00, 0x00, 0x01, 0x01]));
+        let ready = parse_event(&frame(
+            EVT_DEVICE_READY,
+            vec![0x04, 0x01, 0x00, 0x00, 0x01, 0x01],
+        ));
         match ready {
             Some(BleEvent::DeviceReady(r)) => {
                 assert_eq!(r.protocol_version, 4);
@@ -591,7 +608,10 @@ mod tests {
             other => panic!("DEVICE_READY 解析失败: {other:?}"),
         }
 
-        let power = parse_event(&frame(EVT_POWER_CHANGED, vec![0x03, 0x00, 0x07, 0x0F, 0x3C, 0x4B, 0x03]));
+        let power = parse_event(&frame(
+            EVT_POWER_CHANGED,
+            vec![0x03, 0x00, 0x07, 0x0F, 0x3C, 0x4B, 0x03],
+        ));
         match power {
             Some(BleEvent::PowerChanged(p)) => {
                 assert_eq!(p.power_source, 3);
@@ -614,7 +634,11 @@ mod tests {
 
         let fault = parse_event(&frame(EVT_FAULT_EVENT, vec![0x01, 0x02, 0x00, 0x03]));
         match fault {
-            Some(BleEvent::Fault { source, code, context }) => {
+            Some(BleEvent::Fault {
+                source,
+                code,
+                context,
+            }) => {
                 assert_eq!(source, 1);
                 assert_eq!(code, 2);
                 assert_eq!(context, 3);

@@ -32,7 +32,7 @@
 │        │ events    │ invoke                             │
 │        │（状态推送）│（配置操作）                        │
 │  Rust Core                                             │
-│  ├─ L1 hook_server   HTTP 47800（hook-api V1.0）       │
+│  ├─ L1 hook_server   HTTP 25679（hook-api V1.0）       │
 │  ├─ L2 arbiter       优先级仲裁（ADR-0001 Q8）          │
 │  ├─ L2 theme         主题加载/校验/编译（theme-format） │
 │  ├─ L3 protocol      V0.4 编解码（借鉴 pyPcTest 分层）  │
@@ -77,14 +77,14 @@
 
 > **【摘要】** 在 L1 需要极简本地 HTTP 服务（3 端点 + 可选 token）的背景下，我们决定采用 **axum**，以达成后续可扩展性与开箱的中间件支持，接受其依赖体积（tokio 已被 Tauri 2 依赖，边际成本低）。
 
-- **背景**：hook-api V1.0 要求 `POST /hook` + `GET /api/status` + `GET /api/health`，JSON、可选 Bearer token、端口冲突退避（47801~47810）。
+- **背景**：hook-api V1.0 要求 `POST /hook` + `GET /api/status` + `GET /api/health`，JSON、可选 Bearer token、端口冲突退避（25680~25689）。
 - **决策**：使用 `axum`（MUST），监听 `127.0.0.1`（MUST NOT 绑定非回环地址）。token 校验用中间件（SHOULD）。端口占用时自动退避（MUST，hook-api §1）。
 - **备选方案**：
   1. `tiny_http`——极轻但路由/JSON/中间件全手写，扩展 direct_scene（V2）时成本高，否决
   2. `actix-web`——运行时与 Tauri 的 tokio 生态割裂，否决
   3. 原生 `std::net::TcpListener` 手写 HTTP——不可维护，否决
 - **后果**：依赖 +编译时间少量增加（tokio 已存在）✅；axum server 需与 Tauri async runtime 共存（独立 runtime 或 tauri 的 tokio 复用）⚠️。
-- **验证**：构建体积/编译时间对比、端口退避行为。状态：✅ 已实现（`hook_server` 基于 axum，含 OpenAPI 生成与 token 校验单测；端口 47800 退避至 47810）；编译体积对比待回填。
+- **验证**：构建体积/编译时间对比、端口退避行为。状态：✅ 已实现（`hook_server` 基于 axum，含 OpenAPI 生成与 token 校验单测；端口 25679 退避至 25689）；编译体积对比待回填。
 
 ### KAD-03 状态流架构：Rust 侧唯一事实源 + events 推前端
 
@@ -179,6 +179,15 @@
 - **后果**：真实切换闭环✅；mac Ventura+ 首次启用弹一次"在后台运行"通知、app 移动后 plist 路径可能失效、Linux 桌面环境差异等平台细节待实机（U-08）⚠️。
 - **验证**：`cargo check` + 前端 `pnpm check/typecheck/build` 全绿；功能层 F-01~F-05 本机验证；三平台实机冒烟（U-08）。状态：✅ 已实现（2026-08-21）。
 
+### KAD-10 Hook Server 可替换生命周期：先建后切的端口热重启
+
+> **【摘要】** 在用户需要修改本机 Hook 端口、同时不能中断 BLE 与业务状态的背景下，Hook Server 任务由 Tauri `AppState` 持有；端口变更采用“候选端口监听成功 → 配置持久化 → 替换旧任务”的事务顺序。
+
+- **决策**：默认端口 25679；启动时从 `portPreference` 向后最多退避 10 个端口；用户主动保存时精确绑定 1024~65535 内的指定端口，不自动漂移。
+- **失败语义**：候选端口占用或配置持久化失败时终止候选任务，旧 Hook Server 与原配置保持不变；不重建应用、Engine、BLE 或 `SharedState`。
+- **后果**：切换成功前会有极短的新旧监听并存窗口，但二者共享同一 Rust 事实源；避免先停旧服务造成的不可恢复中断。
+- **验证**：端口冲突测试、启动退避测试、失败保留旧服务的 command 验收；状态：✅ 已实现。
+
 ---
 
 ## 4. 不确定性清单（open questions）
@@ -218,5 +227,6 @@
 | KAD-07 单 writer 队列 + 事务状态机 | ✅ 设计确定 |
 | KAD-08 core 不绑 runtime + setup 契约显式化（ADR-0003） | ✅ 设计确定 |
 | KAD-09 开机自启 = OS 事实源 + config 校准缓存（tauri-plugin-autostart） | ✅ 已实现（2026-08-21；U-08 三平台冒烟待完成） |
+| KAD-10 Hook Server 端口热重启 = 先建后切、失败保留旧服务 | ✅ 已实现 |
 
 *本文档随开发推进回填 ⚠️ 项；已定决策如需变更，追加新 KAD 说明变更原因，不改写旧记录。*

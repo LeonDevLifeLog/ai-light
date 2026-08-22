@@ -33,7 +33,15 @@ pub fn init(app: &AppHandle) -> tauri::Result<TrayState> {
 
     let menu = Menu::with_items(
         app,
-        &[&show, &status, &theme, &device, &orient_sub, &open_config, &quit],
+        &[
+            &show,
+            &status,
+            &theme,
+            &device,
+            &orient_sub,
+            &open_config,
+            &quit,
+        ],
     )?;
 
     let tray = TrayIconBuilder::with_id("main")
@@ -85,10 +93,14 @@ fn set_orientation(app: &AppHandle, orientation: &str) {
         autostart: None,
         badge_orientation: Some(orientation.to_string()),
         theme_mode: None,
+        port_preference: None,
     };
-    if let Err(e) = crate::commands::update_config(app.clone(), patch) {
-        tracing::warn!("托盘切换徽章朝向失败: {e:?}");
-    }
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = crate::commands::update_config(handle, patch).await {
+            tracing::warn!("托盘切换徽章朝向失败: {e:?}");
+        }
+    });
 }
 
 // ---- 动态更新（事件源调用） ----

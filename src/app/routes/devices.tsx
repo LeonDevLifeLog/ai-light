@@ -4,6 +4,7 @@ import { useAppState } from "@/app/app-context";
 import {
   ActionButton,
   Card,
+  Dialog,
   EmptyState,
   InlineAlert,
   PageHeader,
@@ -32,6 +33,10 @@ export function DevicesPage() {
   const [scanError, setScanError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [hasScanned, setHasScanned] = useState(false);
+  const [deviceAction, setDeviceAction] = useState<
+    "disconnect" | "forget" | null
+  >(null);
+  const [confirmForget, setConfirmForget] = useState(false);
 
   const scan = useCallback(async () => {
     setScanning(true);
@@ -75,6 +80,41 @@ export function DevicesPage() {
     }
   };
 
+  const disconnect = async () => {
+    setDeviceAction("disconnect");
+    try {
+      await api.disconnectDevice();
+      await refresh();
+      notify({ tone: "success", title: "设备已断开" });
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "断开失败",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setDeviceAction(null);
+    }
+  };
+
+  const forget = async () => {
+    setDeviceAction("forget");
+    try {
+      await api.forgetDevice();
+      await refresh();
+      setConfirmForget(false);
+      notify({ tone: "success", title: "已忘记设备" });
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "无法忘记设备",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setDeviceAction(null);
+    }
+  };
+
   let connectionSection: ReactNode = null;
   if (snapshot?.device.connected) {
     connectionSection = (
@@ -105,6 +145,22 @@ export function DevicesPage() {
             </div>
           </dl>
           <StatusTag tone="success">已连接</StatusTag>
+          <div className="device-actions">
+            <ActionButton
+              busy={deviceAction === "disconnect"}
+              disabled={deviceAction !== null}
+              onClick={() => runAsync(disconnect())}
+            >
+              断开连接
+            </ActionButton>
+            <ActionButton
+              disabled={deviceAction !== null}
+              onClick={() => setConfirmForget(true)}
+              tone="danger"
+            >
+              忘记设备
+            </ActionButton>
+          </div>
         </Card>
       </section>
     );
@@ -117,6 +173,22 @@ export function DevicesPage() {
         <Card className="scan-status" role="status">
           <span className="scan-pip" />
           <span>设备已断开，正在自动重连…（最多尝试 5 次）</span>
+          <div className="device-actions">
+            <ActionButton
+              busy={deviceAction === "disconnect"}
+              disabled={deviceAction !== null}
+              onClick={() => runAsync(disconnect())}
+            >
+              停止重连
+            </ActionButton>
+            <ActionButton
+              disabled={deviceAction !== null}
+              onClick={() => setConfirmForget(true)}
+              tone="danger"
+            >
+              忘记设备
+            </ActionButton>
+          </div>
         </Card>
       </section>
     );
@@ -229,6 +301,34 @@ export function DevicesPage() {
           </div>
         )}
       </section>
+      {confirmForget ? (
+        <Dialog
+          description="应用会先断开当前连接、停止自动重连，并清除已记住的设备。"
+          footer={
+            <>
+              <ActionButton
+                disabled={deviceAction !== null}
+                onClick={() => setConfirmForget(false)}
+              >
+                取消
+              </ActionButton>
+              <ActionButton
+                busy={deviceAction === "forget"}
+                disabled={deviceAction !== null}
+                onClick={() => runAsync(forget())}
+                tone="danger"
+              >
+                确认忘记
+              </ActionButton>
+            </>
+          }
+          onClose={() => setConfirmForget(false)}
+          open={confirmForget}
+          title="忘记这台设备？"
+        >
+          <p>忘记后，下次启动 AI-Light 不会再自动连接这台设备。</p>
+        </Dialog>
+      ) : null}
     </div>
   );
 }

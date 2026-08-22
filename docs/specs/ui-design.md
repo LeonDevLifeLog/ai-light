@@ -122,7 +122,7 @@
 │            │                                              │
 │ ────────   │                                              │
 │ v0.1.0     │                                              │
-│ 端口:47800 │                                              │
+│ 端口:25679 │                                              │
 └────────────┴─────────────────────────────────────────────┘
 ```
 
@@ -239,7 +239,7 @@
   - 错误态：扫描失败的错误提示 + [重试]
 - **已连接区**：当前连接设备信息卡
   - 字段：设备名 / 地址 / 电量 / 固件 / 硬件版本 / 信号强度
-  - 操作：[断开]（P2）/ [忘记设备]（P2）
+  - 操作：[断开连接]（保留记忆）/ [忘记设备]（先断开再清除记忆，需确认）
 - **设备故障区**：FAULT_EVENT 触发的红色 Alert
 
 **关键流程**：
@@ -320,7 +320,7 @@
 **布局**（分组卡片）：
 
 - **服务**：
-  - 服务端口（只读显示当前值；修改需重启 → P2 支持 portPreference 修改重启）
+  - 服务端口（默认 25679；1024~65535；保存后仅热重启 Hook Server，失败保留旧服务）
   - 仲裁模式（**两张选项卡片**：优先级抢占[默认] / 最近活跃，各带效果说明；选中 = 绿描边 + 淡绿底 + 圆点）
   - 接入保护（状态标签："仅限本机" / "Token 已启用"；第一版不开放 Token 编辑，V2 再评估）
 - **显示**：
@@ -413,7 +413,7 @@ UI: Toast 提示"设备已断开"（不阻塞）
         --(成功)-->              [Connected]
         --(失败)-->              [Disconnected]
 [任意]
-    --(forget_device P2)-->      [Disconnected] + 清空 config.rememberedDevice
+    --(forget_device)-->         [Disconnected] + 清空 config.rememberedDevice
 ```
 
 ### 7.3 业务状态（来自仲裁）✅
@@ -628,17 +628,17 @@ z/tooltip    = 300
 
 - **托盘常驻服务**：✅ 已实装（2026-08-21）。图标 + 菜单（显示窗口 / 当前状态 / 当前主题 / 设备 / 徽章朝向 / 打开配置 / 退出）+ 动态联动全部落地；图标复用应用图标占位待替换；三平台行为验证（U-05）待实机
 - **主窗口 5 页 UI**：✅ 已实装（状态总览 / 设备管理 / 主题中心 / 试听 / 设置）
-- **12 个 P1 commands 前端对接**：✅ 已实装（`get_app_state` / `get_themes` / `get_theme` / `set_active_theme` / `import_theme` / `scan_devices` / `connect_device` / `trigger_state` / `preview_scene` / `reset_outputs` / `get_config` / `update_config`）
+- **14 个 P1 commands 前端对接**：✅ 已实装（新增 `disconnect_device` / `forget_device`）
 - **P1 events 订阅**：✅ 前端已订阅 5 个 P1 events，Rust 全部已 emit（含断连方向、`device-power-changed`、`device-fault`）。`hook-log` 为 P2
 - **红绿灯徽章组件**（核心视觉）+ 朝向偏好设置：✅ 已实装
 
 ### 11.2 应做（产品完整性）
 
-- **`portPreference` 实际读取与重启**：❌ 未实现。config 有字段但 `hook_server::serve` 固定 47800 起退避、不读取；`update_config` 不允许修改（P1 只读）
+- **`portPreference` 实际读取与热重启**：✅ 已实现。启动读取首选端口并向后退避；设置保存时精确绑定候选端口，失败保留旧服务
 - **token Bearer 校验**：✅ 已实现。hook_server 在配置 token 后强制 Bearer 校验，含 `token_auth` 单测；UI 设置入口按设计不开放（V2）
 - **`autostart` 真实启用**：✅ 已实现（2026-08-21）。`update_config` 先 OS 后 config（`AUTOSTART_FAILED` 错误码）；setup 启动校准；Settings 页 Switch 真实化；平台 = macOS LaunchAgent / Win Run key / Linux XDG autostart（U-08 三平台实机待完成）
 - **`badgeOrientation` 设置项**：✅ 已实现（Settings 页 + Dashboard 实时生效 + config 持久化）
-- **P2 commands**：❌ 全部未实现。`export_theme` / `delete_theme` / `disconnect_device` / `forget_device` / `hook-log` event（ipc-contract §7）
+- **P2 commands/events**：❌ `export_theme` / `delete_theme` / `hook-log` 未实现（ipc-contract §7）
 
 ### 11.3 待定（V2 / 远期）
 
@@ -683,7 +683,7 @@ z/tooltip    = 300
 
 1. 终端执行：
    ```bash
-   curl -X POST http://127.0.0.1:47800/hook \
+   curl -X POST http://127.0.0.1:25679/hook \
      -H 'Content-Type: application/json' \
      -d '{"source":"manual","event":"state_change","state":"WORKING"}'
    ```

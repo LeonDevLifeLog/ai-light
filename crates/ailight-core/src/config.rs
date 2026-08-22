@@ -5,9 +5,11 @@ use serde::{Deserialize, Serialize};
 use crate::theme;
 
 /// 默认 hook 服务端口
-pub const DEFAULT_PORT: u16 = 47800;
-/// 端口退避上限（hook-api §1）
-pub const MAX_PORT: u16 = 47810;
+pub const DEFAULT_PORT: u16 = 25679;
+/// 用户可配置端口下限（避开特权端口）
+pub const MIN_USER_PORT: u16 = 1024;
+/// 启动期从首选端口向后自动退避的最大次数
+pub const PORT_FALLBACK_ATTEMPTS: u16 = 10;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -27,7 +29,7 @@ pub struct AppConfig {
     /// 当前生效主题名（默认 "default"）
     #[serde(alias = "active_theme")]
     pub active_theme: String,
-    /// hook 服务首选端口；0 = 自动（47800 起退避至 47810）
+    /// hook 服务首选端口（默认 25679）
     #[serde(alias = "port_preference")]
     pub port_preference: u16,
     /// 记住的设备；null = 无
@@ -79,7 +81,7 @@ impl AppConfig {
                     ));
                     cfg.arbitration_mode = "priority".into();
                 }
-                if cfg.port_preference > MAX_PORT {
+                if cfg.port_preference < MIN_USER_PORT {
                     warn.push(format!(
                         "port_preference 非法({}), 回退 {}",
                         cfg.port_preference, DEFAULT_PORT
@@ -93,12 +95,11 @@ impl AppConfig {
                     ));
                     cfg.badge_orientation = "horizontal".into();
                 }
-                if cfg.theme_mode != "light" && cfg.theme_mode != "dark" && cfg.theme_mode != "system"
+                if cfg.theme_mode != "light"
+                    && cfg.theme_mode != "dark"
+                    && cfg.theme_mode != "system"
                 {
-                    warn.push(format!(
-                        "theme_mode 非法({}), 回退 dark",
-                        cfg.theme_mode
-                    ));
+                    warn.push(format!("theme_mode 非法({}), 回退 dark", cfg.theme_mode));
                     cfg.theme_mode = "dark".into();
                 }
                 if !theme::builtin_theme_names().contains(&cfg.active_theme.as_str()) {
@@ -138,7 +139,7 @@ mod tests {
     fn default_config() {
         let cfg = AppConfig::default();
         assert_eq!(cfg.arbitration_mode, "priority");
-        assert_eq!(cfg.port_preference, 47800);
+        assert_eq!(cfg.port_preference, 25679);
         assert!(cfg.remembered_device.is_none());
         assert!(cfg.token.is_empty());
         assert_eq!(cfg.theme_mode, "dark");
@@ -147,13 +148,13 @@ mod tests {
     #[test]
     fn load_valid() {
         let (cfg, warn) = AppConfig::load(
-            r#"{"version":1,"arbitration_mode":"last_active","port_preference":47805,
+            r#"{"version":1,"arbitration_mode":"last_active","port_preference":25685,
                 "remembered_device":{"address":"AA:BB:CC","name":"ACLight-1A2B"},
                 "token":"secret","autostart":true}"#,
         );
         assert!(warn.is_none());
         assert_eq!(cfg.arbitration_mode, "last_active");
-        assert_eq!(cfg.port_preference, 47805);
+        assert_eq!(cfg.port_preference, 25685);
         assert_eq!(cfg.remembered_device.unwrap().address, "AA:BB:CC");
         assert_eq!(cfg.token, "secret");
         assert!(cfg.autostart);
@@ -172,7 +173,7 @@ mod tests {
         assert!(warn.is_some());
         assert_eq!(cfg.version, 1);
         assert_eq!(cfg.arbitration_mode, "priority");
-        assert_eq!(cfg.port_preference, 47800);
+        assert_eq!(cfg.port_preference, 25679);
         assert_eq!(cfg.theme_mode, "dark");
     }
 

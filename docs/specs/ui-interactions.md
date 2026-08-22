@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.19 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.19，2026-08-22） |
+| 文档版本 | V1.20 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.20，2026-08-22） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -44,7 +44,7 @@
 | Event | Payload | 受影响的 UI | 实现状态 |
 |---|---|---|---|
 | `business-state-changed` | `{ state, source, session, sinceTs, theme }` | Dashboard 红绿灯徽章 + 状态名 + 副标题 | ✅ Rust 已 emit |
-| `device-connection-changed` | `{ connected, address, name, reason?, reconnecting? }` | Dashboard 设备卡 + Sidebar 底部「已连接」状态 + Devices 页重连中卡 | ✅ 连接 / 断连 / 重连放弃均已 emit（断连时清空电源字段） |
+| `device-connection-changed` | `{ connected, address, name, reason?, reconnecting? }` | Dashboard 设备卡 + Sidebar 底部「已连接」状态 + Devices 页重连中卡 | ✅ 连接 / 断连 / 主动断开 / 忘记 / 重连放弃均已 emit（断连时清空电源字段） |
 | `device-power-changed` | `{ batteryPercent, powerSource, chargeState, powerFlags }` | Dashboard 设备卡电量格 | ✅ 握手 GET_POWER_STATUS + POWER_CHANGED 主动事件均已 emit |
 | `device-fault` | `{ source, code, context }` | Devices 页告警卡 | ✅ FAULT_EVENT 已接线并 emit |
 | `theme-changed` | `{ name }` | Dashboard 主题卡 + Sidebar 底部「当前主题」 | ✅ Rust 已 emit |
@@ -150,7 +150,10 @@ UI 反馈：设备卡状态 tag 立即更新；失败显示 Toast（原因 + 重
 
 ### 4.3 断开
 
-`P2`：当前版本未提供 UI 入口；通过电源切断 / 走远超时实现。
+- [断开连接]：取消当前连接代次的自动重连 → BLE 主动断开 → 清理设备快照；保留记忆设备，下次启动仍会自动连接。
+- [忘记设备]：应用内确认 Dialog → 先主动断开并取消重连 → 清除并持久化记忆设备；断开失败时不清除记忆。
+- 自动重连中显示 [停止重连] 与 [忘记设备]；旧退避任务通过连接代次校验退出，不得在用户操作后重新连回。
+- 成功分别 Toast「设备已断开」/「已忘记设备」；失败保留可恢复状态并显示原因。
 
 ### 4.4 故障告警
 
@@ -193,7 +196,7 @@ UI 反馈：设备卡状态 tag 立即更新；失败显示 Toast（原因 + 重
 ```
 用户 [复制] 配置 → 粘贴到对应文件 → 重启工具
   ↓
-工具启动 → 第一次 hook 触发 → POST http://127.0.0.1:47800/hook
+工具启动 → 第一次 hook 触发 → POST http://127.0.0.1:25679/hook
   ↓
 AI-Light 收到 → 仲裁 → 主题映射 → SCENE 下发 → 灯亮
   ↓
@@ -360,7 +363,7 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
   - 最近活动优先：最后上报状态的工具接管灯效
   - 切换经 `update_config(arbitrationMode)` 即时生效（引擎热切换）。
 - 连接安全：用户说明强调工具只能从本机连接；状态标签为「仅限本机」/「已启用身份验证」。第一版 UI 不开放 Token 编辑入口（服务端 Bearer 校验见 hook-api §7）。
-- 高级服务信息：默认折叠；展开后只读显示当前监听端口，供配置和诊断使用。
+- 高级服务信息：默认折叠；端口输入允许 1024~65535，默认 25679。[保存并重启服务] 先精确绑定新端口并持久化，再替换旧 Hook Server，不重启应用或 BLE；失败时保留旧端口与原配置并引导用户换端口。
 
 ### 9.2 显示
 
@@ -376,7 +379,7 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 
 - 开机自启：✅ 已实装（2026-08-21，KAD-09 / ADR-0004）。Switch 真实切换：`update_config` 先 OS 后 config（OS 登录项为唯一事实源，config 为启动校准缓存）；失败返回 `AUTOSTART_FAILED` → Toast + 回滚到原值；重启时 `is_enabled()` 校准写回。
 
-> 未展示项：日志查看（P2）、portPreference 修改（P2 热重启）——页面不渲染，仅本文档记录。
+> 未展示项：日志查看（P2）。
 
 ---
 
@@ -392,7 +395,7 @@ Tauri Builder.setup()：
   - 初始化日志（info 级）
   - 加载内置默认主题
   - 启动 Engine（tokio spawn，单 writer 队列）
-  - 启动 L1 hook_server（axum，47800）
+  - 启动 L1 hook_server（axum，25679）
   - 启动事件轮询（200ms tick 仲裁 + emit）
   ↓
 Tauri Builder.on_window_event()：
@@ -471,6 +474,9 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | 主题保存失败（写文件失败）| Toast + 保持当前编辑状态 |
 | 设备扫描失败（蓝牙权限 / 系统错误）| 红色告警条 + 重试按钮 |
 | 设备连接失败 | Toast（含原因）+ 保留在 /devices |
+| 主动断开失败 | Toast（含原因）+ 保留连接与记忆设备 |
+| 端口热重启失败 | Toast（端口与失败原因）+ 输入回滚，旧 Hook Server 继续运行 |
+| 未连接设备试听 | Toast「请先连接设备后再试听灯效」（`DEVICE_NOT_CONNECTED`） |
 | 设备断连 | Toast「设备已断开」+ 设备卡显示「未连接」|
 | 设备重连成功 | Toast「设备已重新连接」+ 设备卡恢复 |
 | 设备故障（FAULT_EVENT）| 红色 Alert 卡 + Dashboard 设备卡故障指示 |
@@ -538,7 +544,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | G-02 | 握手信息读取（DEVICE_READY / GET_DEVICE_INFO / GET_CAPABILITIES / GET_POWER_STATUS）→ `device-power-changed` | ✅ 已实现（2026-08-21；实机冒烟 U-01 待完成） |
 | G-03 | FAULT_EVENT 接线 → `device-fault` | ✅ 已实现（2026-08-21；实机冒烟 U-01 待完成） |
 | G-04 | 托盘实装（图标 + 菜单；口径已定 P1） | ✅ 已实现（2026-08-21；图标占位待替换，U-05 待实机） |
-| G-05 | `portPreference` 读取与热重启 | P1 |
+| G-05 | `portPreference` 读取与 Hook Server 热重启 | ✅ 已实现（默认 25679；失败保留旧服务） |
 | G-06 | `autostart` 接入 tauri-plugin-autostart | ✅ 已实现（2026-08-21；三平台实机 U-08 待完成） |
 | U-01 | btleplug 三平台冒烟（mac/win/linux） | P1 阻塞 release |
 | U-02 | axum 编译/启动验证 | P1 |
@@ -596,7 +602,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 |---|---|---|---|
 | `disconnected` | `!connected` | 占位卡 + 虚线边框 + "未连接" tag | [去连接] → `/devices` |
 | `connecting` | 蓝牙握手进行中 | spinner + "连接中..." | 禁用 |
-| `connected` | 握手完成 | 完整字段 + "已连接" tag（accent） | hover → [断开] P2 |
+| `connected` | 握手完成 | 完整字段 + "已连接" tag（accent） | [断开连接] / [忘记设备] |
 | `reconnecting` | 链路异常退避重连 | spinner + "重连中...(N/M)" | 禁用 |
 | `lowBattery` | `batteryPercent < 20` | 电池格 warning 色 + Toast 警告 | 同 connected |
 | `charging` / `full` | `chargeState` 变化 | 电池格 + ⚡ / ✓ 图标 | 同 connected |
@@ -695,6 +701,9 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | `THEME_BUILTIN` | Dialog "内置主题不可删除" |
 | `BAD_REQUEST` | Toast "请求参数非法：`<reason>`" |
 | `DEVICE_NOT_CONNECTED` | Toast "请先连接设备" + 跳转 `/devices` |
+| `DEVICE_DISCONNECT_FAILED` | Toast "无法断开设备：`<reason>`"，保留记忆设备 |
+| `PORT_UNAVAILABLE` | Toast "端口切换失败：`<reason>`"，保留旧服务与原输入值 |
+| `AUTOSTART_FAILED` | Toast "开机自启设置失败：`<reason>`"，Switch 回滚 |
 
 **蓝牙 V0.4 §3.6**：
 
@@ -737,6 +746,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.20 | 2026-08-22 | 设备与服务闭环：§4.3 实装主动断开、忘记设备及连接代次取消重连；§9.1 实装默认 25679、精确端口热重启及失败回滚；§11 补充 `DEVICE_DISCONNECT_FAILED` / `PORT_UNAVAILABLE` / `DEVICE_NOT_CONNECTED` 反馈。对齐报告：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；蓝牙 result code 未变且仍与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10 引用有效。 |
 | V1.19 | 2026-08-22 | 全页面 UX review 优化：§1.1 将版本/端口收进「高级信息」；§4.1 补扫描最短可感知反馈并统一重试文案；§5 更新客户端支持状态、复制反馈并隐藏暂不支持项的无效操作；§7 将名称约束明确为「主题标识」；§8 区分状态模拟与灯牌试听、统一五态中文名；§9 将仲裁/保护改写为用户语言并折叠服务端口。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（错误路径未变）；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（协议行为未变）；§6~§8 使用的 `leds` / `high` / `brightness` 字段与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
 | V1.18 | 2026-08-22 | 主题创作器关闭与熄灯交互修复：§7.2 每颗灯新增“熄灭此灯 / 点亮此灯”，透明语义映射为协议支持的 `leds[i] = null`；取消、右上角关闭与 Esc 统一走应用内放弃修改确认 Dialog，替换 WebView 中无稳定反馈的原生 `window.confirm`。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（错误路径未变）；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（熄灯仍编译为合法 SCENE）；§6~§8 使用的 `leds` / `high` 字段与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |
 | V1.17 | 2026-08-22 | 主题创作器布局 review 优化：§7.1 主题名称区移除无语义关联的进阶按钮；§7.2 “借用主题效果”改为完整 accordion，按“来源选择 → 覆盖当前状态”两行呈现，右侧预览增加当前状态标题；§7.3/§7.4 “逐灯精确调整”入口移至基础编辑末尾并紧邻展开内容，使用 `aria-expanded` 且不占用主操作色。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（错误路径未变）；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（未触碰协议行为）；§6~§8 主题字段与 theme-format 字段表一致（未增删字段）；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |

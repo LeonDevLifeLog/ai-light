@@ -117,7 +117,7 @@ export interface ThemeFile {
 }
 
 const mockSnapshot: AppSnapshot = {
-  service: { version: "0.1.0", port: 47_800, tokenEnabled: false },
+  service: { version: "0.1.0", port: 25_679, tokenEnabled: false },
   device: {
     connected: false,
     address: null,
@@ -145,7 +145,7 @@ const mockConfig: AppConfig = {
   version: 1,
   arbitrationMode: "priority",
   activeTheme: "default",
-  portPreference: 47_800,
+  portPreference: 25_679,
   rememberedDevice: null,
   token: "",
   autostart: false,
@@ -245,6 +245,10 @@ export const api = {
   scanDevices: async () =>
     isTauri() ? call<ScannedDevice[]>("scan_devices") : [],
   connectDevice: (address: string) => call<void>("connect_device", { address }),
+  disconnectDevice: async () =>
+    isTauri() ? call<{ ok: boolean }>("disconnect_device") : { ok: true },
+  forgetDevice: async () =>
+    isTauri() ? call<{ ok: boolean }>("forget_device") : { ok: true },
   triggerState: async (state: string) =>
     isTauri() ? call<boolean>("trigger_state", { state, meta: null }) : true,
   previewScene: (state: string, theme?: string) =>

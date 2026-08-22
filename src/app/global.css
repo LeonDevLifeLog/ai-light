@@ -1021,6 +1021,21 @@ input[type="range"] {
   color: var(--text-tertiary);
 }
 
+.device-actions,
+.port-control {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.device-actions {
+  margin-left: auto;
+}
+
+.port-control input {
+  width: 112px;
+}
+
 .settings-card {
   padding: 0;
   overflow: hidden;

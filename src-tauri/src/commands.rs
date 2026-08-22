@@ -1,17 +1,16 @@
-//! Tauri commands（ipc-contract V1.0 §2：P1 全部 12 个）
+//! Tauri commands（ipc-contract V1.0 §2：P1 全部 14 个）
 
 use serde::Serialize;
+use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 use tokio::sync::mpsc;
 
 use ailight_core::arbiter::{ArbitrationMode, ST_IDLE};
 use ailight_core::ble::{self, BleDeviceInfo};
-use ailight_core::config::{AppConfig, RememberedDevice};
+use ailight_core::config::{AppConfig, RememberedDevice, MIN_USER_PORT};
 use ailight_core::engine::{self, EngineError};
-use ailight_core::hook_server::{
-    BusinessSnapshot, DeviceSnapshot, ServiceSnapshot, SharedState,
-};
+use ailight_core::hook_server::{BusinessSnapshot, DeviceSnapshot, ServiceSnapshot, SharedState};
 use ailight_core::theme::{self, ThemeFile};
 
 use crate::AppState;
@@ -27,7 +26,10 @@ pub struct AppError {
 type CmdResult<T> = Result<T, AppError>;
 
 fn err(code: &'static str, message: impl Into<String>) -> AppError {
-    AppError { code, message: message.into() }
+    AppError {
+        code,
+        message: message.into(),
+    }
 }
 
 fn internal(e: impl std::fmt::Display) -> AppError {
@@ -77,13 +79,22 @@ pub fn get_app_state(app: AppHandle) -> CmdResult<AppStateSnapshot> {
     };
     let service = ServiceSnapshot {
         version: s.app_version.clone(),
-        port: s.port.read().map(|p| *p).unwrap_or(47800),
+        port: s.port.read().map(|p| *p).unwrap_or(25679),
         token_enabled: s.token.read().map(|t| t.is_some()).unwrap_or(false),
     };
     let device = s.device.read().map(|d| d.clone()).unwrap_or_default();
-    let themes = theme::builtin_theme_names().into_iter().map(String::from).collect();
+    let themes = theme::builtin_theme_names()
+        .into_iter()
+        .map(String::from)
+        .collect();
     let active_theme = s.theme_name.read().map(|t| t.clone()).unwrap_or_default();
-    Ok(AppStateSnapshot { service, device, business, themes, active_theme })
+    Ok(AppStateSnapshot {
+        service,
+        device,
+        business,
+        themes,
+        active_theme,
+    })
 }
 
 // ---- 主题域 ----
@@ -99,7 +110,10 @@ pub struct ThemeMeta {
 pub fn get_themes(app: AppHandle) -> CmdResult<Vec<ThemeMeta>> {
     let mut names: Vec<ThemeMeta> = theme::builtin_theme_names()
         .into_iter()
-        .map(|n| ThemeMeta { name: n.to_string(), builtin: true })
+        .map(|n| ThemeMeta {
+            name: n.to_string(),
+            builtin: true,
+        })
         .collect();
     if let Ok(dir) = user_theme_dir(&app) {
         if let Ok(entries) = std::fs::read_dir(dir) {
@@ -110,7 +124,10 @@ pub fn get_themes(app: AppHandle) -> CmdResult<Vec<ThemeMeta>> {
                     .and_then(|value| value.to_str())
                     .and_then(|value| value.strip_suffix(".ailight-theme.json"))
                 {
-                    names.push(ThemeMeta { name: name.to_string(), builtin: false });
+                    names.push(ThemeMeta {
+                        name: name.to_string(),
+                        builtin: false,
+                    });
                 }
             }
         }
@@ -134,20 +151,24 @@ pub fn set_active_theme(app: AppHandle, name: String) -> CmdResult<()> {
     // 校验主题存在且合法
     let theme = resolve_theme(&app, &name).map_err(|e| err("THEME_INVALID", e))?;
     *s.theme.write().map_err(|_| internal("theme 锁"))? = Some(theme);
-    *s.theme_name.write().map_err(|_| internal("theme_name 锁"))? = name.clone();
+    *s.theme_name
+        .write()
+        .map_err(|_| internal("theme_name 锁"))? = name.clone();
     // 持久化
     persist_active_theme(&app, &name)?;
     let _ = app.emit("theme-changed", serde_json::json!({ "name": name }));
     crate::tray::update_theme(&app, &name);
     // 当前业务非 IDLE → 用新主题重放（幂等对齐，ipc-contract §2.2 副作用）
-    let state_now = s.arbiter.read().map(|g| g.current().state.clone()).unwrap_or_default();
+    let state_now = s
+        .arbiter
+        .read()
+        .map(|g| g.current().state.clone())
+        .unwrap_or_default();
     if state_now != ST_IDLE {
         let s2 = s.clone();
         tauri::async_runtime::spawn(async move {
-            let _ = engine::compile_current(&s2).and_then(|scene| {
-                s2.send_outbound(scene)
-                    .map_err(EngineError::State)
-            });
+            let _ = engine::compile_current(&s2)
+                .and_then(|scene| s2.send_outbound(scene).map_err(EngineError::State));
         });
     }
     Ok(())
@@ -181,6 +202,7 @@ pub(crate) async fn connect_device_internal(
     app: &AppHandle,
     address: &str,
     name: &str,
+    generation: u64,
 ) -> Result<(), String> {
     let adapter = ble::default_adapter().await.map_err(|e| e.to_string())?;
     let _ = ble::scan(&adapter, 4).await.map_err(|e| e.to_string())?;
@@ -188,8 +210,12 @@ pub(crate) async fn connect_device_internal(
     let (ble_io, actual_name, handshake) = ble::connect_to_address(&adapter, &addr_norm)
         .await
         .map_err(|e| e.to_string())?;
-    let display_name = if name.is_empty() { actual_name } else { name.to_string() };
-    attach_device(app, ble_io, handshake, addr_norm, display_name).await
+    let display_name = if name.is_empty() {
+        actual_name
+    } else {
+        name.to_string()
+    };
+    attach_device(app, ble_io, handshake, addr_norm, display_name, generation).await
 }
 
 /// 连接成功后的统一装配：快照 → 事件 → 持久化 → 热切换 → resync → 设备事件循环
@@ -199,9 +225,15 @@ pub(crate) async fn attach_device(
     handshake: ble::HandshakeInfo,
     address: String,
     name: String,
+    generation: u64,
 ) -> Result<(), String> {
     let s = shared(app);
     let state = app.state::<AppState>();
+
+    if state.connection_generation.load(Ordering::SeqCst) != generation {
+        ble_io.disconnect().await.map_err(|e| e.to_string())?;
+        return Err("连接请求已取消".into());
+    }
 
     // 设备快照（含握手信息：固件 / 硬件变体 / 电量）
     {
@@ -245,19 +277,23 @@ pub(crate) async fn attach_device(
 
     // 记住设备
     if let Ok(mut cfg) = state.config.write() {
-        cfg.remembered_device =
-            Some(RememberedDevice { address: address.clone(), name: name.clone() });
+        cfg.remembered_device = Some(RememberedDevice {
+            address: address.clone(),
+            name: name.clone(),
+        });
         persist_config(app, &cfg).map_err(|e| e.message)?;
     }
 
     // 热切换设备（Engine 无需重建）
     let events_rx = ble_io.take_events();
-    state.device_io.set(Some(std::sync::Arc::new(ble_io))).await;
+    let ble_io = std::sync::Arc::new(ble_io);
+    state.device_io.set(Some(ble_io.clone())).await;
+    *state.active_ble.lock().await = Some(ble_io);
     // 重连对齐：重发当前业务 SCENE（协议 §15.5）
     state.engine.resync().await.map_err(|e| e.to_string())?;
 
     if let Some(rx) = events_rx {
-        spawn_device_event_loop(app.clone(), rx, address, name);
+        spawn_device_event_loop(app.clone(), rx, address, name, generation);
     }
     Ok(())
 }
@@ -268,9 +304,18 @@ fn spawn_device_event_loop(
     mut events: mpsc::UnboundedReceiver<ble::BleEvent>,
     address: String,
     name: String,
+    generation: u64,
 ) {
     tauri::async_runtime::spawn(async move {
         while let Some(ev) = events.recv().await {
+            if app
+                .state::<AppState>()
+                .connection_generation
+                .load(Ordering::SeqCst)
+                != generation
+            {
+                return;
+            }
             match ev {
                 ble::BleEvent::PowerChanged(p) => {
                     let s = shared(&app);
@@ -278,7 +323,8 @@ fn spawn_device_event_loop(
                         dev.power_source = Some(p.power_source);
                         dev.power_flags = Some(p.power_flags);
                         dev.charge_state = Some(p.charge_state);
-                        dev.battery_percent = (p.battery_percent != 0xFF).then_some(p.battery_percent);
+                        dev.battery_percent =
+                            (p.battery_percent != 0xFF).then_some(p.battery_percent);
                     }
                     let _ = app.emit(
                         "device-power-changed",
@@ -290,7 +336,11 @@ fn spawn_device_event_loop(
                         }),
                     );
                 }
-                ble::BleEvent::Fault { source, code, context } => {
+                ble::BleEvent::Fault {
+                    source,
+                    code,
+                    context,
+                } => {
                     tracing::warn!("设备故障 source={source} code={code} context={context}");
                     let _ = app.emit(
                         "device-fault",
@@ -315,6 +365,7 @@ fn spawn_device_event_loop(
                     }
                     let state = app.state::<AppState>();
                     state.device_io.set(None).await;
+                    *state.active_ble.lock().await = None;
                     let _ = app.emit(
                         "device-connection-changed",
                         serde_json::json!({
@@ -326,7 +377,7 @@ fn spawn_device_event_loop(
                         }),
                     );
                     crate::tray::update_device(&app, false, None);
-                    spawn_reconnect(app, address, name, 1);
+                    spawn_reconnect(app, address, name, 1, generation);
                     return;
                 }
             }
@@ -335,8 +386,22 @@ fn spawn_device_event_loop(
 }
 
 /// 断连退避重连：延迟后重试 connect_device_internal；期间已手动连接则放弃
-pub(crate) fn spawn_reconnect(app: AppHandle, address: String, name: String, attempt: u32) {
+pub(crate) fn spawn_reconnect(
+    app: AppHandle,
+    address: String,
+    name: String,
+    attempt: u32,
+    generation: u64,
+) {
     const MAX_RECONNECT_ATTEMPTS: u32 = 5;
+    if app
+        .state::<AppState>()
+        .connection_generation
+        .load(Ordering::SeqCst)
+        != generation
+    {
+        return;
+    }
     if attempt > MAX_RECONNECT_ATTEMPTS {
         tracing::warn!("设备 {name} 重连达到上限，停止自动重连");
         let _ = app.emit(
@@ -356,14 +421,17 @@ pub(crate) fn spawn_reconnect(app: AppHandle, address: String, name: String, att
         tracing::info!("{delay:?} 后尝试重连 {name}（第 {attempt}/5 次）");
         tokio::time::sleep(delay).await;
         let state = app.state::<AppState>();
+        if state.connection_generation.load(Ordering::SeqCst) != generation {
+            return;
+        }
         if state.device_io.is_connected().await {
             return;
         }
-        match connect_device_internal(&app, &address, &name).await {
+        match connect_device_internal(&app, &address, &name, generation).await {
             Ok(()) => tracing::info!("设备 {name} 重连成功"),
             Err(e) => {
                 tracing::warn!("设备 {name} 重连第 {attempt} 次失败: {e}");
-                spawn_reconnect(app, address, name, attempt + 1);
+                spawn_reconnect(app, address, name, attempt + 1, generation);
             }
         }
     });
@@ -371,7 +439,73 @@ pub(crate) fn spawn_reconnect(app: AppHandle, address: String, name: String, att
 
 #[tauri::command]
 pub async fn connect_device(app: AppHandle, address: String) -> CmdResult<()> {
-    connect_device_internal(&app, &address, "").await.map_err(internal)
+    let generation = app
+        .state::<AppState>()
+        .connection_generation
+        .fetch_add(1, Ordering::SeqCst)
+        + 1;
+    connect_device_internal(&app, &address, "", generation)
+        .await
+        .map_err(internal)
+}
+
+async fn disconnect_current(app: &AppHandle) -> CmdResult<()> {
+    let state = app.state::<AppState>();
+    let current = state.active_ble.lock().await.clone();
+    if let Some(ble) = current {
+        ble.disconnect()
+            .await
+            .map_err(|e| err("DEVICE_DISCONNECT_FAILED", e.to_string()))?;
+    }
+
+    state.connection_generation.fetch_add(1, Ordering::SeqCst);
+    state.device_io.set(None).await;
+    *state.active_ble.lock().await = None;
+    if let Ok(mut device) = state.shared.device.write() {
+        *device = DeviceSnapshot::default();
+    }
+    Ok(())
+}
+
+fn emit_disconnected(app: &AppHandle, reason: &str) {
+    let _ = app.emit(
+        "device-connection-changed",
+        serde_json::json!({
+            "connected": false,
+            "reconnecting": false,
+            "reason": reason,
+            "address": null,
+            "name": null,
+        }),
+    );
+    crate::tray::update_device(app, false, None);
+}
+
+#[tauri::command]
+pub async fn disconnect_device(app: AppHandle) -> CmdResult<serde_json::Value> {
+    disconnect_current(&app).await?;
+    emit_disconnected(&app, "manual_disconnect");
+    Ok(serde_json::json!({ "ok": true }))
+}
+
+#[tauri::command]
+pub async fn forget_device(app: AppHandle) -> CmdResult<serde_json::Value> {
+    disconnect_current(&app).await?;
+    let state = app.state::<AppState>();
+    let mut candidate = state
+        .config
+        .read()
+        .map_err(|_| internal("config 锁"))?
+        .clone();
+    candidate.remembered_device = None;
+    if let Err(e) = persist_config(&app, &candidate) {
+        emit_disconnected(&app, "manual_disconnect");
+        return Err(e);
+    }
+    *state.config.write().map_err(|_| internal("config 锁"))? = candidate.clone();
+    let _ = app.emit("config-changed", &candidate);
+    emit_disconnected(&app, "forgotten");
+    Ok(serde_json::json!({ "ok": true }))
 }
 
 // ---- 控制域 ----
@@ -394,12 +528,19 @@ pub async fn preview_scene(
     theme: Option<String>,
     content: Option<String>,
 ) -> CmdResult<()> {
-    let engine = &app.state::<AppState>().engine;
+    let app_state = app.state::<AppState>();
+    if !app_state.device_io.is_connected().await {
+        return Err(err("DEVICE_NOT_CONNECTED", "请先连接设备后再试听灯效"));
+    }
+    let engine = &app_state.engine;
     if let Some(content) = content {
         let draft = theme::load(&content).map_err(|e| err("THEME_INVALID", e.to_string()))?;
         engine.preview_theme(&draft, &state).await.map_err(internal)
     } else {
-        engine.preview(&state, theme.as_deref()).await.map_err(internal)
+        engine
+            .preview(&state, theme.as_deref())
+            .await
+            .map_err(internal)
     }
 }
 
@@ -407,7 +548,10 @@ pub async fn preview_scene(
 pub async fn reset_outputs(app: AppHandle) -> CmdResult<()> {
     let engine = &app.state::<AppState>().engine;
     engine.reset().await.map_err(internal)?;
-    let _ = app.emit("business-state-changed", serde_json::json!({ "state": ST_IDLE }));
+    let _ = app.emit(
+        "business-state-changed",
+        serde_json::json!({ "state": ST_IDLE }),
+    );
     Ok(())
 }
 
@@ -416,7 +560,11 @@ pub async fn reset_outputs(app: AppHandle) -> CmdResult<()> {
 #[tauri::command]
 pub fn get_config(app: AppHandle) -> CmdResult<AppConfig> {
     let state = app.state::<AppState>();
-    state.config.read().map(|c| c.clone()).map_err(|_| internal("config 锁"))
+    state
+        .config
+        .read()
+        .map(|c| c.clone())
+        .map_err(|_| internal("config 锁"))
 }
 
 #[derive(serde::Deserialize)]
@@ -427,12 +575,72 @@ pub struct ConfigPatch {
     pub autostart: Option<bool>,
     pub badge_orientation: Option<String>,
     pub theme_mode: Option<String>,
+    pub port_preference: Option<u16>,
 }
 
 #[tauri::command]
-pub fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppConfig> {
+pub async fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppConfig> {
     let s = shared(&app);
     let state = app.state::<AppState>();
+
+    if let Some(port) = patch.port_preference {
+        if patch.arbitration_mode.is_some()
+            || patch.token.is_some()
+            || patch.autostart.is_some()
+            || patch.badge_orientation.is_some()
+            || patch.theme_mode.is_some()
+        {
+            return Err(err("BAD_REQUEST", "服务端口需要单独保存"));
+        }
+        if port < MIN_USER_PORT {
+            return Err(err(
+                "BAD_REQUEST",
+                format!("服务端口必须在 {MIN_USER_PORT}~65535 之间"),
+            ));
+        }
+        let current = state
+            .config
+            .read()
+            .map_err(|_| internal("config 锁"))?
+            .clone();
+        let actual_port = s.port.read().map(|p| *p).unwrap_or(port);
+        if current.port_preference == port && actual_port == port {
+            return Ok(current);
+        }
+        if actual_port == port {
+            let mut candidate = current;
+            candidate.port_preference = port;
+            persist_config(&app, &candidate)?;
+            *state.config.write().map_err(|_| internal("config 锁"))? = candidate.clone();
+            let _ = app.emit("config-changed", &candidate);
+            return Ok(candidate);
+        }
+
+        let candidate_server = ailight_core::hook_server::serve_on(s.clone(), port)
+            .await
+            .map_err(|e| {
+                err(
+                    "PORT_UNAVAILABLE",
+                    format!("无法使用端口 {port}：{e}。请换一个端口后重试"),
+                )
+            })?;
+        let mut candidate = current;
+        candidate.port_preference = port;
+        if let Err(e) = persist_config(&app, &candidate) {
+            candidate_server.stop();
+            return Err(e);
+        }
+
+        let old_server = state.hook_server.lock().await.replace(candidate_server);
+        if let Some(old) = old_server {
+            old.stop();
+        }
+        *s.port.write().map_err(|_| internal("port 锁"))? = port;
+        *state.config.write().map_err(|_| internal("config 锁"))? = candidate.clone();
+        let _ = app.emit("config-changed", &candidate);
+        return Ok(candidate);
+    }
+
     let mut cfg = state.config.write().map_err(|_| internal("config 锁"))?;
 
     if let Some(mode) = &patch.arbitration_mode {
@@ -444,8 +652,11 @@ pub fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppConfig>
     }
     if let Some(token) = &patch.token {
         cfg.token = token.clone();
-        *s.token.write().map_err(|_| internal("token 锁"))? =
-            if token.is_empty() { None } else { Some(token.clone()) };
+        *s.token.write().map_err(|_| internal("token 锁"))? = if token.is_empty() {
+            None
+        } else {
+            Some(token.clone())
+        };
     }
     if let Some(autostart) = patch.autostart {
         // 先 OS 后 config（设计方案 D-06）：OS 登录项为唯一事实源，
@@ -463,7 +674,10 @@ pub fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppConfig>
     }
     if let Some(orientation) = &patch.badge_orientation {
         if orientation != "horizontal" && orientation != "vertical" {
-            return Err(err("BAD_REQUEST", format!("badgeOrientation 非法: {orientation}")));
+            return Err(err(
+                "BAD_REQUEST",
+                format!("badgeOrientation 非法: {orientation}"),
+            ));
         }
         cfg.badge_orientation = orientation.clone();
         crate::tray::update_orientation(&app, orientation);
@@ -489,7 +703,10 @@ fn user_theme_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
 }
 
 fn builtin_theme_content(name: &str) -> Option<&'static str> {
-    theme::BUILTIN_THEMES.iter().find(|(n, _)| *n == name).map(|(_, c)| *c)
+    theme::BUILTIN_THEMES
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, c)| *c)
 }
 
 fn resolve_theme(app: &AppHandle, name: &str) -> Result<ThemeFile, String> {

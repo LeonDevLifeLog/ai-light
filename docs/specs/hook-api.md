@@ -4,7 +4,7 @@
 |---|---|
 | API 版本 | V1.0 |
 | 机器契约 | 运行时 `GET /openapi.json`（由 Rust DTO 与 Handler 注解生成） |
-| 默认地址 | `http://127.0.0.1:47800` |
+| 默认地址 | `http://127.0.0.1:25679` |
 | 服务范围 | 仅本机回环地址 |
 
 Hook API 接收 AI 编程工具或适配器上报的任务状态。AI-Light 对多个来源的状态进行仲裁，再按当前主题转换为灯光和提示音。
@@ -18,12 +18,12 @@ Hook API 接收 AI 编程工具或适配器上报的任务状态。AI-Light 对�
 | `GET /openapi.json` | OpenAPI 3.1 JSON，可用于生成客户端、导入 Postman 或自动测试 |
 | `GET /docs` | Swagger UI，可查看模型并直接调用接口 |
 
-端口默认是 `47800`。端口被占用时，应用依次尝试 `47801` 至 `47810`；实际端口可在应用状态或 `/api/status` 的 `service.port` 中查看。Swagger UI 的 HTML、JavaScript 和 CSS 均嵌入应用并由 Hook Server 本地提供，不需要访问外部 CDN。
+端口默认是 `25679`。启动时首选端口被占用，应用会向后尝试最多 10 个端口；设置页也可在 1024~65535 范围内指定端口并热重启 Hook Server。主动保存使用精确端口，冲突时保留旧服务并提示调整。实际端口可在应用状态或 `/api/status` 的 `service.port` 中查看。Swagger UI 的资源均嵌入应用，不访问外部 CDN。
 
 ## 2. 快速开始
 
 ```bash
-curl http://127.0.0.1:47800/hook \
+curl http://127.0.0.1:25679/hook \
   --request POST \
   --header 'Content-Type: application/json' \
   --data '{
@@ -48,8 +48,8 @@ curl http://127.0.0.1:47800/hook \
 查询状态与健康情况：
 
 ```bash
-curl http://127.0.0.1:47800/api/status
-curl http://127.0.0.1:47800/api/health
+curl http://127.0.0.1:25679/api/status
+curl http://127.0.0.1:25679/api/health
 ```
 
 ## 3. 接口一览
