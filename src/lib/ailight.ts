@@ -80,6 +80,12 @@ export interface AppError {
   message: string;
 }
 
+export interface IntegrationStatus {
+  connected: boolean;
+  managedCount: number;
+  path: string;
+}
+
 export interface LedTrack {
   brightness: number;
   curve: "CONSTANT" | "SQUARE" | "TRIANGLE" | "SAW_UP" | "SAW_DOWN";
@@ -277,6 +283,14 @@ export const api = {
     isTauri()
       ? call<AppConfig>("update_config", { patch })
       : { ...mockConfig, ...patch },
+  getIntegrationStatus: async (tool: "claude-code" | "codex") =>
+    isTauri()
+      ? call<IntegrationStatus>("get_integration_status", { tool })
+      : { connected: false, managedCount: 0, path: "" },
+  installIntegration: (tool: "claude-code" | "codex") =>
+    call<{ changed: boolean; path: string }>("install_integration", { tool }),
+  uninstallIntegration: (tool: "claude-code" | "codex") =>
+    call<{ changed: boolean; path: string }>("uninstall_integration", { tool }),
 };
 
 export function subscribe<T>(

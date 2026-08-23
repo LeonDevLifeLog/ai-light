@@ -222,7 +222,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `portPreference` 变更 | `Settings.portInput` + 全局 service.port | — | 精确绑定候选端口 → 持久化 → 替换旧 Hook Server → refresh 快照；失败回滚 |
 | `config-changed`（Rust 事件） | 全组件 | `config.badgeOrientation` / `themeMode` 等完整 Config | full sync |
 
-> `portPreference` 热重启已实装（KAD-10）；`autostart` 真实切换已实装（KAD-09）。
+> `portPreference` 热重启历史实现见 KAD-10，现由 KAD-11 取代为自动端口发现且不开放用户修改；`autostart` 真实切换已实装（KAD-09）。
 >
 > ✅ 实现状态：`update_config`（设置页与托盘徽章朝向共用）成功后 emit `config-changed`，前端订阅整包同步。
 
@@ -268,7 +268,6 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `BAD_REQUEST` | 参数非法（如 trigger_state 状态名含非法字符） | Toast "请求参数非法：`<reason>`" | 修正输入 |
 | `DEVICE_NOT_CONNECTED` | preview_scene 时未连接 | Toast "请先连接设备" | 跳转 `/devices` |
 | `DEVICE_DISCONNECT_FAILED` | 主动断开失败 | Toast "无法断开设备：`<reason>`" | 检查设备后重试 |
-| `PORT_UNAVAILABLE` | 新端口占用或无法监听 | Toast "端口切换失败：`<reason>`"；输入与服务保持原值 | 换一个端口重试 |
 | `AUTOSTART_FAILED` | OS 登录项切换失败 | Toast "开机自启设置失败：`<reason>`"；Switch 回滚 | 检查系统权限后重试 |
 | `INTERNAL` | Rust 侧异常（含 BLE 下发失败） | Toast "服务异常，请查看日志" | 打开日志目录 |
 
@@ -624,28 +623,26 @@ Dashboard 主题卡 + Themes 页主题网格卡：3 灯条色块缩略 + 主题�
 ### 6.5 `IntegrationCard`
 
 **6.5.1 用途**
-Integrations 页的客户端配置卡（Claude Code / Codex / Qoder / Cursor）。
+Integrations 页的官方 Adapter 卡（Claude Code / Codex）。
 
 **6.5.2 对外契约**
 
 | 类别 | 项 | 说明 |
 |---|---|---|
-| Props | `client` | `{ id, name, status, configPath, configSnippet, helpText }` |
-| Props | `status` | `'configured' \| 'unconfigured' \| 'incompatible' \| 'reserved'` |
-| Emit | `onClickTestConnection(clientId)` | 触发测试连接 |
-| Emit | `onClickCopy(content)` | 复制配置代码 |
-| Invoke | `trigger_state('WORKING', { source: clientId })`（[测试连接]） | — |
+| Props | `client` | `{ id, name, description }` |
+| Props | `status` | `'connected' \| 'unconnected'` |
+| Emit | `onClickConnect(clientId)` | 安装 Adapter 并写入托管 Hook |
+| Emit | `onClickDisconnect(clientId)` | 仅移除托管 Hook |
+| Invoke | `get_integration_status/install_integration/uninstall_integration` | — |
 
 **6.5.3 视觉态全集**
 
 | 态 | 触发条件 | 视觉 | 可交互 |
 |---|---|---|---|
-| `configured` | `status == 'configured'` | accent tag "已配置" + 测试连接 enabled | hover |
-| `unconfigured` | `status == 'unconfigured'` | warn tag "未配置" + 测试连接 enabled | hover |
-| `incompatible` | `status == 'incompatible'` | 灰 tag「仅支持 CLI」+ 平台限制说明 | 可复制配置；测试禁用 |
-| `reserved` | `status == 'reserved'` | 灰 tag「暂不支持」+ 原因说明 | 不渲染测试、复制和配置展开入口 |
-| `testing` | [测试连接] 点击后 | button = loading 态 | 禁用 |
-| `error` | 测试失败 | button 抖动 + Toast | hover |
+| `connected` | Adapter 托管条目完整 | success tag「已连接」+ 断开按钮 | hover |
+| `unconnected` | 未安装或托管条目不完整 | warn tag「未连接」+ 主按钮「连接」 | hover |
+| `loading` | 连接/断开执行中 | button loading | 禁止重复触发 |
+| `error` | 管理命令失败 | 状态保持原值 + 含恢复方向的 Toast | hover |
 
 **6.5.4 联动矩阵**
 
@@ -655,13 +652,13 @@ Integrations 页的客户端配置卡（Claude Code / Codex / Qoder / Cursor）�
 | `update_config` | (none) | — |
 
 **6.5.5 边界条件**
-- Codex Desktop 用户：tag 显示「仅支持 CLI」，说明 Desktop 暂不支持（KAD-04 提示）
-- 文件路径不存在：`status` 检测时显示 "配置文件未找到"
-- [测试连接] 失败 → Toast "测试失败：5 秒内未看到灯效变化"
+- Adapter 未安装时，[连接] 由后端尝试 npm 全局安装；失败 Toast 说明 Node/npm 或权限原因。
+- 配置解析失败时不写文件，Toast 明确要求先修复原配置。
+- [断开] 只移除 AI-Light 标记的托管条目，其他 Hook 保持不变。
 
 **6.5.6 无障碍**
-- 折叠区 = `<details>` / `<summary>`
-- 复制按钮 = `<button>` + `aria-live` 复制成功提示；Toast 同时说明粘贴目标路径
+- 连接和断开均为带文字按钮，不依赖图标表达状态。
+- loading 使用原生 `disabled`，Toast 通过现有 `aria-live` 区域播报。
 
 ---
 
@@ -701,7 +698,7 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 **6.6.5 边界条件**
 - 端口切换：需重启服务 → Toast "服务重启中..." → 成功后 Toast "端口已切换"
 - 自启动：✅ 已实装（tauri-plugin-autostart 2.5.1，KAD-09）；失败路径 `AUTOSTART_FAILED` → Toast + 控件回滚到原值；OS 登录项为唯一事实源，config 为启动校准缓存
-- 状态显示规则：ModeOption 卡片独占选择（`aria-pressed`）；「重要状态优先」带「推荐」标签；切换经 `update_config(arbitrationMode)` 即时生效
+- 状态显示规则：行说明为“同一工具始终跟随最新状态；多个工具冲突时决定显示谁”；ModeOption 卡片独占选择（`aria-pressed`）；「重要状态优先」说明优先级仅在多个工具冲突时生效，「最近活动优先」说明最后上报的工具在冲突时接管；切换经 `update_config(arbitrationMode)` 即时生效（KAD-12）
 - 服务端口放在「高级服务信息」原生 disclosure 中，默认收起
 - 接口文档与服务端口同处「高级服务信息」；按钮根据 `service.port` 打开 `http://127.0.0.1:{port}/docs/`，调用中进入 loading 并禁用，状态未就绪时 disabled，打开失败 Toast，成功不额外反馈
 
@@ -1792,6 +1789,8 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.22 | 2026-08-22 | KAD-12 仲裁语义澄清：§6.6.5 明确同一工具按最新生命周期状态推进，两个 ModeOption 只决定多个工具冲突时的显示规则。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效，新增 KAD-12 可解析。 |
+| V1.21 | 2026-08-22 | §6.5 IntegrationCard 切换为 Node Adapter 一键连接/断开契约，移除复制配置、伪测试及固定 Codex Desktop 限制；§6.6 设置页不再提供端口编辑。对齐报告：§3 Source Events 未变且均存在于 ipc-contract §5；Adapter AppError.code 已同步 ipc-contract §4；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10/11 引用有效。 |
 | V1.20 | 2026-08-22 | §6.6/§7.6 新增 Hook API 文档快捷入口契约：使用实际 `service.port` 在默认浏览器打开 `/docs/`，补齐 loading、disabled 与失败 Toast。对齐报告：§3 Source Events 未变且均存在于 ipc-contract §5；§4.1 未新增 AppError.code；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段，与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10 引用有效。 |
 | V1.19 | 2026-08-22 | 设备与服务闭环：§3.2 扩展主动断开/忘记 reason；§3.6 新增 `portPreference` 热重启联动；§5.2/§6.3 实装断开、忘记与连接代次取消重连。对齐报告：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10 引用有效。 |
 | V1.18 | 2026-08-22 | 全页面 UX review 优化：§6.1 将版本/端口折叠为高级信息；§6.5 更新 incompatible/reserved 支持状态和动作可用性；§6.6/§7.6 将仲裁与接入保护改写为用户语言并折叠服务端口；§7.2 补扫描最短反馈；§7.4 隐藏未支持客户端的无效操作；§7.5 区分状态模拟与设备试听；§8.5 熄灯态隐藏不可生效的颜色/亮度控件。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（错误路径未变）；§4.2 result code 与蓝牙 V0.4 §3.6 一致（协议行为未变）；§6~§8 的 `leds` / `high` / `brightness` 与 theme-format 字段一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |

@@ -168,35 +168,27 @@ UI 反馈：设备卡状态 tag 立即更新；失败显示 Toast（原因 + 重
 
 ## 5. 接入外部工具（`/integrations`）
 
-### 5.1 4 个客户端卡
+### 5.1 2 个客户端卡
 
 | 客户端 | 状态 tag（默认） | 配置文件 | 接入方式 |
 |---|---|---|---|
-| Claude Code | 已配置 / 未配置 | `~/.claude/settings.json` | 🟢 HTTP hook 直连 |
-| Codex | 仅支持 CLI | `~/.codex/hooks.json` + `~/.codex/config.toml` | 🟢 command（curl） + notify；Desktop 暂不支持 |
-| Qoder | 暂不支持 | — | 不显示测试、复制与配置展开入口 |
-| Cursor | 暂不支持 | — | 不显示测试、复制与配置展开入口 |
+| Claude Code | 已连接 / 未连接 | `~/.claude/settings.json` | Node Adapter command hook |
+| Codex | 已连接 / 未连接 | `~/.codex/hooks.json` | Node Adapter command hook；notify 仅作后续兼容降级 |
 
 ### 5.2 操作
 
-可配置的客户端卡包含 3 个动作：
-- [测试连接] → 后端向本工具的配置路径 POST 一个测试 hook 事件，Dashboard 5 秒内应看到红绿灯变化
-- [▸ 查看配置步骤] → 折叠显示完整配置代码（已折叠）
-- [复制配置] → 一键复制配置代码到剪贴板；Toast 同时提示粘贴目标路径
-
-暂不支持的客户端卡只展示支持状态与原因，不呈现看似可操作但始终禁用的按钮。
+客户端卡只包含一个上下文主动作：未连接时 [连接]，已连接时 [断开]。连接由后端检测/安装 `@ai-light/adapter`，CLI 备份并合并工具配置；断开只删除 AI-Light 托管 Hook。按钮执行时进入 loading 并禁止重复触发，结果通过 Toast 反馈。
 
 ### 5.3 Codex 特殊说明
 
-- ⚠️ Codex Desktop 会重写 `notify` 配置（包装成 Computer Use），可能丢失用户的 ai-light 项
-- 建议：纯 CLI Codex 用户才用此卡；卡片明确标记「仅支持 CLI」，说明 Codex Desktop 暂不支持
+能力以当前本机 Codex 配置与 Adapter 检测结果为准，不再固定显示“Desktop 暂不支持”。V1 优先 lifecycle command hooks，不与 `notify` 重复发送终态。
 
 ### 5.4 配置生效流程
 
 ```
-用户 [复制] 配置 → 粘贴到对应文件 → 重启工具
+用户 [连接] → Desktop 调用 Adapter CLI → 备份并幂等写入 Hook
   ↓
-工具启动 → 第一次 hook 触发 → POST http://127.0.0.1:25679/hook
+工具启动 → 第一次 hook 触发 → Adapter 读取 stdin 与 ~/.ailight/runtime.json → POST /hook
   ↓
 AI-Light 收到 → 仲裁 → 主题映射 → SCENE 下发 → 灯亮
   ↓
@@ -358,14 +350,12 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 
 ### 9.1 服务
 
-- 状态显示规则：两张选项卡片（独占选择），选中态 = 绿色描边 + 淡绿底 + 圆点填充；「重要状态优先」带「推荐」标签。选项与效果：
-  - 重要状态优先：错误 > 完成 > 进行中 > 等待 > 空闲
-  - 最近活动优先：最后上报状态的工具接管灯效
+- 状态显示规则：说明明确“同一工具始终跟随最新状态；多个工具冲突时决定显示谁”。两张选项卡片独占选择，选中态 = 绿色描边 + 淡绿底 + 圆点填充；「重要状态优先」带「推荐」标签。选项与效果：
+  - 重要状态优先：仅在多个工具冲突时，错误 > 完成 > 进行中 > 等待 > 空闲
+  - 最近活动优先：仅在多个工具冲突时，由最后上报的工具接管灯效
   - 切换经 `update_config(arbitrationMode)` 即时生效（引擎热切换）。
 - 连接安全：用户说明强调工具只能从本机连接；状态标签为「仅限本机」/「已启用身份验证」。第一版 UI 不开放 Token 编辑入口（服务端 Bearer 校验见 hook-api §7）。
-- 高级服务信息：默认折叠，包含服务端口与接口文档两个同级行：
-  - 服务端口：输入允许 1024~65535，默认 25679。[保存并重启服务] 先精确绑定新端口并持久化，再替换旧 Hook Server，不重启应用或 BLE；失败时保留旧端口与原配置并引导用户换端口。
-  - 接口文档：[打开 API 文档] 使用系统默认浏览器打开当前实际监听地址 `http://127.0.0.1:{service.port}/docs/`。打开中显示「正在打开…」并屏蔽重复触发；应用状态尚未就绪时禁用。成功不额外提示，打开失败显示原因 Toast。
+- 高级服务信息：默认折叠，只包含接口文档；端口由 AI-Light 自动管理，不提供用户编辑或普通接入页展示。[打开 API 文档] 使用系统默认浏览器打开当前实际监听地址 `http://127.0.0.1:{service.port}/docs/`。打开中显示「正在打开…」并屏蔽重复触发；应用状态尚未就绪时禁用。成功不额外提示，打开失败显示原因 Toast。
 
 ### 9.2 显示
 
@@ -547,7 +537,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | G-02 | 握手信息读取（DEVICE_READY / GET_DEVICE_INFO / GET_CAPABILITIES / GET_POWER_STATUS）→ `device-power-changed` | ✅ 已实现（2026-08-21；实机冒烟 U-01 待完成） |
 | G-03 | FAULT_EVENT 接线 → `device-fault` | ✅ 已实现（2026-08-21；实机冒烟 U-01 待完成） |
 | G-04 | 托盘实装（图标 + 菜单；口径已定 P1） | ✅ 已实现（2026-08-21；图标占位待替换，U-05 待实机） |
-| G-05 | `portPreference` 读取与 Hook Server 热重启 | ✅ 已实现（默认 25679；失败保留旧服务） |
+| G-05 | Hook Server 地址管理 | ✅ 已实现（固定优先 25679、自动退避、runtime 文件供 Adapter 发现；不开放用户修改） |
 | G-06 | `autostart` 接入 tauri-plugin-autostart | ✅ 已实现（2026-08-21；三平台实机 U-08 待完成） |
 | U-01 | btleplug 三平台冒烟（mac/win/linux） | P1 阻塞 release |
 | U-02 | axum 编译/启动验证 | P1 |
@@ -705,7 +695,6 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | `BAD_REQUEST` | Toast "请求参数非法：`<reason>`" |
 | `DEVICE_NOT_CONNECTED` | Toast "请先连接设备" + 跳转 `/devices` |
 | `DEVICE_DISCONNECT_FAILED` | Toast "无法断开设备：`<reason>`"，保留记忆设备 |
-| `PORT_UNAVAILABLE` | Toast "端口切换失败：`<reason>`"，保留旧服务与原输入值 |
 | `AUTOSTART_FAILED` | Toast "开机自启设置失败：`<reason>`"，Switch 回滚 |
 
 **蓝牙 V0.4 §3.6**：
@@ -749,6 +738,8 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.23 | 2026-08-22 | KAD-12 仲裁语义澄清：§9.1 明确同一工具始终跟随最新生命周期状态，优先级与最近活动规则仅在多个工具冲突时生效；设置页文案同步。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效，新增 KAD-12 可解析。 |
+| V1.22 | 2026-08-22 | Node Adapter CLI 接入：§5 改为 Claude Code/Codex 一键连接与断开，移除复制 curl、伪测试与端口展示；§9.1 移除用户端口编辑，实际地址由 `~/.ailight/runtime.json` 自动发现。对齐报告：§3 Source Events 未变且均存在于 ipc-contract §5；新增 Adapter AppError.code 已同步 ipc-contract §4；蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10/11 引用有效。 |
 | V1.21 | 2026-08-22 | 设置页高级服务信息新增「接口文档」快捷入口：基于 `service.port` 用系统浏览器打开 Hook Server `/docs/` Swagger UI，包含 loading/disabled/失败 Toast，避免端口退避或热切换后打开旧地址。对齐报告：§3 Source Events 未变且均存在于 ipc-contract §5；§4.1 未新增 AppError.code，既有清单一致；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增主题字段，与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10 引用有效。 |
 | V1.20 | 2026-08-22 | 设备与服务闭环：§4.3 实装主动断开、忘记设备及连接代次取消重连；§9.1 实装默认 25679、精确端口热重启及失败回滚；§11 补充 `DEVICE_DISCONNECT_FAILED` / `PORT_UNAVAILABLE` / `DEVICE_NOT_CONNECTED` 反馈。对齐报告：§3 Source Events 均存在于 ipc-contract §5；§4.1 AppError.code 均在 ipc-contract §4；蓝牙 result code 未变且仍与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10 引用有效。 |
 | V1.19 | 2026-08-22 | 全页面 UX review 优化：§1.1 将版本/端口收进「高级信息」；§4.1 补扫描最短可感知反馈并统一重试文案；§5 更新客户端支持状态、复制反馈并隐藏暂不支持项的无效操作；§7 将名称约束明确为「主题标识」；§8 区分状态模拟与灯牌试听、统一五态中文名；§9 将仲裁/保护改写为用户语言并折叠服务端口。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（错误路径未变）；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（协议行为未变）；§6~§8 使用的 `leds` / `high` / `brightness` 字段与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09 引用有效。 |

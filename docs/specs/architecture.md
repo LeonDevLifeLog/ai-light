@@ -188,6 +188,25 @@
 - **后果**：切换成功前会有极短的新旧监听并存窗口，但二者共享同一 Rust 事实源；避免先停旧服务造成的不可恢复中断。
 - **验证**：端口冲突测试、启动退避测试、失败保留旧服务的 command 验收；状态：✅ 已实现。
 
+### KAD-11 Adapter 共享目录与运行时发现取代用户端口配置
+
+> **【摘要】** 在 npm Adapter CLI 需要跨进程读取 Desktop 运行时地址、且 macOS 私有容器不适合作为共享边界的背景下，我们决定使用当前用户私有的 `~/.ailight` 作为共享目录，并关闭用户端口编辑，以达到无端口心智和 CLI 可读，接受 V1 macOS 不采用 App Sandbox。
+
+- **决策**：配置、主题、日志与 `runtime.json` 迁至 `~/.ailight`（`AILIGHT_HOME` 可覆盖）；目录/敏感文件权限为 `0700`/`0600`；旧 app config dir 首次启动幂等迁移。
+- **传输**：Hook Server 始终从 25679 启动并自动退避至 25689；实际回环地址与随机启动 Token 原子写入 `runtime.json`；端口编辑命令返回 `BAD_REQUEST`。
+- **Adapter**：Claude Code/Codex 统一由 npm CLI 读取 stdin、归一化后调用 Hook API；Desktop 只调用 CLI 管理 Hook，不直接编辑第三方配置。
+- **后果**：官网/GitHub 分发可继续 Developer ID 签名、公证与 Hardened Runtime；Mac App Store/App Sandbox 若未来进入范围，必须追加签名 Helper/XPC 决策。
+- **验证**：CLI 单元/集成测试、Tauri 编译、三平台配置路径与真实 Hook→灯效闭环。状态：🚧 已实现代码路径，npm 发布与实机闭环待验证。
+
+### KAD-12 生命周期推进与跨来源优先级分离
+
+> **【摘要】** 优先级用于多个 AI 工具竞争同一灯牌，不用于阻止单个工具自身的生命周期推进。
+
+- **背景**：Claude Code 已正确发送 `PermissionRequest → WAITING`，但旧仲裁规则因 `WAITING` 优先级低于 `WORKING` 而拒绝更新，导致权限等待无法显示。
+- **决策**：同一 `source` 的非幂等状态变化始终生效；不同 `source` 之间继续按 `ERROR > SUCCESS > WORKING > WAITING > IDLE` 仲裁；`IDLE` 保持显式清除特例。
+- **后果**：`WORKING → WAITING → SUCCESS/ERROR` 可表达真实任务生命周期，同时保留多工具并发时的优先级抢占。
+- **验证**：新增同 source 生命周期回归测试，并保留不同 source 低优先级不得覆盖的测试。
+
 ---
 
 ## 4. 不确定性清单（open questions）
@@ -196,8 +215,8 @@
 |---|---|---|---|
 | U-01 | btleplug 三平台实际行为（Win 缓存规避、Linux BlueZ 依赖） | KAD-01 | ✅ 代码已落地；三平台实机冒烟待完成 |
 | U-02 | axum 对构建体积/编译时间影响 | KAD-02 | ✅ 已实现（含 OpenAPI/token 单测）；编译体积对比待回填 |
-| U-03 | Claude Code HTTP hook 真实请求格式（变量占位/时序） | Q6 实测 | 待实测回填 `docs/specs/adapters/`（目录尚未创建） |
-| U-04 | Codex Desktop notify 重写冲突规避 | Q6 实测 | 实测后定适配模板 |
+| U-03 | Claude Code lifecycle command hook 真实时序 | Adapter CLI | 官方事件契约已实现；本机真实会话与灯牌闭环待验收 |
+| U-04 | Codex lifecycle hooks 的版本兼容与信任确认 | Adapter CLI | 官方 `hooks.json` command 契约已实现；当前本机 Codex 安装异常，修复后验收 |
 | U-05 | 托盘图标三平台差异（mac 菜单栏/win 通知区/linux DE） | KAD-06 | ✅ 托盘已实装（图标占位待替换）；三平台行为冒烟待实机 |
 | U-06 | Tauri async command 与 btleplug 事件循环线程模型整合 | KAD-01/03 | ✅ 已落地：见 KAD-08 + ADR-0003（setup 侧已通过 `enter()` guard 解决；BLE 线程侧始终在 async fn 内部，原本安全） |
 | U-07 | token 明文存储风险 | KAD-04 | 改进项：系统钥匙串（mac Keychain/win Credential Manager/linux secret-service），V2 |
@@ -208,7 +227,7 @@
 | 受众 | 影响 |
 |---|---|
 | **前端开发者** | 状态流只读（events）+ 配置操作（invoke）；主题编辑器数据模型 = theme-format V1.0；不持有业务状态 |
-| **适配器开发者** | 对接 hook-api V1.0（POST /hook），source 注册；🟢 配置模板在 `docs/specs/adapters/`（待实测回填） |
+| **适配器开发者** | 在 `@ai-light/adapter` 内实现事件翻译与 hook 配置，不让最终用户接触端口和第三方配置差异；内部投递遵循 hook-api V1.0 |
 | **主题作者** | 格式 = theme-format V1.0（`.ailight-theme.json`），整体校验 + 默认主题兜底 |
 | **维护者** | 决策追溯链：本文档 ← ADR-0001/0002/0003 ← product-boundary.md；新决策追加 KAD-N 或新 ADR，不改写历史 |
 
@@ -228,5 +247,7 @@
 | KAD-08 core 不绑 runtime + setup 契约显式化（ADR-0003） | ✅ 设计确定 |
 | KAD-09 开机自启 = OS 事实源 + config 校准缓存（tauri-plugin-autostart） | ✅ 已实现（2026-08-21；U-08 三平台冒烟待完成） |
 | KAD-10 Hook Server 端口热重启 = 先建后切、失败保留旧服务 | ✅ 已实现 |
+| KAD-11 Adapter 共享目录 + runtime 自动发现 | 🚧 代码已实现；npm 发布与真机闭环待验收 |
+| KAD-12 同 source 生命周期推进，跨 source 才按优先级仲裁 | ✅ 已实现并回归测试 |
 
 *本文档随开发推进回填 ⚠️ 项；已定决策如需变更，追加新 KAD 说明变更原因，不改写旧记录。*

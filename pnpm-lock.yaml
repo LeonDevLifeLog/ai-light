@@ -100,6 +100,15 @@ importers:
         specifier: ^8.0.0
         version: 8.2.1(@types/node@25.9.5)(jiti@2.7.0)(yaml@2.9.0)
 
+  packages/ailight-adapter:
+    devDependencies:
+      '@types/node':
+        specifier: ^25.4.0
+        version: 25.9.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
 packages:
 
   '@biomejs/biome@2.4.9':
