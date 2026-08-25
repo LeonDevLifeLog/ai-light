@@ -1,205 +1,165 @@
-import {
-  Check,
-  Clipboard,
-  FlaskConical,
-  Info,
-  TerminalSquare,
-} from "lucide-react";
-import { useState } from "react";
+import { CheckCircle2, Info, PlugZap, Unplug } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { useAppState } from "@/app/app-context";
 import { ActionButton, Card, PageHeader, StatusTag } from "@/components/app-ui";
-import { api, asAppError } from "@/lib/ailight";
+import { api, asAppError, type IntegrationStatus } from "@/lib/ailight";
 import { runAsync } from "@/lib/utils";
+
+type ToolId = "claude-code" | "codex";
 
 interface Integration {
   accent: string;
-  config: (port: number) => string;
   description: string;
+  id: ToolId;
   name: string;
-  path: string;
   source: string;
-  status: "unconfigured" | "incompatible" | "reserved";
 }
 
 const integrations: Integration[] = [
   {
-    name: "Claude Code",
-    path: "~/.claude/settings.json",
-    description: "通过 HTTP hook 上报开始、完成、错误和等待状态。",
-    source: "C",
     accent: "amber",
-    status: "unconfigured",
-    config: (port) => `{
-  "hooks": {
-    "UserPromptSubmit": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:${port}/hook" }] }],
-    "Stop": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:${port}/hook" }] }]
-  }
-}`,
+    description: "同步工作、等待权限、本轮完成、失败和会话结束状态。",
+    id: "claude-code",
+    name: "Claude Code",
+    source: "C",
   },
   {
-    name: "Codex",
-    path: "~/.codex/hooks.json + config.toml",
-    description: "Codex CLI 可以通过通知脚本同步状态；Codex Desktop 暂不支持。",
-    source: "X",
     accent: "green",
-    status: "incompatible",
-    config: (port) => `curl -s -X POST http://127.0.0.1:${port}/hook \\
-  -H 'Content-Type: application/json' \\
-  -d '{"source":"codex","state":"WORKING"}'`,
-  },
-  {
-    name: "Qoder",
-    path: "工具 Hook 设置",
-    description: "此工具的自动接入正在准备中。",
-    source: "Q",
-    accent: "slate",
-    status: "reserved",
-    config: (port) => `POST http://127.0.0.1:${port}/hook
-Content-Type: application/json
-
-{"source":"qoder","event":"state_change","state":"WORKING"}`,
-  },
-  {
-    name: "Cursor",
-    path: "暂不支持自动接入",
-    description: "Cursor 当前无法自动同步状态。",
-    source: "Cu",
-    accent: "violet",
-    status: "reserved",
-    config: (port) => `curl -X POST http://127.0.0.1:${port}/hook \\
-  -H 'Content-Type: application/json' \\
-  -d '{"source":"my-tool","event":"state_change","state":"SUCCESS"}'`,
+    description: "同步工作、等待权限、本轮完成和会话结束状态。",
+    id: "codex",
+    name: "Codex",
+    source: "X",
   },
 ];
-const statusLabels: Record<Integration["status"], string> = {
-  incompatible: "仅支持 CLI",
-  reserved: "暂不支持",
-  unconfigured: "未配置",
-};
 
 export function IntegrationsPage() {
-  const { snapshot, notify } = useAppState();
-  const [copied, setCopied] = useState<string | null>(null);
-  const [testing, setTesting] = useState<string | null>(null);
-  const port = snapshot?.service.port ?? 25_679;
+  const { notify } = useAppState();
+  const [statuses, setStatuses] = useState<
+    Partial<Record<ToolId, IntegrationStatus>>
+  >({});
+  const [busy, setBusy] = useState<ToolId | null>(null);
 
-  const copy = async (integration: Integration) => {
-    await navigator.clipboard.writeText(integration.config(port));
-    setCopied(integration.name);
-    notify({
-      tone: "success",
-      title: `${integration.name} 配置代码已复制`,
-      message: `请粘贴到 ${integration.path}`,
-    });
-    window.setTimeout(() => setCopied(null), 2000);
-  };
+  const refresh = useCallback(async () => {
+    const entries = await Promise.all(
+      integrations.map(async ({ id }) => {
+        try {
+          return [id, await api.getIntegrationStatus(id)] as const;
+        } catch {
+          return [id, { connected: false, managedCount: 0, path: "" }] as const;
+        }
+      })
+    );
+    setStatuses(Object.fromEntries(entries));
+  }, []);
 
-  const testConnection = async (integration: Integration) => {
-    setTesting(integration.name);
+  useEffect(() => {
+    runAsync(refresh());
+  }, [refresh]);
+
+  const connect = async (integration: Integration) => {
+    setBusy(integration.id);
     try {
-      await api.triggerState("WORKING");
+      await api.installIntegration(integration.id);
+      await refresh();
       notify({
         tone: "success",
-        title: "测试状态已触发",
-        message: "Dashboard 应立即显示工作中",
+        title: `${integration.name} 已连接`,
+        message: "下一次真实任务事件会自动同步到灯牌",
       });
     } catch (error) {
       notify({
         tone: "error",
-        title: "测试连接失败",
+        title: "连接失败",
         message: asAppError(error).message,
       });
     } finally {
-      setTesting(null);
+      setBusy(null);
+    }
+  };
+
+  const disconnect = async (integration: Integration) => {
+    setBusy(integration.id);
+    try {
+      await api.uninstallIntegration(integration.id);
+      await refresh();
+      notify({ tone: "success", title: `${integration.name} 已断开` });
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "断开失败",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setBusy(null);
     }
   };
 
   return (
     <div className="page-stack page-stack--narrow">
       <PageHeader
-        description="把 AI 编程工具的状态自动同步到灯牌，配置一次，长期生效"
+        description="连接一次，AI 工具的工作状态会自动同步到灯牌"
         title="接入外部工具"
       />
-      <Card className="endpoint-banner">
-        <TerminalSquare aria-hidden="true" size={20} />
-        <div>
-          <span>本机接收地址</span>
-          <code>http://127.0.0.1:{port}/hook</code>
-        </div>
-        <StatusTag
-          tone={snapshot?.service.tokenEnabled ? "warning" : "success"}
-        >
-          {snapshot?.service.tokenEnabled ? "需要 Token" : "仅本机访问"}
-        </StatusTag>
-      </Card>
       <div className="integration-list">
-        {integrations.map((integration) => (
-          <Card className="integration-card" key={integration.name}>
-            <div
-              className={`integration-logo integration-logo--${integration.accent}`}
-            >
-              {integration.source}
-            </div>
-            <div className="integration-card__main">
-              <div className="integration-card__heading">
-                <div>
-                  <h2>{integration.name}</h2>
-                  <code>{integration.path}</code>
-                </div>
-                <div className="integration-actions">
-                  <StatusTag
-                    tone={
-                      integration.status === "unconfigured"
-                        ? "warning"
-                        : "neutral"
-                    }
-                  >
-                    {statusLabels[integration.status]}
-                  </StatusTag>
-                  {integration.status === "reserved" ? null : (
-                    <>
-                      <ActionButton
-                        busy={testing === integration.name}
-                        disabled={integration.status !== "unconfigured"}
-                        onClick={() => runAsync(testConnection(integration))}
-                      >
-                        测试连接
-                      </ActionButton>
-                      <ActionButton onClick={() => runAsync(copy(integration))}>
-                        {copied === integration.name ? (
-                          <Check size={16} />
-                        ) : (
-                          <Clipboard size={16} />
-                        )}
-                        {copied === integration.name ? "已复制" : "复制配置"}
-                      </ActionButton>
-                    </>
-                  )}
-                </div>
+        {integrations.map((integration) => {
+          const status = statuses[integration.id];
+          const connected = status?.connected ?? false;
+          return (
+            <Card className="integration-card" key={integration.id}>
+              <div
+                className={`integration-logo integration-logo--${integration.accent}`}
+              >
+                {integration.source}
               </div>
-              <p>{integration.description}</p>
-              {integration.status === "reserved" ? null : (
-                <details>
-                  <summary>查看配置步骤</summary>
-                  <pre>
-                    <code>{integration.config(port)}</code>
-                  </pre>
-                </details>
-              )}
-            </div>
-          </Card>
-        ))}
+              <div className="integration-card__main">
+                <div className="integration-card__heading">
+                  <div>
+                    <h2>{integration.name}</h2>
+                    {status?.path ? <code>{status.path}</code> : null}
+                  </div>
+                  <div className="integration-actions">
+                    <StatusTag tone={connected ? "success" : "warning"}>
+                      {connected ? "已连接" : "未连接"}
+                    </StatusTag>
+                    {connected ? (
+                      <ActionButton
+                        busy={busy === integration.id}
+                        onClick={() => runAsync(disconnect(integration))}
+                      >
+                        <Unplug size={16} /> 断开
+                      </ActionButton>
+                    ) : (
+                      <ActionButton
+                        busy={busy === integration.id}
+                        onClick={() => runAsync(connect(integration))}
+                        tone="primary"
+                      >
+                        <PlugZap size={16} /> 连接
+                      </ActionButton>
+                    )}
+                  </div>
+                </div>
+                <p>{integration.description}</p>
+                {connected ? (
+                  <p className="integration-verified">
+                    <CheckCircle2 aria-hidden="true" size={16} /> Hook 配置由
+                    AI-Light Adapter 管理
+                  </p>
+                ) : null}
+              </div>
+            </Card>
+          );
+        })}
       </div>
       <Card className="explain-card">
         <Info aria-hidden="true" size={19} />
         <div>
-          <strong>这些配置在做什么？</strong>
+          <strong>连接过程不会覆盖你的其他 Hook</strong>
           <p>
-            工具会在开始、完成、出错或等待你回复时通知
-            AI-Light，应用再按当前主题让灯牌显示对应效果。
+            AI-Light 会安装独立
+            Adapter、备份现有配置，并且只管理自己添加的条目。
           </p>
         </div>
-        <FlaskConical aria-hidden="true" className="explain-card__decoration" />
       </Card>
     </div>
   );

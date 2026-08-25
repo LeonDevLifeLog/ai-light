@@ -27,7 +27,7 @@
 
 | 层 | 名称 | 职责 | 状态 | 关键依据 |
 |---|---|---|---|---|
-| L1 | **接入层** | 接收各智能体客户端 hook 事件 | ✅ 已明确（hook-api V1.0） | 正式规范：`docs/specs/hook-api.md`；第一期支持 Claude Code / Qoder / Codex |
+| L1 | **接入层** | 接收各智能体客户端 hook 事件 | ✅ CLI Adapter 已实现，实机闭环待验收 | `docs/specs/adapter-cli.md` + `docs/specs/hook-api.md`；第一期支持 Claude Code / Codex |
 | L2 | **业务层** | 状态仲裁 → 业务状态 → 主题映射 → SCENE 编译 | ✅ 已明确（除 direct_scene 预留） | 5 态 + 优先级仲裁（ADR-0001）；主题格式 V1.0（ADR-0002） |
 | L3 | **协议层** | V0.4 编解码、单 writer 队列、超时重试、幂等 | ✅ 已明确 | 协议 V0.4 §15 客户端实现指南 |
 | L4 | **设备层** | BLE 扫描/连接/握手/能力发现/断连重连 | ✅ 已实现（握手信息读取 / 断连重连已落地，2026-08-21）；实机验证待 U-01 | 协议 V0.4 §5 握手流程；PCDaemon ble_worker 验证过退避重连 |
@@ -44,20 +44,19 @@
 
 **目标**：提供标准 API 服务，各智能体客户端通过自身 hook 机制调用，形成可插拔的事件接入。
 
-**正式规范**：`docs/specs/hook-api.md`（V1.0）——本地 HTTP `127.0.0.1:25679`，`POST /hook` + `GET /api/status` + `GET /api/health`；标准 5 态事件模型；幂等对账（applied）；可选 token。
+**正式规范**：`docs/specs/adapter-cli.md` + `docs/specs/hook-api.md`。AI 工具只调用独立发布的 Node.js CLI；CLI 从用户目录 `~/.ailight/runtime.json` 自动发现桌面程序的固定回环地址和短期 token，再调用 `POST /hook`。端口不对最终用户开放配置。
 
-**第一期支持清单**（🟢 配置级接入）：
-- Claude Code（本机 CLI 2.1.31）——hooks 原生支持 HTTP handler
-- Qoder——hooks 事件与 Claude Code 同构
-- Codex（CLI 0.147.0 + Desktop）——hooks + notify（注意 Desktop 重写 notify 冲突，待实测）
+**第一期支持清单**（🟢 Adapter CLI 接入）：
+- Claude Code——CLI 安全合并 `~/.claude/settings.json` lifecycle command hooks
+- Codex——CLI 安全合并 `~/.codex/hooks.json` lifecycle command hooks；首次执行仍须按 Codex 自身安全机制确认信任
 
-**暂缓/不覆盖**：Cursor（🟡 桥接方案存档）、WorkBuddy（🔴 无公开 hook）、Claude Desktop 纯聊天（🔴 不覆盖，内置 Claude Code 可接）。
+**暂缓/不覆盖**：Qoder、Cursor（🟡 桥接方案存档）、WorkBuddy（🔴 无公开 hook）、Claude Desktop 纯聊天（🔴 不覆盖，内置 Claude Code 可接）。
 
-**待办**：本机实测三客户端（Q6，延后至 hook-api 定稿后）→ 适配器配置模板入 `docs/specs/adapters/`。
+**待办**：发布 `@ai-light/adapter`、修复本机 Codex 安装、完成 Claude Code / Codex / AgentCore-Light 真机闭环验收。
 
 ### L2 业务层（✅ 已明确）
 
-- **状态仲裁**：优先级抢占（`ERROR > SUCCESS > WORKING > WAITING > IDLE`，同级最近活跃），可配置切换"最近活跃"。——✅ 已确定（ADR-0001 Q8）
+- **状态仲裁**：同一 source 的生命周期事件始终推进；不同 source 之间按 `ERROR > SUCCESS > WORKING > WAITING > IDLE` 抢占，同级最近活跃。可配置切换“最近活跃”。——✅ 已确定（ADR-0001 Q8，KAD-12 澄清）
 - **状态模型**：标准 5 态（IDLE/WORKING/WAITING/SUCCESS/ERROR）+ 开放状态名，主题映射表驱动。——✅ 已确定（ADR-0001 Q1）
 - **主题系统**：命名 SCENE 库 + 状态引用（`.ailight-theme.json`），UI 可编辑、可分享导入；终态 hold_ms 驻留。——✅ 已确定（ADR-0002，规范 `docs/specs/theme-format.md`）
 - **SCENE 编译**：业务状态 → SCENE 名 → JSON → V0.4 OutputScene，幂等去重（APPLY_IF_CHANGED）。——✅ 已明确（协议 §8.4）
@@ -115,6 +114,7 @@
 | D-20 | 蜂鸣轨道 | 可选，null = 静音 | 08-19 | ADR-0002 T-04 |
 | D-21 | 自定义状态 | 随用随写；未映射状态 → IDLE + 记日志 | 08-19 | ADR-0002 T-05 |
 | D-22 | 校验容错 | 整体校验，任一非法 → 拒绝生效，默认主题兜底 | 08-19 | ADR-0002 T-06 |
+| D-23 | AI 工具接入 | 独立 Node.js Adapter CLI（npm 全局安装、独立升级）注入 Claude Code / Codex hooks；运行时信息统一存放 `~/.ailight/`；固定回环端口不开放配置 | 08-22 | KAD-11 |
 
 ## 5. 待确认问题（截至 08-19 晚）
 

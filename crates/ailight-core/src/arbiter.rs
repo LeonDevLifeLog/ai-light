@@ -2,7 +2,8 @@
 //!
 //! 规则：
 //! - `Priority` 模式：默认优先级抢占 ERROR(5) > SUCCESS(4) > WORKING(3) > WAITING(2) > 自定义(1) > IDLE(0)；
-//!   同级按"最近活跃"（新事件覆盖旧事件）；**IDLE 事件总是生效**（显式清除，优先级模型下的特例）
+//!   同一 source 的生命周期事件始终允许推进；不同 source 才按优先级抢占，同级按"最近活跃"；
+//!   **IDLE 事件总是生效**（显式清除，优先级模型下的特例）
 //! - `LastActive` 模式：任何事件都生效（最近活跃优先）
 //! - 终态驻留（hold_ms）：进入 SUCCESS/ERROR 且配置了 hold_ms>0 时，到期自动回落 IDLE
 
@@ -144,6 +145,9 @@ impl Arbiter {
                 if ev.state == ST_IDLE {
                     // IDLE 总是生效（显式清除）
                     true
+                } else if self.current.source.as_deref() == Some(ev.source.as_str()) {
+                    // 同一工具内部是生命周期推进，不参与跨工具优先级竞争。
+                    true
                 } else {
                     state_priority(&ev.state) >= state_priority(&self.current.state)
                 }
@@ -225,7 +229,7 @@ mod tests {
         // 同级 WORKING（另一 source）→ 最近活跃覆盖
         assert!(applied(&a.apply(&ev("codex", ST_WORKING, 2), None, 2)));
         assert_eq!(a.current().source.as_deref(), Some("codex"));
-        // 低优先级 WAITING → 忽略
+        // 另一 source 的低优先级 WAITING → 忽略
         assert!(!applied(&a.apply(&ev("cc", ST_WAITING, 3), None, 3)));
         assert_eq!(a.current().state, ST_WORKING);
         // ERROR 抢占
@@ -233,6 +237,15 @@ mod tests {
         // IDLE 清除（优先级模型特例）
         assert!(applied(&a.apply(&ev("cc", ST_IDLE, 5), None, 5)));
         assert_eq!(a.current().state, ST_IDLE);
+    }
+
+    #[test]
+    fn same_source_lifecycle_can_move_from_working_to_waiting() {
+        let mut a = Arbiter::new(ArbitrationMode::Priority, 0);
+        assert!(applied(&a.apply(&ev("claude-code", ST_WORKING, 1), None, 1)));
+        assert!(applied(&a.apply(&ev("claude-code", ST_WAITING, 2), None, 2)));
+        assert_eq!(a.current().state, ST_WAITING);
+        assert!(applied(&a.apply(&ev("claude-code", ST_SUCCESS, 3), None, 3)));
     }
 
     #[test]

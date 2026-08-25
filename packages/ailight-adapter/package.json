@@ -1,0 +1,35 @@
+{
+  "name": "@ai-light/adapter",
+  "version": "0.1.1",
+  "description": "Claude Code and Codex adapter for AI-Light",
+  "type": "module",
+  "bin": {
+    "ailight-adapter": "./dist/cli.js"
+  },
+  "files": [
+    "dist/adapters.d.ts",
+    "dist/adapters.js",
+    "dist/cli.d.ts",
+    "dist/cli.js",
+    "dist/integrations.d.ts",
+    "dist/integrations.js",
+    "dist/runtime.d.ts",
+    "dist/runtime.js"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm build && node --test dist/**/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "typescript": "^6.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}

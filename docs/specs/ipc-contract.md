@@ -92,19 +92,22 @@
 | Command | 请求 | 响应 | 错误码 | 优先级 |
 |---|---|---|---|---|
 | `get_config()` | — | Config（§3） | — | P1 |
-| `update_config(patch)` | patch: Partial\<Config> | 更新后完整 Config | `BAD_REQUEST` / `AUTOSTART_FAILED` / `PORT_UNAVAILABLE` | P1 |
+| `update_config(patch)` | patch: Partial\<Config> | 更新后完整 Config | `BAD_REQUEST` / `AUTOSTART_FAILED` | P1 |
+| `get_integration_status(tool)` | `claude-code \| codex` | Adapter 托管状态 | `BAD_REQUEST` / `ADAPTER_*` | P1 |
+| `install_integration(tool)` | `claude-code \| codex` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` / `NPM_NOT_FOUND` | P1 |
+| `uninstall_integration(tool)` | `claude-code \| codex` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` | P1 |
 
-**`update_config` 允许字段**：`arbitrationMode` / `token` / `autostart` / `badgeOrientation` / `themeMode` / `portPreference`。`portPreference` 允许 1024~65535，必须单独 patch；后端先精确绑定新端口，再持久化配置并替换旧 Hook Server，失败时保留旧服务与原配置（KAD-10）。`autostart` 采用"先 OS 后 config"：OS 登录项操作成功才写缓存，失败返回 `AUTOSTART_FAILED` 且 config 不变（KAD-09）。`rememberedDevice` 由连接流程管理，不接受用户 patch。
+**`update_config` 允许字段**：`arbitrationMode` / `token` / `autostart` / `badgeOrientation` / `themeMode`。`portPreference` 为遗留兼容字段，不再接受用户 patch；Hook Server 固定优先 25679 并自动退避，实际地址通过 `~/.ailight/runtime.json` 提供给 Adapter（KAD-11）。`autostart` 采用"先 OS 后 config"：OS 登录项操作成功才写缓存，失败返回 `AUTOSTART_FAILED` 且 config 不变（KAD-09）。`rememberedDevice` 由连接流程管理，不接受用户 patch。
 
 ## 3. config.json Schema
 
-文件位置：app config dir（KAD-04），文件名 `config.json`。
+文件位置：`~/.ailight/config.json`（`AILIGHT_HOME` 可覆盖），旧 app config dir 首次启动幂等迁移（KAD-11）。
 
 ```jsonc
 {
   "version": 1,                    // schema 版本，当前 = 1
   "arbitrationMode": "priority",   // "priority"（默认）| "last_active"（ADR-0001 Q8）
-  "portPreference": 25679,         // hook 服务首选端口；启动占用时向后最多退避 10 个端口
+  "portPreference": 25679,         // 遗留兼容字段；运行时不接受用户修改
   "rememberedDevice": {            // 记住的设备；null = 无
     "address": "AA:BB:CC:DD:EE:FF",
     "name": "ACLight-1A2B"
@@ -131,8 +134,11 @@
 | `THEME_BUILTIN` | 内置主题不可操作 | delete_theme(内置)——P2 未实现，当前无代码路径产生该码（预留） |
 | `DEVICE_NOT_CONNECTED` | 设备未连接 | preview_scene 前置检查 |
 | `DEVICE_DISCONNECT_FAILED` | 主动断开失败 | disconnect_device / forget_device；忘记操作不会清除记忆 |
-| `PORT_UNAVAILABLE` | 首选端口无法监听 | update_config(portPreference)，旧服务继续运行 |
 | `AUTOSTART_FAILED` | 开机自启 OS 登录项操作失败 | update_config(autostart) 时 enable/disable 抛错（权限、路径失效、平台异常等） |
+| `ADAPTER_NOT_FOUND` | Adapter CLI 不可执行 | 查询或管理 Claude Code/Codex 接入 |
+| `ADAPTER_COMMAND_FAILED` | Adapter 管理命令失败 | 检测、安装或卸载 Hook |
+| `ADAPTER_INSTALL_FAILED` | npm 全局安装失败 | 首次连接工具 |
+| `NPM_NOT_FOUND` | npm 不可执行 | 首次连接且 Adapter 尚未安装 |
 | `INTERNAL` | 内部异常 | 兜底（含 BLE 下发失败） |
 
 ## 5. Events 清单（Rust → 前端）
@@ -156,7 +162,7 @@
 |---|---|
 | trigger_state / reset_outputs 语义 | hook-api V1.0（manual source）、协议 V0.4 §12.4 |
 | 主题相关 commands | theme-format V1.0（校验/编译）、ADR-0002 |
-| arbitrationMode | ADR-0001 Q8 |
+| arbitrationMode | ADR-0001 Q8、KAD-12（同 source 生命周期推进；跨 source 仲裁） |
 | 设备识别/握手 | 协议 V0.4 §5、pyPcTest 识别逻辑 |
 | 事件命名风格 | KAD-03（events 只读推送） |
 
@@ -176,6 +182,6 @@
 - **P2 commands / event（3 个）**：❌ `export_theme` / `delete_theme` / `hook-log` 未实现。
 - **试听错误映射**：✅ `preview_scene` 在设备未连接时前置返回 `DEVICE_NOT_CONNECTED`；`THEME_BUILTIN` 依赖 P2 `delete_theme`，当前无代码路径。
 - **开机自启（G-06）**：✅ 已实装（2026-08-21）。`update_config` 先 OS 后 config（新增 `AUTOSTART_FAILED`）；setup 启动校准 `is_enabled()` 写回 config；平台 = macOS LaunchAgent / Windows Run key / Linux XDG autostart（tauri-plugin-autostart 2.5.1）；三平台实机待验证（U-08）。
-- **配置项**：`portPreference` 默认 25679，启动期占用自动退避；设置页精确绑定并热重启 Hook Server，失败保留旧服务。其余配置项均已生效。
+- **配置项**：Hook Server 固定优先 25679、占用时自动退避；`portPreference` 仅为旧配置兼容字段，设置页不再开放修改。其余配置项均已生效。
 
 *本文随实现推进修订；修改须同步更新 UI 设计与 Rust 实现双方。*

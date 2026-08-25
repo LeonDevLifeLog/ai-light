@@ -1,6 +1,7 @@
 //! Tauri commands（ipc-contract V1.0 §2：P1 全部 14 个）
 
 use serde::Serialize;
+use std::process::Command;
 use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
@@ -8,7 +9,7 @@ use tokio::sync::mpsc;
 
 use ailight_core::arbiter::{ArbitrationMode, ST_IDLE};
 use ailight_core::ble::{self, BleDeviceInfo};
-use ailight_core::config::{AppConfig, RememberedDevice, MIN_USER_PORT};
+use ailight_core::config::{AppConfig, RememberedDevice};
 use ailight_core::engine::{self, EngineError};
 use ailight_core::hook_server::{BusinessSnapshot, DeviceSnapshot, ServiceSnapshot, SharedState};
 use ailight_core::theme::{self, ThemeFile};
@@ -38,6 +39,95 @@ fn internal(e: impl std::fmt::Display) -> AppError {
 
 fn shared(app: &AppHandle) -> std::sync::Arc<SharedState> {
     app.state::<AppState>().shared.clone()
+}
+
+// ---- Adapter CLI 集成 ----
+
+fn valid_integration_tool(tool: &str) -> bool {
+    matches!(tool, "claude-code" | "codex")
+}
+
+fn adapter_command(args: &[&str]) -> CmdResult<serde_json::Value> {
+    let executable =
+        std::env::var_os("AILIGHT_ADAPTER_BIN").unwrap_or_else(|| "ailight-adapter".into());
+    let output = Command::new(executable)
+        .args(args)
+        .arg("--json")
+        .output()
+        .map_err(|error| {
+            err(
+                "ADAPTER_NOT_FOUND",
+                format!("无法启动 Adapter CLI: {error}"),
+            )
+        })?;
+    let value = serde_json::from_slice::<serde_json::Value>(&output.stdout).map_err(|error| {
+        err(
+            "ADAPTER_INVALID_OUTPUT",
+            format!("Adapter 返回无效数据: {error}"),
+        )
+    })?;
+    if !output.status.success() || value.get("ok") != Some(&serde_json::Value::Bool(true)) {
+        let message = value
+            .pointer("/error/message")
+            .and_then(|item| item.as_str())
+            .unwrap_or("Adapter 命令执行失败");
+        return Err(err("ADAPTER_COMMAND_FAILED", message));
+    }
+    Ok(value
+        .get("data")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null))
+}
+
+fn ensure_adapter_installed() -> CmdResult<()> {
+    if adapter_command(&["version"]).is_ok() {
+        return Ok(());
+    }
+    let output = Command::new("npm")
+        .args(["install", "--global", "@ai-light/adapter"])
+        .output()
+        .map_err(|error| err("NPM_NOT_FOUND", format!("无法启动 npm: {error}")))?;
+    if !output.status.success() {
+        return Err(err(
+            "ADAPTER_INSTALL_FAILED",
+            String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        ));
+    }
+    adapter_command(&["version"])?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_integration_status(tool: String) -> CmdResult<serde_json::Value> {
+    if !valid_integration_tool(&tool) {
+        return Err(err("BAD_REQUEST", "不支持的接入工具"));
+    }
+    tauri::async_runtime::spawn_blocking(move || adapter_command(&["detect", &tool]))
+        .await
+        .map_err(internal)?
+}
+
+#[tauri::command]
+pub async fn install_integration(tool: String) -> CmdResult<serde_json::Value> {
+    if !valid_integration_tool(&tool) {
+        return Err(err("BAD_REQUEST", "不支持的接入工具"));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        ensure_adapter_installed()?;
+        adapter_command(&["install", &tool])
+    })
+    .await
+    .map_err(internal)?
+}
+
+#[tauri::command]
+pub async fn uninstall_integration(tool: String) -> CmdResult<serde_json::Value> {
+    if !valid_integration_tool(&tool) {
+        return Err(err("BAD_REQUEST", "不支持的接入工具"));
+    }
+    tauri::async_runtime::spawn_blocking(move || adapter_command(&["uninstall", &tool]))
+        .await
+        .map_err(internal)?
 }
 
 // ---- 状态查询 ----
@@ -613,62 +703,8 @@ pub async fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppC
     let s = shared(&app);
     let state = app.state::<AppState>();
 
-    if let Some(port) = patch.port_preference {
-        if patch.arbitration_mode.is_some()
-            || patch.token.is_some()
-            || patch.autostart.is_some()
-            || patch.badge_orientation.is_some()
-            || patch.theme_mode.is_some()
-        {
-            return Err(err("BAD_REQUEST", "服务端口需要单独保存"));
-        }
-        if port < MIN_USER_PORT {
-            return Err(err(
-                "BAD_REQUEST",
-                format!("服务端口必须在 {MIN_USER_PORT}~65535 之间"),
-            ));
-        }
-        let current = state
-            .config
-            .read()
-            .map_err(|_| internal("config 锁"))?
-            .clone();
-        let actual_port = s.port.read().map(|p| *p).unwrap_or(port);
-        if current.port_preference == port && actual_port == port {
-            return Ok(current);
-        }
-        if actual_port == port {
-            let mut candidate = current;
-            candidate.port_preference = port;
-            persist_config(&app, &candidate)?;
-            *state.config.write().map_err(|_| internal("config 锁"))? = candidate.clone();
-            let _ = app.emit("config-changed", &candidate);
-            return Ok(candidate);
-        }
-
-        let candidate_server = ailight_core::hook_server::serve_on(s.clone(), port)
-            .await
-            .map_err(|e| {
-                err(
-                    "PORT_UNAVAILABLE",
-                    format!("无法使用端口 {port}：{e}。请换一个端口后重试"),
-                )
-            })?;
-        let mut candidate = current;
-        candidate.port_preference = port;
-        if let Err(e) = persist_config(&app, &candidate) {
-            candidate_server.stop();
-            return Err(e);
-        }
-
-        let old_server = state.hook_server.lock().await.replace(candidate_server);
-        if let Some(old) = old_server {
-            old.stop();
-        }
-        *s.port.write().map_err(|_| internal("port 锁"))? = port;
-        *state.config.write().map_err(|_| internal("config 锁"))? = candidate.clone();
-        let _ = app.emit("config-changed", &candidate);
-        return Ok(candidate);
+    if patch.port_preference.is_some() {
+        return Err(err("BAD_REQUEST", "服务端口由 AI-Light 自动管理"));
     }
 
     let mut cfg = state.config.write().map_err(|_| internal("config 锁"))?;
@@ -682,11 +718,27 @@ pub async fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppC
     }
     if let Some(token) = &patch.token {
         cfg.token = token.clone();
-        *s.token.write().map_err(|_| internal("token 锁"))? = if token.is_empty() {
-            None
+        let runtime_token = if token.is_empty() {
+            crate::storage::runtime_token()
         } else {
-            Some(token.clone())
+            token.clone()
         };
+        *s.token.write().map_err(|_| internal("token 锁"))? = Some(runtime_token.clone());
+        *state
+            .runtime_token
+            .write()
+            .map_err(|_| internal("runtime token 锁"))? = runtime_token.clone();
+        let port = s.port.read().map(|value| *value).unwrap_or(25_679);
+        crate::storage::write_runtime(
+            port,
+            &runtime_token,
+            env!("CARGO_PKG_VERSION"),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|value| value.as_millis() as u64)
+                .unwrap_or(0),
+        )
+        .map_err(internal)?;
     }
     if let Some(autostart) = patch.autostart {
         // 先 OS 后 config（设计方案 D-06）：OS 登录项为唯一事实源，
@@ -726,10 +778,8 @@ pub async fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppC
 // ---- 内部辅助 ----
 
 fn user_theme_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
-    app.path()
-        .app_config_dir()
-        .map(|d| d.join("themes"))
-        .map_err(|e| e.to_string())
+    let _ = app;
+    crate::storage::themes_dir()
 }
 
 fn builtin_theme_content(name: &str) -> Option<&'static str> {
@@ -750,18 +800,13 @@ fn resolve_theme(app: &AppHandle, name: &str) -> Result<ThemeFile, String> {
 }
 
 fn config_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
-    app.path()
-        .app_config_dir()
-        .map(|d| d.join("config.json"))
-        .map_err(|e| e.to_string())
+    let _ = app;
+    crate::storage::config_path()
 }
 
 fn persist_config(app: &AppHandle, cfg: &AppConfig) -> CmdResult<()> {
     let path = config_path(app).map_err(internal)?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(internal)?;
-    }
-    std::fs::write(&path, cfg.to_json()).map_err(internal)
+    crate::storage::write_private_file(&path, cfg.to_json()).map_err(internal)
 }
 
 fn persist_active_theme(app: &AppHandle, name: &str) -> CmdResult<()> {

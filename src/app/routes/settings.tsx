@@ -6,7 +6,6 @@ import {
   Moon,
   Palette,
   Radio,
-  Server,
   ShieldCheck,
   Sun,
   SunMoon,
@@ -104,21 +103,14 @@ const themeModeOptions: Array<{
 ];
 
 export function SettingsPage() {
-  const { snapshot, config, patchConfig, notify, refresh } = useAppState();
+  const { snapshot, config, patchConfig, notify } = useAppState();
   const [saving, setSaving] = useState<string | null>(null);
   const [openingDocs, setOpeningDocs] = useState(false);
-  const [portInput, setPortInput] = useState("");
   const [preview, setPreview] = useState<{
     swatches: Array<{ state: string; color: string }>;
     hasSound: boolean;
   } | null>(null);
   const activeTheme = config?.activeTheme;
-
-  useEffect(() => {
-    if (config) {
-      setPortInput(String(config.portPreference));
-    }
-  }, [config]);
 
   useEffect(() => {
     if (!activeTheme) {
@@ -165,37 +157,6 @@ export function SettingsPage() {
     }
   };
 
-  const updatePort = async () => {
-    const port = Number(portInput);
-    if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
-      notify({
-        tone: "error",
-        title: "端口格式不正确",
-        message: "请输入 1024 到 65535 之间的整数",
-      });
-      return;
-    }
-    setSaving("portPreference");
-    try {
-      await patchConfig({ portPreference: port });
-      await refresh();
-      notify({
-        tone: "success",
-        title: "Hook 服务已切换端口",
-        message: `当前监听 127.0.0.1:${port}`,
-      });
-    } catch (error) {
-      setPortInput(String(config.portPreference));
-      notify({
-        tone: "error",
-        title: "端口切换失败",
-        message: asAppError(error).message,
-      });
-    } finally {
-      setSaving(null);
-    }
-  };
-
   const openApiDocs = async () => {
     if (!snapshot) {
       return;
@@ -226,7 +187,7 @@ export function SettingsPage() {
         </h2>
         <Card className="settings-card">
           <SettingRow
-            description="多个工具同时运行时，决定优先显示哪个状态"
+            description="同一工具始终跟随最新状态；多个工具冲突时决定显示谁"
             icon={<Radio />}
             stacked
             title="多个工具同时运行时"
@@ -253,7 +214,8 @@ export function SettingsPage() {
                     <span className="mode-option__tag">推荐</span>
                   </span>
                   <span className="mode-option__desc">
-                    重要状态优先：错误 &gt; 完成 &gt; 进行中 &gt; 等待 &gt; 空闲
+                    仅在多个工具冲突时：错误 &gt; 完成 &gt; 进行中 &gt; 等待
+                    &gt; 空闲
                   </span>
                 </span>
               </button>
@@ -280,7 +242,7 @@ export function SettingsPage() {
                     <span className="mode-option__name">最近活动优先</span>
                   </span>
                   <span className="mode-option__desc">
-                    最后上报状态的工具接管灯效
+                    仅在多个工具冲突时，由最后上报的工具接管灯效
                   </span>
                 </span>
               </button>
@@ -299,34 +261,6 @@ export function SettingsPage() {
           </SettingRow>
           <details className="settings-advanced">
             <summary>高级服务信息</summary>
-            <SettingRow
-              description={`当前监听端口：${snapshot?.service.port ?? config.portPreference}`}
-              icon={<Server />}
-              title="服务端口"
-            >
-              <div className="port-control">
-                <input
-                  aria-label="Hook 服务端口"
-                  disabled={saving === "portPreference"}
-                  max={65_535}
-                  min={1024}
-                  onChange={(event) => setPortInput(event.target.value)}
-                  type="number"
-                  value={portInput}
-                />
-                <button
-                  className="action-button action-button--secondary"
-                  disabled={
-                    saving === "portPreference" ||
-                    portInput === String(config.portPreference)
-                  }
-                  onClick={() => runAsync(updatePort())}
-                  type="button"
-                >
-                  {saving === "portPreference" ? "正在切换…" : "保存并重启服务"}
-                </button>
-              </div>
-            </SettingRow>
             <SettingRow
               description="在浏览器中查看 Hook API，可调试接口并生成自定义调用"
               icon={<BookOpen />}

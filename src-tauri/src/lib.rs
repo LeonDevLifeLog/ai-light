@@ -1,6 +1,7 @@
 //! AI-Light Tauri 应用入口：装配 core 模块、注册 commands/events
 
 mod commands;
+mod storage;
 mod tray;
 
 use std::sync::atomic::AtomicU64;
@@ -11,7 +12,7 @@ use tauri_plugin_autostart::ManagerExt;
 
 use ailight_core::arbiter::ArbitrationMode;
 use ailight_core::ble::DeviceIo;
-use ailight_core::config::AppConfig;
+use ailight_core::config::{AppConfig, DEFAULT_PORT};
 use ailight_core::engine::Engine;
 use ailight_core::hook_server::SharedState;
 use ailight_core::{logging, theme};
@@ -26,6 +27,7 @@ pub struct AppState {
     pub active_ble: tokio::sync::Mutex<Option<Arc<ailight_core::ble::BleIo>>>,
     pub connection_lock: tokio::sync::Mutex<()>,
     pub connection_generation: AtomicU64,
+    pub runtime_token: RwLock<String>,
 }
 
 fn now_ms() -> u64 {
@@ -60,12 +62,13 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             // 日志（KAD-05）
-            let _ = logging::init(app.path().app_log_dir().ok().as_deref(), "info");
+            let log_dir = storage::logs_dir().ok();
+            let _ = logging::init(log_dir.as_deref(), "info");
 
             // 配置加载（KAD-04）
-            let config_dir = app.path().app_config_dir()?;
-            std::fs::create_dir_all(&config_dir)?;
-            let cfg_path = config_dir.join("config.json");
+            let legacy_config_dir = app.path().app_config_dir()?;
+            storage::migrate_legacy_config(&legacy_config_dir).map_err(std::io::Error::other)?;
+            let cfg_path = storage::config_path().map_err(std::io::Error::other)?;
             let (mut config, warn) = if cfg_path.exists() {
                 match std::fs::read_to_string(&cfg_path) {
                     Ok(c) => AppConfig::load(&c),
@@ -87,11 +90,12 @@ pub fn run() {
                 .expect("内置 default 主题必须合法");
             *shared.theme.write().unwrap() = Some(theme);
             *shared.theme_name.write().unwrap() = config.active_theme.clone();
-            *shared.token.write().unwrap() = if config.token.is_empty() {
-                None
+            let runtime_token = if config.token.is_empty() {
+                storage::runtime_token()
             } else {
-                Some(config.token.clone())
+                config.token.clone()
             };
+            *shared.token.write().unwrap() = Some(runtime_token.clone());
 
             // 设备代理 + 引擎
             let device_io = DeviceIo::new();
@@ -138,7 +142,7 @@ pub fn run() {
                 Err(e) => eprintln!("autostart 校准失败（保留本地缓存）: {e}"),
             }
 
-            let preferred_port = config.port_preference;
+            let preferred_port = DEFAULT_PORT;
             app.manage(AppState {
                 shared,
                 engine,
@@ -148,6 +152,7 @@ pub fn run() {
                 active_ble: tokio::sync::Mutex::new(None),
                 connection_lock: tokio::sync::Mutex::new(()),
                 connection_generation: AtomicU64::new(0),
+                runtime_token: RwLock::new(runtime_token),
             });
 
             // L1 HTTP 接入服务：启动期允许从首选端口向后退避。
@@ -166,6 +171,19 @@ pub fn run() {
                             *current = port;
                         }
                         *slot = Some(server);
+                        let runtime_token = state
+                            .runtime_token
+                            .read()
+                            .map(|value| value.clone())
+                            .unwrap_or_default();
+                        if let Err(error) = storage::write_runtime(
+                            port,
+                            &runtime_token,
+                            env!("CARGO_PKG_VERSION"),
+                            now_ms(),
+                        ) {
+                            tracing::error!("写入 Adapter runtime 失败: {error}");
+                        }
                         tracing::info!("hook server 127.0.0.1:{port}");
                     }
                     Err(e) => eprintln!("hook server 启动失败: {e}"),
@@ -246,6 +264,9 @@ pub fn run() {
             commands::reset_outputs,
             commands::get_config,
             commands::update_config,
+            commands::get_integration_status,
+            commands::install_integration,
+            commands::uninstall_integration,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -256,6 +277,9 @@ pub fn run() {
                     let _ = window.show();
                     let _ = window.set_focus();
                 }
+            }
+            if let tauri::RunEvent::Exit = event {
+                storage::remove_runtime();
             }
         });
 }
