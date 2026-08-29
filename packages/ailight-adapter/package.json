@@ -2,6 +2,15 @@
   "name": "@ai-light/adapter",
   "version": "0.1.1",
   "description": "Claude Code and Codex adapter for AI-Light",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LeonDevLifeLog/ai-light.git",
+    "directory": "packages/ailight-adapter"
+  },
+  "homepage": "https://github.com/LeonDevLifeLog/ai-light#readme",
+  "bugs": {
+    "url": "https://github.com/LeonDevLifeLog/ai-light/issues"
+  },
   "type": "module",
   "bin": {
     "ailight-adapter": "./dist/cli.js"

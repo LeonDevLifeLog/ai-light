@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       app: ${{ steps.filter.outputs.app }}
+      adapter: ${{ steps.filter.outputs.adapter }}
       core: ${{ steps.filter.outputs.core }}
       cross-platform: ${{ steps.filter.outputs.cross_platform }}
     steps:
@@ -42,6 +43,12 @@ jobs:
               - "vite.config.*"
             core:
               - "crates/ailight-core/**"
+            adapter:
+              - "packages/ailight-adapter/**"
+              - ".github/workflows/**"
+              - "package.json"
+              - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
             cross_platform:
               - "crates/**"
               - "src-tauri/**"
@@ -57,6 +64,23 @@ jobs:
       - run: pnpm check
       - run: pnpm typecheck
       - run: pnpm build
+
+  adapter-checks:
+    name: Adapter checks
+    needs: quality
+    if: github.event_name == 'workflow_dispatch' || needs.quality.outputs.adapter == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6.0.9
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir packages/ailight-adapter check
+      - run: pnpm --dir packages/ailight-adapter test
 
   tauri-build:
     name: Tauri build (${{ matrix.name }})

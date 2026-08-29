@@ -64,3 +64,80 @@ Draft Release 构建失败时不得发布。修复代码并更新版本后，应
 
 如果标签尚未对外使用且明确需要删除，应同时删除远端标签和对应 Draft Release，再从正确提交重新创建。删除属于破坏性操作，执行前必须确认目标标签和 Release 均未公开使用。
 
+## npm Adapter 发布
+
+### 发布边界
+
+配置文件：`.github/workflows/npm-publish.yml`
+
+`@ai-light/adapter` 与桌面应用使用独立版本线：
+
+- 桌面应用标签：`v0.2.0`
+- Adapter 标签：`adapter-v0.1.2`
+
+Adapter 标签不会复用桌面应用版本校验，也不会创建四平台安装包。发布工作流使用 npm Trusted Publishing（OIDC），不保存长期 `NPM_TOKEN`；CI 只把候选包提交到 npm staging，维护者检查后使用 2FA 批准公开。
+
+### 首次发布引导
+
+npm staged publishing 要求包已存在。首次发布前，确认 npm 上已创建 `ai-light` organization，且当前账号有 scope 发布权限，然后执行：
+
+```bash
+cd packages/ailight-adapter
+npm login --registry=https://registry.npmjs.org/
+npm publish --access public --registry=https://registry.npmjs.org/
+```
+
+首次发布成功后，在 npm 包设置中添加 Trusted Publisher：
+
+| 字段 | 值 |
+| --- | --- |
+| Provider | GitHub Actions |
+| Organization/user | `LeonDevLifeLog` |
+| Repository | `ai-light` |
+| Workflow filename | `npm-publish.yml` |
+| Allowed action | `npm stage publish` |
+
+随后将 Publishing access 设置为要求 2FA 并禁止 token 发布。仓库为 private 时可以使用 Trusted Publishing，但 npm 不生成 provenance。
+
+### 发布前检查
+
+1. 确认目标提交的 `Quality checks` 与 `Adapter checks` 均通过。
+2. 更新 `packages/ailight-adapter/package.json` 的版本号；CLI 会在运行时读取该文件，不维护第二份版本常量。
+3. 执行：
+
+```bash
+pnpm --dir packages/ailight-adapter check
+pnpm --dir packages/ailight-adapter test
+cd packages/ailight-adapter
+npm pack --dry-run --registry=https://registry.npmjs.org/
+```
+
+### 标签与审批
+
+稳定版和预发布版本分别使用：
+
+```bash
+git tag adapter-v0.1.2
+git push origin adapter-v0.1.2
+
+git tag adapter-v0.2.0-beta.1
+git push origin adapter-v0.2.0-beta.1
+```
+
+工作流要求标签与 Adapter 版本完全一致。稳定版本 stage 到 `latest`，含 SemVer prerelease 后缀的版本 stage 到 `next`。
+
+Action 成功后，在 npmjs.com 的 Staged Packages 页面检查包名、版本、dist-tag、文件清单和 tarball，再使用 2FA 批准。审批后执行：
+
+```bash
+npm view @ai-light/adapter version --registry=https://registry.npmjs.org/
+npm install --global @ai-light/adapter@0.1.2 \
+  --registry=https://registry.npmjs.org/
+ailight-adapter version --json
+ailight-adapter doctor --json
+```
+
+### 手动重跑与失败处理
+
+在 GitHub Actions 中选择 `Publish npm adapter`，输入已经存在的 `adapter-v*` 标签，可以重试失败的构建或 staging。手动入口仍会校验标签与包版本，不能从任意分支发布。
+
+版本一旦进入 staging，就占用该 SemVer。构建或测试失败时修复代码并递增版本；staging 内容不正确时，先在 npmjs.com 拒绝候选包，再按确认后的版本策略重新发布。不要移动已经公开使用的 Git 标签。
