@@ -1,6 +1,6 @@
 {
   "name": "@ai-light/adapter",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Claude Code and Codex adapter for AI-Light",
   "repository": {
     "type": "git",
