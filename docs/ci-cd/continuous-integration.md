@@ -27,6 +27,17 @@ pnpm build
 
 任何步骤失败都会阻止该 Job 通过。
 
+### Adapter checks
+
+当 `packages/ailight-adapter/**`、workspace 配置、依赖锁文件或 workflow 发生变化时，在 `ubuntu-22.04` 上执行：
+
+```bash
+pnpm --dir packages/ailight-adapter check
+pnpm --dir packages/ailight-adapter test
+```
+
+手动触发 CI 时也会执行该 Job。普通前端与纯文档变更不会单独启动 Adapter checks。
+
 ### Tauri build
 
 工作流先按变更文件决定构建范围：纯文档改动只执行质量检查，不启动 Tauri 构建；Pull Request 和普通前端改动仅在 `ubuntu-22.04` 上执行原生 Tauri release 编译；Rust、Tauri、依赖锁文件或 workflow 改动在推送至 `main`、`master`、`develop` 时通过矩阵执行 Linux、macOS、Windows 三平台编译。手动触发始终执行三平台编译。单个平台超时时间为 45 分钟。
@@ -55,5 +66,7 @@ Linux 构建前会安装 WebKitGTK 等系统依赖。APT 设置 30 秒网络超�
 
 - `Quality checks`
 - `Tauri build (Linux)`
+
+`Adapter checks` 只在相关路径变更时出现。如需将其设为 required check，应使用支持路径条件检查的规则，避免无关 PR 因该 Job 跳过而长期 pending。
 
 macOS 和 Windows 检查不在 Pull Request 事件中运行，不应设置为 PR 合并必需项。

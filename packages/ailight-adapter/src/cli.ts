@@ -1,9 +1,16 @@
 #!/usr/bin/env node
 
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type ToolId, translate } from "./adapters.js";
 import { detect, install, uninstall } from "./integrations.js";
 import { aiLightHome, deliver, readRuntime } from "./runtime.js";
+
+const packageVersion = (
+  JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8")
+  ) as { version: string }
+).version;
 
 function isTool(value: string | undefined): value is ToolId {
   return value === "claude-code" || value === "codex";
@@ -31,7 +38,7 @@ async function main() {
   const [command, toolArg, ...options] = process.argv.slice(2);
   const dryRun = options.includes("--dry-run");
   if (command === "version") {
-    output({ name: "@ai-light/adapter", version: "0.1.1" });
+    output({ name: "@ai-light/adapter", version: packageVersion });
     return;
   }
   if (command === "doctor") {

@@ -1,0 +1,67 @@
+name: Publish npm adapter
+
+on:
+  push:
+    tags: ["adapter-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing Adapter tag (for example adapter-v0.1.2)
+        required: true
+        type: string
+
+concurrency:
+  group: npm-publish-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Build and stage npm package
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: pnpm/action-setup@v6.0.9
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Install supported npm CLI
+        run: npm install --global npm@11.19.0
+      - id: version
+        name: Validate tag and package version
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const tag = process.env.RELEASE_TAG;
+          const manifest = JSON.parse(fs.readFileSync('packages/ailight-adapter/package.json', 'utf8'));
+          const expectedTag = `adapter-v${manifest.version}`;
+          if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(manifest.version)) {
+            throw new Error(`Invalid Adapter version: ${manifest.version}`);
+          }
+          if (tag !== expectedTag) {
+            throw new Error(`Tag ${tag} does not match Adapter version ${expectedTag}`);
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `dist-tag=${manifest.version.includes('-') ? 'next' : 'latest'}\n`);
+          NODE
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Type-check Adapter
+        run: pnpm --dir packages/ailight-adapter check
+      - name: Test Adapter
+        run: pnpm --dir packages/ailight-adapter test
+      - name: Inspect package contents
+        working-directory: packages/ailight-adapter
+        run: npm pack --dry-run
+      - name: Stage package for approval
+        working-directory: packages/ailight-adapter
+        run: npm stage publish --tag "${{ steps.version.outputs.dist-tag }}"
