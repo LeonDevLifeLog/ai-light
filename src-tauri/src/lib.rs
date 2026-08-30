@@ -252,6 +252,7 @@ pub fn run() {
             commands::get_theme,
             commands::set_active_theme,
             commands::import_theme,
+            commands::delete_theme,
             commands::scan_devices,
             commands::connect_device,
             commands::disconnect_device,

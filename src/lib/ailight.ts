@@ -258,6 +258,8 @@ export const api = {
     isTauri()
       ? call<string>("import_theme", { content })
       : (JSON.parse(content) as ThemeFile).theme.name,
+  deleteTheme: async (name: string) =>
+    isTauri() ? call<{ ok: boolean }>("delete_theme", { name }) : { ok: true },
   scanDevices: async () =>
     isTauri() ? call<ScannedDevice[]>("scan_devices") : [],
   connectDevice: (address: string) => call<void>("connect_device", { address }),

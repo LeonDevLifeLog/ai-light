@@ -56,9 +56,11 @@
 | `set_active_theme(name)` | name: string | `()` | `NOT_FOUND` / `THEME_INVALID` | P1 |
 | `import_theme(content)` | content: 主题 JSON 字符串 | 主题名 string | `THEME_INVALID` / `CONFLICT`（与内置同名） | P1 |
 | `export_theme(name)` | name: string | `{ "content": "<JSON 字符串>" }` | `NOT_FOUND` | P2 |
-| `delete_theme(name)` | name: string | `{ "ok": true }` | `NOT_FOUND` / `THEME_BUILTIN`（内置不可删） | P2 |
+| `delete_theme(name)` | name: string | `{ "ok": true }` | `BAD_REQUEST` / `NOT_FOUND` / `THEME_BUILTIN`（内置不可删） | P1 |
 
 **`set_active_theme` 副作用**：若当前业务状态非 IDLE，用新主题重新编译当前状态并下发（`APPLY_IF_CHANGED` 幂等对齐）。
+
+**`delete_theme` 副作用**：仅允许删除用户主题；删除当前主题时先切换到内置 `default`，复用 `set_active_theme` 的持久化、事件和当前 SCENE 重放语义，再删除用户主题文件。文件删除失败时尝试恢复原主题。
 
 ### 2.3 设备域
 
@@ -130,7 +132,7 @@
 | `NOT_FOUND` | 对象不存在 | get_theme/set_active_theme/export/delete、connect_device 地址未扫到 |
 | `CONFLICT` | 冲突 | import_theme 与内置主题同名 |
 | `THEME_INVALID` | 主题校验失败 | import/set_active_theme/preview_scene（含校验失败原因于 message） |
-| `THEME_BUILTIN` | 内置主题不可操作 | delete_theme(内置)——P2 未实现，当前无代码路径产生该码（预留） |
+| `THEME_BUILTIN` | 内置主题不可操作 | delete_theme(内置) |
 | `DEVICE_NOT_CONNECTED` | 设备未连接 | preview_scene 前置检查 |
 | `DEVICE_DISCONNECT_FAILED` | 主动断开失败 | disconnect_device / forget_device；忘记操作不会清除记忆 |
 | `AUTOSTART_FAILED` | 开机自启 OS 登录项操作失败 | update_config(autostart) 时 enable/disable 抛错（权限、路径失效、平台异常等） |
@@ -167,19 +169,20 @@
 
 ## 7. 第一期实现范围（P1 汇总）
 
-**P1 commands**：get_app_state / get_themes / get_theme / set_active_theme / import_theme / scan_devices / connect_device / disconnect_device / forget_device / trigger_state / preview_scene / reset_outputs / get_config / update_config
+**P1 commands**：get_app_state / get_themes / get_theme / set_active_theme / import_theme / delete_theme / scan_devices / connect_device / disconnect_device / forget_device / trigger_state / preview_scene / reset_outputs / get_config / update_config
 **P1 events**：business-state-changed / device-connection-changed / device-power-changed / device-fault / theme-changed
-**P2（后续）**：export_theme / delete_theme / hook-log
+**P2（后续）**：export_theme / hook-log
 
 ## 8. 实现状态对账快照（2026-08-21）
 
 以代码为事实源（对应 ui-design.md §11 路线图对账）：
 
-- **P1 commands（14 个）**：✅ 全部已注册（`src-tauri/src/commands.rs`）并由前端 `api` 层对接。
+- **P1 commands（15 个）**：✅ 全部已注册（`src-tauri/src/commands.rs`）并由前端 `api` 层对接。
 - **P1 events（5 个）**：✅ 全部已 emit。`device-connection-changed` 覆盖连接与断连双向；`device-power-changed` 由握手 GET_POWER_STATUS 与 POWER_CHANGED 主动事件触发；`device-fault` 由 FAULT_EVENT 触发。
 - **UI 导航事件**：`open-config`（托盘「打开配置」）✅ 已 emit，前端订阅跳转 /devices。
-- **P2 commands / event（3 个）**：❌ `export_theme` / `delete_theme` / `hook-log` 未实现。
-- **试听错误映射**：✅ `preview_scene` 在设备未连接时前置返回 `DEVICE_NOT_CONNECTED`；`THEME_BUILTIN` 依赖 P2 `delete_theme`，当前无代码路径。
+- **P2 commands / event（2 个）**：❌ `export_theme` / `hook-log` 未实现。
+- **主题删除**：✅ `delete_theme` 已注册并由前端对接；仅用户主题显示入口，内置主题由 Rust 返回 `THEME_BUILTIN`；删除当前用户主题先回退 `default`。
+- **试听错误映射**：✅ `preview_scene` 在设备未连接时前置返回 `DEVICE_NOT_CONNECTED`。
 - **开机自启（G-06）**：✅ 已实装（2026-08-21）。`update_config` 先 OS 后 config（新增 `AUTOSTART_FAILED`）；setup 启动校准 `is_enabled()` 写回 config；平台 = macOS LaunchAgent / Windows Run key / Linux XDG autostart（tauri-plugin-autostart 2.5.1）；三平台实机待验证（U-08）。
 - **配置项**：Hook Server 固定优先 25679、占用时自动退避；`portPreference` 仅为旧配置兼容字段，设置页不再开放修改。其余配置项均已生效。
 

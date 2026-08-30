@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.23 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.23，2026-08-30） |
+| 文档版本 | V1.24 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.24，2026-08-30） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -120,7 +120,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | Dashboard | `StatusHero` / `DeviceCard` / `ThemeCard` | 3 |
 | Devices | `ScanProgress` / `ScanResultList` / `DeviceDetailCard` / `FaultAlert` | 4 |
 | Integrations | `IntegrationCard` × 4 / `HelpFooter` | 5 |
-| Themes | `ThemeGrid` / `ThemeDetailPanel` / `ImportThemeDialog` / `ThemeEditorDialog` | 4 |
+| Themes | `ThemeGrid` / `ThemeDetailPanel` / `ImportThemeDialog` / `DeleteThemeDialog` / `ThemeEditorDialog` | 5 |
 | Preview | `StandardStateButtonGroup` / `CustomStateInput` / `CustomStateQuickList` / `ResetOutputsButton` | 4 |
 | Settings | `SettingGroup` × N（外观 / 设备 / 主题 / 系统） | 4 |
 
@@ -586,7 +586,9 @@ Dashboard 主题卡 + Themes 页主题网格卡：3 灯条色块缩略 + 主题�
 | Props | `theme` | `{ name, builtin, description, previewColors: [color × 3] }` |
 | Props | `isActive` | boolean |
 | Props | `mode` | `'dashboard' \| 'grid'` |
+| Props | `deleting` | boolean；仅用户主题删除中 |
 | Emit | `onClickApply(themeName)` | 仅 `mode = 'grid'` |
+| Emit | `onClickDelete(theme)` | 仅 `mode = 'grid' && builtin == false` |
 | Emit | `onClickChangeTheme` | 仅 `mode = 'dashboard'` → 跳转 `/themes` |
 | 订阅 | `theme-changed` | `isActive` |
 | 订阅 | `get_themes` | 网格全量 |
@@ -598,6 +600,7 @@ Dashboard 主题卡 + Themes 页主题网格卡：3 灯条色块缩略 + 主题�
 | `default` | 非当前主题 | bg-elev + border-soft | hover → border + shadow |
 | `active` | `isActive == true` | accent 边框 + box-shadow-glow + "当前使用" tag | 同 hover |
 | `applying` | 点击 [使用此主题] 后 | button = loading 态（spinner） | 禁用 |
+| `deleting` | 确认删除用户主题后 | 删除按钮 = loading 态 | 禁用全部卡片操作 |
 | `error` | `set_active_theme` 失败 | button 抖动 + 错误 Toast | hover → border-destructive |
 
 **6.4.4 联动矩阵**
@@ -607,15 +610,19 @@ Dashboard 主题卡 + Themes 页主题网格卡：3 灯条色块缩略 + 主题�
 | `theme-changed` | `isActive` | patch |
 | `get_themes` | 网格全量 | full |
 | 用户点击 [使用此主题] | `isActive` 本地乐观更新 → 等待 event 确认 | patch |
+| `delete_theme` 成功 | 删除用户主题卡；若删除当前主题则 `default` 进入 active | full |
 
 **6.4.5 边界条件**
 - 用户主题导入成功 → 自动刷新网格
 - 用户主题删除 → 自动移除卡
+- 内置主题不渲染删除控件，后端仍强制返回 `THEME_BUILTIN`
+- 删除当前用户主题 → Dialog 明示自动切换 `default`；成功后关闭对应详情
 - `previewColors` 缺失 → 显示默认 3 灰块
 
 **6.4.6 无障碍**
 - 卡片 = `<button>`（整卡可点）+ `aria-pressed="isActive"`
 - [使用此主题] 按钮 = `<button type="button">`
+- [删除] = 带可见文字与 `aria-label="删除主题 <name>"` 的危险按钮；确认 Dialog 支持 Esc 与焦点归还
 
 ---
 
@@ -773,6 +780,8 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 │       ThemeGrid         │ 3 列网格
 ├─────────────────────────┤
 │    ThemeDetailPanel     │ （V2）选中主题时展开
+├─────────────────────────┤
+│   DeleteThemeDialog     │ 用户主题删除确认
 └─────────────────────────┘
 ```
 
@@ -780,8 +789,9 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 - ThemeGrid 点击 → 设置当前选中主题（本地 state）→ DetailPanel 同步
 - [编辑当前主题] → 打开 ThemeEditorDialog（独占模式）
 - [导入新主题] → 打开 ImportThemeDialog（独占模式）
+- 用户主题 [删除] → 打开 DeleteThemeDialog；当前主题额外说明自动切换 default
 
-**Dialog 层级**：ThemeEditor > ImportTheme > 主窗口；同一时刻仅一个 Dialog。
+**Dialog 层级**：ThemeEditor > DeleteTheme / ImportTheme > 主窗口；同一时刻仅一个 Dialog。
 
 ---
 
@@ -1788,6 +1798,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.24 | 2026-08-30 | ThemeCard 为用户主题新增删除操作与 deleting 态；新增 DeleteThemeDialog，当前主题删除会自动回退 default；Rust 端强制保护内置主题。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未新增；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效。 |
 | V1.23 | 2026-08-30 | 设置页移除仲裁 ModeOption；最近活动成为唯一策略（ADR-0005 / KAD-13）。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效。 |
 | V1.22 | 2026-08-22 | KAD-12 仲裁语义澄清：§6.6.5 明确同一工具按最新生命周期状态推进，两个 ModeOption 只决定多个工具冲突时的显示规则。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效，新增 KAD-12 可解析。 |
 | V1.21 | 2026-08-22 | §6.5 IntegrationCard 切换为 Node Adapter 一键连接/断开契约，移除复制配置、伪测试及固定 Codex Desktop 限制；§6.6 设置页不再提供端口编辑。对齐报告：§3 Source Events 未变且均存在于 ipc-contract §5；Adapter AppError.code 已同步 ipc-contract §4；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10/11 引用有效。 |

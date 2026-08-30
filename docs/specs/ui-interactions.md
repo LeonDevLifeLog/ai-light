@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.24 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.24，2026-08-30） |
+| 文档版本 | V1.25 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.25，2026-08-30） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -202,7 +202,7 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 ### 6.1 浏览
 
 - 6 张内置主题卡（默认 / 极简 / 专注 / 自然 / 极光 / 霓虹）
-- 主题卡含：主题名 + 中文描述 + 缩略图（3 灯条色块）+ [使用此主题] / [正在使用] 按钮
+- 主题卡含：主题名 + 中文描述 + 缩略图（3 灯条色块）+ [使用此主题] / [正在使用] 按钮；用户主题额外显示 [删除]
 - 当前激活主题有外发光边框 + `当前使用` tag
 
 ### 6.2 切换主题
@@ -229,6 +229,14 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
    - 解析失败 → 错误 Toast（指出校验失败原因）
    - 与内置同名 → 错误 Toast（CONFLICT）
    - 成功 → 写 `themes/<name>.ailight-theme.json`，网格自动刷新
+
+### 6.5 删除用户主题
+
+- 内置主题不显示删除入口，Rust 侧仍以 `THEME_BUILTIN` 阻止绕过 UI 的删除请求。
+- 用户主题点击 [删除] → Dialog 显示主题名并说明不可恢复；确认按钮使用危险操作样式，删除期间禁用重复操作。
+- 普通用户主题删除成功 → 移除本机主题文件、刷新网格、关闭对应详情并显示成功 Toast。
+- 当前用户主题删除前，Dialog 明示将切换默认主题；确认后先应用内置 `default`（含配置持久化、`theme-changed` 和当前 SCENE 重放），再删除文件。
+- 删除失败 → Dialog 内显示具体原因并保留主题；若文件删除失败，后端尝试恢复原主题。
 
 ---
 
@@ -460,6 +468,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | 主题导入失败（JSON 非法）| Dialog 错误提示（含校验失败原因）|
 | 主题与内置同名 | Dialog 错误提示（CONFLICT）|
 | 主题保存失败（写文件失败）| Toast + 保持当前编辑状态 |
+| 主题删除失败 | Dialog 保留并显示原因；主题卡不移除 |
 | 设备扫描失败（蓝牙权限 / 系统错误）| 红色告警条 + 重试按钮 |
 | 设备连接失败 | Toast（含原因）+ 保留在 /devices |
 | 主动断开失败 | Toast（含原因）+ 保留连接与记忆设备 |
@@ -715,7 +724,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | Dashboard | （无可交互元素，焦点默认 body） | — |
 | Devices | 重新查找 → 扫描结果 [连接] × N | Cmd/Ctrl+R = 重新查找 |
 | Integrations | 客户端卡 × 4：[测试连接] → [查看 JSON] → [复制] | — |
-| Themes | 编辑当前主题 → 导入新主题 → 主题卡 [使用此主题] × N | Cmd/Ctrl+I = 导入 |
+| Themes | 编辑当前主题 → 导入新主题 → 主题卡 [使用此主题] → 用户主题 [删除] | Cmd/Ctrl+I = 导入；Esc = 关闭删除确认 |
 | Preview | 5 标准按钮 → 自定义输入 → [触发] → 最近 N → [全部重置] | `1`~`5` = 标准状态；`0` = 全部重置 |
 | Settings | 按视觉顺序 Tab | Esc 关闭 Dialog |
 | 全局 | — | Esc 关闭最上层 Dialog；Enter 提交当前焦点表单 |
@@ -734,6 +743,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.25 | 2026-08-30 | 实装用户主题删除：仅用户主题展示删除入口，确认 Dialog 明示不可恢复；删除当前主题自动回退 default，Rust 强制保护内置主题。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未新增；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效。 |
 | V1.24 | 2026-08-30 | 设置页移除“多个工具同时运行时”，仲裁固定为最近活动优先（ADR-0005 / KAD-13）。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效。 |
 | V1.23 | 2026-08-22 | KAD-12 仲裁语义澄清：§9.1 明确同一工具始终跟随最新生命周期状态，优先级与最近活动规则仅在多个工具冲突时生效；设置页文案同步。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效，新增 KAD-12 可解析。 |
 | V1.22 | 2026-08-22 | Node Adapter CLI 接入：§5 改为 Claude Code/Codex 一键连接与断开，移除复制 curl、伪测试与端口展示；§9.1 移除用户端口编辑，实际地址由 `~/.ailight/runtime.json` 自动发现。对齐报告：§3 Source Events 未变且均存在于 ipc-contract §5；新增 Adapter AppError.code 已同步 ipc-contract §4；蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10/11 引用有效。 |

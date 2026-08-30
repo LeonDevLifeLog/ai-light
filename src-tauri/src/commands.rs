@@ -278,6 +278,40 @@ pub fn import_theme(app: AppHandle, content: String) -> CmdResult<String> {
     Ok(name)
 }
 
+#[tauri::command]
+pub fn delete_theme(app: AppHandle, name: String) -> CmdResult<serde_json::Value> {
+    if theme::builtin_theme_names().contains(&name.as_str()) {
+        return Err(err("THEME_BUILTIN", format!("内置主题不可删除: {name}")));
+    }
+    if !valid_theme_name(&name) {
+        return Err(err("BAD_REQUEST", format!("主题名称非法: {name}")));
+    }
+
+    let path = user_theme_dir(&app)
+        .map_err(internal)?
+        .join(format!("{name}.ailight-theme.json"));
+    if !path.is_file() {
+        return Err(err("NOT_FOUND", format!("主题不存在: {name}")));
+    }
+
+    let is_active = shared(&app)
+        .theme_name
+        .read()
+        .map(|current| current.as_str() == name)
+        .map_err(|_| internal("theme_name 锁"))?;
+    if is_active {
+        set_active_theme(app.clone(), "default".into())?;
+    }
+
+    if let Err(error) = std::fs::remove_file(path) {
+        if is_active {
+            let _ = set_active_theme(app.clone(), name.clone());
+        }
+        return Err(internal(error));
+    }
+    Ok(serde_json::json!({ "ok": true }))
+}
+
 // ---- 设备域 ----
 
 #[tauri::command]
@@ -781,6 +815,14 @@ fn builtin_theme_content(name: &str) -> Option<&'static str> {
         .map(|(_, c)| *c)
 }
 
+fn valid_theme_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+}
+
 fn resolve_theme(app: &AppHandle, name: &str) -> Result<ThemeFile, String> {
     if let Some(content) = builtin_theme_content(name) {
         return theme::load(content).map_err(|e| e.to_string());
@@ -808,4 +850,17 @@ fn persist_active_theme(app: &AppHandle, name: &str) -> CmdResult<()> {
         persist_config(app, &cfg)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::valid_theme_name;
+
+    #[test]
+    fn user_theme_name_rejects_path_components() {
+        assert!(valid_theme_name("my-theme_2"));
+        assert!(!valid_theme_name("../default"));
+        assert!(!valid_theme_name("nested/theme"));
+        assert!(!valid_theme_name(""));
+    }
 }

@@ -1571,15 +1571,19 @@ function ThemeEditor({
 function ThemeCardItem({
   active,
   applying,
+  deleting,
   index,
   onApply,
+  onDelete,
   onInspect,
   theme,
 }: {
   active: boolean;
   applying: boolean;
+  deleting: boolean;
   index: number;
   onApply: (name: string) => Promise<void>;
+  onDelete: (theme: ThemeMeta) => void;
   onInspect: (name: string) => Promise<void>;
   theme: ThemeMeta;
 }) {
@@ -1601,23 +1605,39 @@ function ThemeCardItem({
           {theme.builtin ? "内置" : "用户"}
         </StatusTag>
       </div>
-      <ActionButton
-        busy={applying}
-        disabled={active}
-        onClick={(event) => {
-          event.stopPropagation();
-          runAsync(onApply(theme.name));
-        }}
-        tone={active ? "primary" : "secondary"}
-      >
-        {active ? (
-          <>
-            <Check size={16} /> 正在使用
-          </>
-        ) : (
-          "使用此主题"
+      <div className="theme-card__actions">
+        <ActionButton
+          busy={applying}
+          disabled={active || deleting}
+          onClick={(event) => {
+            event.stopPropagation();
+            runAsync(onApply(theme.name));
+          }}
+          tone={active ? "primary" : "secondary"}
+        >
+          {active ? (
+            <>
+              <Check size={16} /> 正在使用
+            </>
+          ) : (
+            "使用此主题"
+          )}
+        </ActionButton>
+        {theme.builtin ? null : (
+          <ActionButton
+            aria-label={`删除主题 ${theme.name}`}
+            busy={deleting}
+            disabled={applying}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete(theme);
+            }}
+            tone="danger"
+          >
+            <Trash2 aria-hidden="true" size={16} /> 删除
+          </ActionButton>
         )}
-      </ActionButton>
+      </div>
     </Card>
   );
 }
@@ -1628,6 +1648,9 @@ export function ThemesPage() {
   const [selectedTheme, setSelectedTheme] = useState<ThemeFile | null>(null);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ThemeMeta | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorSource, setEditorSource] = useState<ThemeFile | null>(null);
@@ -1715,6 +1738,40 @@ export function ThemesPage() {
     }
   };
 
+  const requestDelete = (theme: ThemeMeta) => {
+    setDeleteError(null);
+    setDeleteTarget(theme);
+  };
+
+  const closeDelete = () => {
+    if (!deleting) {
+      setDeleteTarget(null);
+      setDeleteError(null);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+    const name = deleteTarget.name;
+    setDeleting(name);
+    setDeleteError(null);
+    try {
+      await api.deleteTheme(name);
+      if (selectedTheme?.theme.name === name) {
+        setSelectedTheme(null);
+      }
+      await Promise.all([loadThemes(), refresh()]);
+      setDeleteTarget(null);
+      notify({ tone: "success", title: "主题已删除", message: name });
+    } catch (error) {
+      setDeleteError(asAppError(error).message);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   let themeContent: ReactNode;
   if (loading) {
     themeContent = (
@@ -1742,9 +1799,11 @@ export function ThemesPage() {
             <ThemeCardItem
               active={snapshot?.activeTheme === theme.name}
               applying={applying === theme.name}
+              deleting={deleting === theme.name}
               index={index}
               key={theme.name}
               onApply={apply}
+              onDelete={requestDelete}
               onInspect={inspect}
               theme={theme}
             />
@@ -1800,6 +1859,36 @@ export function ThemesPage() {
         title="主题"
       />
       {themeContent}
+      <Dialog
+        description={
+          deleteTarget && snapshot?.activeTheme === deleteTarget.name
+            ? "删除后将自动切换到默认主题，并立即更新当前灯效。"
+            : "此操作会永久删除本机保存的主题文件。"
+        }
+        footer={
+          <>
+            <ActionButton disabled={Boolean(deleting)} onClick={closeDelete}>
+              取消
+            </ActionButton>
+            <ActionButton
+              busy={Boolean(deleting)}
+              onClick={() => runAsync(confirmDelete())}
+              tone="danger"
+            >
+              删除主题
+            </ActionButton>
+          </>
+        }
+        onClose={closeDelete}
+        open={Boolean(deleteTarget)}
+        title={`删除主题“${deleteTarget?.name ?? ""}”？`}
+      >
+        {deleteError ? (
+          <InlineAlert title="主题删除失败">{deleteError}</InlineAlert>
+        ) : (
+          <p>内置主题不受影响；删除后无法恢复。</p>
+        )}
+      </Dialog>
       <Dialog
         description="选择主题文件，或粘贴完整 JSON 内容。"
         footer={

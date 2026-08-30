@@ -260,7 +260,7 @@
 
 - 顶部：[导入主题] 按钮（打开 Dialog：文件选择器 或 粘贴 JSON 文本框）
 - **主题网格**（响应式 2~4 列卡片）：
-  - 每张卡片：主题名 / builtin or user 徽章 / 缩略灯效示意（红绿灯静态预览）/ [应用] 按钮
+  - 每张卡片：主题名 / builtin or user 徽章 / 缩略灯效示意（红绿灯静态预览）/ [应用] 按钮；用户主题额外提供 [删除] 并二次确认
   - 内置主题 6 张卡片（default / minimal / neon / nature / aurora / focus）
   - 用户主题 N 张（按文件系统枚举）
 - **右侧详情面板**（选中主题时展开）：
@@ -637,7 +637,8 @@ z/tooltip    = 300
 - **token Bearer 校验**：✅ 已实现。hook_server 在配置 token 后强制 Bearer 校验，含 `token_auth` 单测；UI 设置入口按设计不开放（V2）
 - **`autostart` 真实启用**：✅ 已实现（2026-08-21）。`update_config` 先 OS 后 config（`AUTOSTART_FAILED` 错误码）；setup 启动校准；Settings 页 Switch 真实化；平台 = macOS LaunchAgent / Win Run key / Linux XDG autostart（U-08 三平台实机待完成）
 - **`badgeOrientation` 设置项**：✅ 已实现（Settings 页 + Dashboard 实时生效 + config 持久化）
-- **P2 commands/events**：❌ `export_theme` / `delete_theme` / `hook-log` 未实现（ipc-contract §7）
+- **P1 主题删除**：✅ `delete_theme` 已实现；仅用户主题可删，删除当前主题自动回退 default
+- **P2 commands/events**：❌ `export_theme` / `hook-log` 未实现（ipc-contract §7）
 
 ### 11.3 待定（V2 / 远期）
 

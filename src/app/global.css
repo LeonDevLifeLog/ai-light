@@ -1510,9 +1510,13 @@ input[type="range"] {
   font-size: 11px;
   color: var(--text-tertiary);
 }
-.theme-card > .action-button {
-  width: 100%;
+.theme-card__actions {
+  display: flex;
+  gap: 8px;
   margin-top: auto;
+}
+.theme-card__actions > .action-button:first-child {
+  flex: 1;
 }
 .theme-detail {
   position: sticky;

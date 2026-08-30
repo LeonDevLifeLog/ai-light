@@ -33,7 +33,7 @@
 │        │（状态推送）│（配置操作）                        │
 │  Rust Core                                             │
 │  ├─ L1 hook_server   HTTP 25679（hook-api V1.0）       │
-│  ├─ L2 arbiter       优先级仲裁（ADR-0001 Q8）          │
+│  ├─ L2 arbiter       最近活动仲裁（ADR-0005 / KAD-13） │
 │  ├─ L2 theme         主题加载/校验/编译（theme-format） │
 │  ├─ L3 protocol      V0.4 编解码（借鉴 pyPcTest 分层）  │
 │  ├─ L3 transport     单 writer 队列 + 重试幂等          │
