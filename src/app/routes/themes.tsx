@@ -1,6 +1,7 @@
 import {
   Check,
   ChevronDown,
+  Download,
   FileJson,
   Import,
   Music2,
@@ -1572,18 +1573,22 @@ function ThemeCardItem({
   active,
   applying,
   deleting,
+  exporting,
   index,
   onApply,
   onDelete,
+  onExport,
   onInspect,
   theme,
 }: {
   active: boolean;
   applying: boolean;
   deleting: boolean;
+  exporting: boolean;
   index: number;
   onApply: (name: string) => Promise<void>;
   onDelete: (theme: ThemeMeta) => void;
+  onExport: (name: string) => Promise<void>;
   onInspect: (name: string) => Promise<void>;
   theme: ThemeMeta;
 }) {
@@ -1608,7 +1613,7 @@ function ThemeCardItem({
       <div className="theme-card__actions">
         <ActionButton
           busy={applying}
-          disabled={active || deleting}
+          disabled={active || deleting || exporting}
           onClick={(event) => {
             event.stopPropagation();
             runAsync(onApply(theme.name));
@@ -1624,18 +1629,31 @@ function ThemeCardItem({
           )}
         </ActionButton>
         {theme.builtin ? null : (
-          <ActionButton
-            aria-label={`删除主题 ${theme.name}`}
-            busy={deleting}
-            disabled={applying}
-            onClick={(event) => {
-              event.stopPropagation();
-              onDelete(theme);
-            }}
-            tone="danger"
-          >
-            <Trash2 aria-hidden="true" size={16} /> 删除
-          </ActionButton>
+          <>
+            <ActionButton
+              aria-label={`导出主题 ${theme.name}`}
+              busy={exporting}
+              disabled={applying || deleting}
+              onClick={(event) => {
+                event.stopPropagation();
+                runAsync(onExport(theme.name));
+              }}
+            >
+              <Download aria-hidden="true" size={16} /> 导出
+            </ActionButton>
+            <ActionButton
+              aria-label={`删除主题 ${theme.name}`}
+              busy={deleting}
+              disabled={applying || exporting}
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete(theme);
+              }}
+              tone="danger"
+            >
+              <Trash2 aria-hidden="true" size={16} /> 删除
+            </ActionButton>
+          </>
         )}
       </div>
     </Card>
@@ -1650,6 +1668,7 @@ export function ThemesPage() {
   const [applying, setApplying] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ThemeMeta | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -1743,6 +1762,28 @@ export function ThemesPage() {
     setDeleteTarget(theme);
   };
 
+  const exportTheme = async (name: string) => {
+    setExporting(name);
+    try {
+      const result = await api.exportTheme(name);
+      if (result.status === "exported") {
+        notify({
+          tone: "success",
+          title: "主题已导出",
+          message: result.fileName ?? `${name}.ailight-theme.json`,
+        });
+      }
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "主题导出失败",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const closeDelete = () => {
     if (!deleting) {
       setDeleteTarget(null);
@@ -1800,10 +1841,12 @@ export function ThemesPage() {
               active={snapshot?.activeTheme === theme.name}
               applying={applying === theme.name}
               deleting={deleting === theme.name}
+              exporting={exporting === theme.name}
               index={index}
               key={theme.name}
               onApply={apply}
               onDelete={requestDelete}
+              onExport={exportTheme}
               onInspect={inspect}
               theme={theme}
             />

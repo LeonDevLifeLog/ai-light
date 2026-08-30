@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.25 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.25，2026-08-30） |
+| 文档版本 | V1.26 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.26，2026-08-30） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -202,7 +202,7 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 ### 6.1 浏览
 
 - 6 张内置主题卡（默认 / 极简 / 专注 / 自然 / 极光 / 霓虹）
-- 主题卡含：主题名 + 中文描述 + 缩略图（3 灯条色块）+ [使用此主题] / [正在使用] 按钮；用户主题额外显示 [删除]
+- 主题卡含：主题名 + 中文描述 + 缩略图（3 灯条色块）+ [使用此主题] / [正在使用] 按钮；用户主题额外显示 [导出]、[删除]
 - 当前激活主题有外发光边框 + `当前使用` tag
 
 ### 6.2 切换主题
@@ -230,7 +230,15 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
    - 与内置同名 → 错误 Toast（CONFLICT）
    - 成功 → 写 `themes/<name>.ailight-theme.json`，网格自动刷新
 
-### 6.5 删除用户主题
+### 6.5 导出用户主题
+
+- 所有 `builtin == false` 的用户主题均显示 [导出]，包括通过文件导入后保存的主题；内置主题不显示，Rust 侧仍以 `THEME_BUILTIN` 阻止绕过 UI 的请求。
+- 点击 [导出] → Rust 重新读取并校验持久化主题 → 打开系统保存窗口；默认文件名为 `<name>.ailight-theme.json`，文件内容保持原样，可由现有导入流程重新导入。
+- 导出期间当前卡片的 [导出] 显示 loading，并禁用该卡片的应用、导出和删除；其他主题卡仍可操作。
+- 保存成功 → Toast“主题已导出：`<name>.ailight-theme.json`”；用户取消系统保存窗口 → 静默结束；读取、校验或写入失败 → Toast“主题导出失败：`<reason>`”。
+- 导出不切换当前主题、不修改配置、不触发事件、不改变设备灯效。
+
+### 6.6 删除用户主题
 
 - 内置主题不显示删除入口，Rust 侧仍以 `THEME_BUILTIN` 阻止绕过 UI 的删除请求。
 - 用户主题点击 [删除] → Dialog 显示主题名并说明不可恢复；确认按钮使用危险操作样式，删除期间禁用重复操作。
@@ -468,6 +476,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | 主题导入失败（JSON 非法）| Dialog 错误提示（含校验失败原因）|
 | 主题与内置同名 | Dialog 错误提示（CONFLICT）|
 | 主题保存失败（写文件失败）| Toast + 保持当前编辑状态 |
+| 主题导出失败 | Toast“主题导出失败：`<reason>`”；取消系统保存窗口不提示 |
 | 主题删除失败 | Dialog 保留并显示原因；主题卡不移除 |
 | 设备扫描失败（蓝牙权限 / 系统错误）| 红色告警条 + 重试按钮 |
 | 设备连接失败 | Toast（含原因）+ 保留在 /devices |
@@ -696,7 +705,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | `NOT_FOUND` | Toast "`<对象>` 不存在" |
 | `THEME_INVALID` | Dialog "主题校验失败：`<details>`" |
 | `CONFLICT` | Dialog "与内置主题 `<X>` 同名" |
-| `THEME_BUILTIN` | Dialog "内置主题不可删除" |
+| `THEME_BUILTIN` | Toast / Dialog“内置主题不可导出或删除” |
 | `BAD_REQUEST` | Toast "请求参数非法：`<reason>`" |
 | `DEVICE_NOT_CONNECTED` | Toast "请先连接设备" + 跳转 `/devices` |
 | `DEVICE_DISCONNECT_FAILED` | Toast "无法断开设备：`<reason>`"，保留记忆设备 |
@@ -743,6 +752,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.26 | 2026-08-30 | 实装用户主题导出：所有非内置主题显示导出入口，Rust 校验后通过系统保存窗口原样写出；内置主题强制保护，取消保存静默结束。对齐报告：§2 Source Events 与 ipc-contract §5 一致；错误码均存在于 ipc-contract §4；蓝牙 result code 与 V0.4 §3.6 一致；主题字段未变；ADR/KAD 引用有效。 |
 | V1.25 | 2026-08-30 | 实装用户主题删除：仅用户主题展示删除入口，确认 Dialog 明示不可恢复；删除当前主题自动回退 default，Rust 强制保护内置主题。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未新增；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效。 |
 | V1.24 | 2026-08-30 | 设置页移除“多个工具同时运行时”，仲裁固定为最近活动优先（ADR-0005 / KAD-13）。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效。 |
 | V1.23 | 2026-08-22 | KAD-12 仲裁语义澄清：§9.1 明确同一工具始终跟随最新生命周期状态，优先级与最近活动规则仅在多个工具冲突时生效；设置页文案同步。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效，新增 KAD-12 可解析。 |

@@ -5,6 +5,7 @@ use std::process::Command;
 use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_dialog::DialogExt;
 use tokio::sync::mpsc;
 
 use ailight_core::arbiter::ST_IDLE;
@@ -276,6 +277,68 @@ pub fn import_theme(app: AppHandle, content: String) -> CmdResult<String> {
     std::fs::create_dir_all(&dir).map_err(internal)?;
     std::fs::write(dir.join(format!("{name}.ailight-theme.json")), content).map_err(internal)?;
     Ok(name)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportThemeResult {
+    pub status: &'static str,
+    pub file_name: Option<String>,
+}
+
+#[tauri::command]
+pub async fn export_theme(app: AppHandle, name: String) -> CmdResult<ExportThemeResult> {
+    validate_export_theme_name(&name)?;
+    let path = user_theme_dir(&app)
+        .map_err(internal)?
+        .join(format!("{name}.ailight-theme.json"));
+    let content = match std::fs::read_to_string(path) {
+        Ok(content) => Some(content),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(internal(error)),
+    };
+    let content = prepare_theme_export(&name, content)?;
+    let file_name = format!("{name}.ailight-theme.json");
+    let destination = app
+        .dialog()
+        .file()
+        .add_filter("AI-Light 主题", &["json"])
+        .set_file_name(&file_name)
+        .blocking_save_file();
+    let Some(destination) = destination else {
+        return Ok(ExportThemeResult {
+            status: "cancelled",
+            file_name: None,
+        });
+    };
+    let destination = destination.into_path().map_err(internal)?;
+    let exported_file_name = destination
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(&file_name)
+        .to_string();
+    std::fs::write(destination, content).map_err(internal)?;
+    Ok(ExportThemeResult {
+        status: "exported",
+        file_name: Some(exported_file_name),
+    })
+}
+
+fn prepare_theme_export(name: &str, content: Option<String>) -> CmdResult<String> {
+    validate_export_theme_name(name)?;
+    let content = content.ok_or_else(|| err("NOT_FOUND", format!("主题不存在: {name}")))?;
+    theme::load(&content).map_err(|error| err("THEME_INVALID", error.to_string()))?;
+    Ok(content)
+}
+
+fn validate_export_theme_name(name: &str) -> CmdResult<()> {
+    if !valid_theme_name(name) {
+        return Err(err("BAD_REQUEST", format!("主题名称非法: {name}")));
+    }
+    if theme::builtin_theme_names().contains(&name) {
+        return Err(err("THEME_BUILTIN", format!("内置主题不可导出: {name}")));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -854,7 +917,7 @@ fn persist_active_theme(app: &AppHandle, name: &str) -> CmdResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::valid_theme_name;
+    use super::{prepare_theme_export, valid_theme_name};
 
     #[test]
     fn user_theme_name_rejects_path_components() {
@@ -862,5 +925,36 @@ mod tests {
         assert!(!valid_theme_name("../default"));
         assert!(!valid_theme_name("nested/theme"));
         assert!(!valid_theme_name(""));
+    }
+
+    #[test]
+    fn export_rejects_invalid_builtin_missing_and_corrupt_themes() {
+        assert_eq!(
+            prepare_theme_export("../theme", None).unwrap_err().code,
+            "BAD_REQUEST"
+        );
+        assert_eq!(
+            prepare_theme_export("default", None).unwrap_err().code,
+            "THEME_BUILTIN"
+        );
+        assert_eq!(
+            prepare_theme_export("mine", None).unwrap_err().code,
+            "NOT_FOUND"
+        );
+        assert_eq!(
+            prepare_theme_export("mine", Some("{broken".into()))
+                .unwrap_err()
+                .code,
+            "THEME_INVALID"
+        );
+    }
+
+    #[test]
+    fn export_preserves_valid_user_theme_content() {
+        let content = r#"{"theme":{"name":"mine","version":1},"scenes":{"off":{"leds":[null,null,null]}},"states":{"IDLE":{"scene":"off"}}}"#;
+        assert_eq!(
+            prepare_theme_export("mine", Some(content.into())).unwrap(),
+            content
+        );
     }
 }

@@ -51,6 +51,11 @@ export interface ThemeMeta {
   name: string;
 }
 
+export interface ExportThemeResult {
+  fileName?: string;
+  status: "exported" | "cancelled";
+}
+
 export interface ScannedDevice {
   address: string;
   name: string;
@@ -258,6 +263,10 @@ export const api = {
     isTauri()
       ? call<string>("import_theme", { content })
       : (JSON.parse(content) as ThemeFile).theme.name,
+  exportTheme: async (name: string) =>
+    isTauri()
+      ? call<ExportThemeResult>("export_theme", { name })
+      : { fileName: `${name}.ailight-theme.json`, status: "exported" as const },
   deleteTheme: async (name: string) =>
     isTauri() ? call<{ ok: boolean }>("delete_theme", { name }) : { ok: true },
   scanDevices: async () =>
