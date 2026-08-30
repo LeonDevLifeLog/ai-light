@@ -143,6 +143,18 @@ export interface ToolchainStatus {
   summary: string;
 }
 
+export interface AdapterUpdateInfo {
+  compatible: boolean;
+  currentVersion: string;
+  targetVersion: string;
+  updateAvailable: boolean;
+}
+
+export interface AdapterUpgradeResult {
+  doctor: Record<string, unknown>;
+  toolchain: ToolchainStatus;
+}
+
 export interface ToolchainOverridesPatch {
   adapter?: string | null;
   node?: string | null;
@@ -409,6 +421,22 @@ export const api = {
     isTauri()
       ? call<ToolchainStatus>("select_executable", { kind })
       : mockToolchainStatus,
+  checkAdapterUpdate: async () =>
+    isTauri()
+      ? call<AdapterUpdateInfo>("check_adapter_update")
+      : {
+          compatible: true,
+          currentVersion: "0.1.1",
+          targetVersion: "0.1.1",
+          updateAvailable: false,
+        },
+  upgradeAdapter: async (targetVersion: string) =>
+    isTauri()
+      ? call<AdapterUpgradeResult>("upgrade_adapter", { targetVersion })
+      : {
+          doctor: {},
+          toolchain: mockToolchainStatus,
+        },
 };
 
 export function subscribe<T>(

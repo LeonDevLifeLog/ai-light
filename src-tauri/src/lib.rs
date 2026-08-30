@@ -275,6 +275,8 @@ pub fn run() {
             commands::set_toolchain_overrides,
             commands::reset_toolchain_overrides,
             commands::select_executable,
+            commands::check_adapter_update,
+            commands::upgrade_adapter,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -16,7 +16,9 @@ use ailight_core::hook_server::{BusinessSnapshot, DeviceSnapshot, ServiceSnapsho
 use ailight_core::theme::{self, ThemeFile};
 
 use crate::toolchain::model::states;
-use crate::toolchain::model::{ResolvedToolchain, ToolKind, ToolchainOverrides, ToolchainStatus};
+use crate::toolchain::model::{
+    AdapterUpdateInfo, ResolvedToolchain, ToolKind, ToolchainOverrides, ToolchainStatus,
+};
 use crate::toolchain::{runner, validate, ToolchainError};
 use crate::AppState;
 
@@ -82,6 +84,13 @@ fn map_toolchain_error(error: ToolchainError) -> AppError {
             format!("工具链配置受保护，请先恢复自动检测: {message}"),
         ),
         ToolchainError::Io(message) => internal(message),
+    }
+}
+
+fn map_adapter_update_error(error: ToolchainError) -> AppError {
+    match error {
+        ToolchainError::Io(message) => err("ADAPTER_UPDATE_FAILED", message),
+        other => map_toolchain_error(other),
     }
 }
 
@@ -314,6 +323,33 @@ pub async fn select_executable(app: AppHandle, kind: String) -> CmdResult<Toolch
         .select_executable(kind, path)
         .await
         .map_err(map_toolchain_error)
+}
+
+#[tauri::command]
+pub async fn check_adapter_update(app: AppHandle) -> CmdResult<AdapterUpdateInfo> {
+    app.state::<AppState>()
+        .toolchain
+        .check_adapter_update()
+        .await
+        .map_err(map_adapter_update_error)
+}
+
+#[tauri::command]
+pub async fn upgrade_adapter(
+    app: AppHandle,
+    target_version: String,
+) -> CmdResult<serde_json::Value> {
+    let service = &app.state::<AppState>().toolchain;
+    let chain = service
+        .upgrade_adapter(&target_version)
+        .await
+        .map_err(map_adapter_update_error)?;
+    let doctor = adapter_command_with_chain(&chain, &["doctor"]).await?;
+    let toolchain = service.status(false).await;
+    Ok(serde_json::json!({
+        "doctor": doctor,
+        "toolchain": toolchain,
+    }))
 }
 
 fn pick_executable(app: &AppHandle, kind: ToolKind) -> Option<std::path::PathBuf> {

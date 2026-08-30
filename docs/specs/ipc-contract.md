@@ -113,6 +113,10 @@
 | `set_toolchain_overrides(patch)` | patch: `{ node?, npm?, adapter? }`（绝对路径） | ToolchainStatus | `TOOLCHAIN_OVERRIDE_INVALID`（字段级验证错误，details 携带 kind/path/reason） | P1 |
 | `reset_toolchain_overrides()` | — | ToolchainStatus（mode 恢复 auto） | — | P1 |
 | `select_executable(kind)` | kind: `node \| npm \| adapter` | ToolchainStatus（取消选择返回当前状态，不改变配置） | `BAD_REQUEST`（kind 非法）/ `TOOLCHAIN_OVERRIDE_INVALID`（所选路径验证失败） | P1 |
+| `check_adapter_update()` | — | AdapterUpdateInfo `{ currentVersion, targetVersion, updateAvailable, compatible }` | `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` / `ADAPTER_UPDATE_FAILED` | P1 |
+| `upgrade_adapter(targetVersion)` | targetVersion: 精确 semver | `{ toolchain: ToolchainStatus, doctor: object }` | `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` / `ADAPTER_UPDATE_FAILED` / `EXECUTABLE_TIMEOUT` | P1 |
+
+**主动升级约束**：仅在用户点击“检查更新”时访问 npm registry；候选必须位于桌面端兼容范围，升级命令只接受 registry 已发布的精确版本，不使用 `latest`。安装完成后必须重新解析工具链并执行 `doctor --json`，成功结果同时返回新的 ToolchainStatus 与诊断结果。客户端不提供后台自动检查或自动升级开关。
 
 **ToolchainStatus schema**（`state` 全集：`checking / ready / node_missing / node_incompatible / npm_missing / adapter_missing / adapter_incompatible / invalid_override / ambiguous / permission_denied / store_invalid`）：
 
@@ -173,6 +177,7 @@
 | `ADAPTER_NOT_FOUND` | Adapter CLI 不可执行 | 查询或管理 Claude Code/Codex 接入 |
 | `ADAPTER_COMMAND_FAILED` | Adapter 管理命令失败 | 检测、安装或卸载 Hook |
 | `ADAPTER_INSTALL_FAILED` | npm 全局安装失败 | 首次连接工具 |
+| `ADAPTER_UPDATE_FAILED` | Adapter 主动检查或精确版本升级失败 | Settings 高级运行环境中的检查/升级（恢复：保留现状并重试） |
 | `ADAPTER_INVALID_OUTPUT` | Adapter 返回无法解析的数据 | Adapter 管理命令执行后解析失败 |
 | `NPM_NOT_FOUND` | 已发现 Node，但无关联 npm | 首次连接且 Adapter 尚未安装 |
 | `NODE_NOT_FOUND` | 未发现 Node.js | 工具链解析失败（恢复：安装 Node 20+ 或手动选择） |
@@ -223,7 +228,7 @@
 
 - **P1 commands（16 个）**：✅ 全部已注册（`src-tauri/src/commands.rs`）并由前端 `api` 层对接。
 - **P1 events（5 个）**：✅ 全部已 emit。`device-connection-changed` 覆盖连接与断连双向；`device-power-changed` 由握手 GET_POWER_STATUS 与 POWER_CHANGED 主动事件触发；`device-fault` 由 FAULT_EVENT 触发。
-- **工具链域 commands（4 个，ADR-0006，2026-08-30 增补）**：✅ 已注册并对接（`src-tauri/src/toolchain/` + 前端 `src/features/toolchain/`）；接入域三命令统一经 ToolchainService/ProcessRunner 执行。
+- **工具链域 commands（6 个，ADR-0006，2026-08-30 增补）**：✅ 已注册并对接（`src-tauri/src/toolchain/` + 前端运行环境界面）；接入域三命令统一经 ToolchainService/ProcessRunner 执行；主动检查/升级仅由 Settings 用户操作触发。
 - **UI 导航事件**：`open-config`（托盘「打开配置」）✅ 已 emit，前端订阅跳转 /devices。
 - **P2 event（1 个）**：❌ `hook-log` 未实现。
 - **主题导出**：✅ `export_theme` 已注册并由前端对接；仅用户主题显示入口，Rust 重新校验内容并以系统保存窗口写出，内置主题返回 `THEME_BUILTIN`，取消保存静默结束。

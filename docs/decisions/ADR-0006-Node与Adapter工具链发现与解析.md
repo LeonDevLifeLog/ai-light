@@ -44,3 +44,10 @@
 2. 损坏、非法或高于当前 schema 的 `toolchain.json` 进入 `store_invalid` 只读保护态。自动探测可以提供诊断，但不得覆盖原文件或执行接入写操作；只有用户明确“恢复自动检测”才允许重建。
 3. 所有 Node/npm/Adapter 子进程统一使用清理后的 ProcessRunner 环境；移除 `NODE_OPTIONS` 与 `NPM_CONFIG_*`，使用参数数组、超时与输出上限。达到输出上限后继续排空管道，只停止累积，避免 EPIPE 或子进程异常退出。
 4. ToolchainStatus 每个状态都必须存在 UI 恢复动作；`adapter_incompatible` 进入“确认并升级”链，`store_invalid` 进入“恢复自动检测”链，不允许仅显示不可操作错误。
+
+## 追加决策：高级用户主动升级（2026-08-30）
+
+1. Settings「外部运行环境」为已就绪 Adapter 提供用户主动触发的版本检查；页面加载、后台任务与定时器不得访问 npm registry。
+2. 查询结果只暴露当前版本与兼容范围内的最高已发布版本。升级必须由用户点击带精确目标版本的按钮触发，后端再次确认该版本已发布且兼容，禁止使用 `latest`。
+3. npm 安装完成不等于流程成功：ToolchainService 必须重新解析 Node/npm/Adapter，并通过同一 ResolvedToolchain 执行 `doctor --json`，再向 UI 返回新状态。
+4. V1 不提供自动检查或自动升级开关。Adapter 缺失/不兼容仍由 Integrations 的必需安装恢复链处理，避免把高阶维护入口混入普通连接流程。

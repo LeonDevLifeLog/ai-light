@@ -25,7 +25,12 @@ import {
   ToolchainDetailsList,
   toolchainStateCopy,
 } from "@/features/toolchain/runtime-environment";
-import type { AppConfig, ThemeFile, ToolchainStatus } from "@/lib/ailight";
+import type {
+  AdapterUpdateInfo,
+  AppConfig,
+  ThemeFile,
+  ToolchainStatus,
+} from "@/lib/ailight";
 import { api, asAppError } from "@/lib/ailight";
 import { cn, runAsync } from "@/lib/utils";
 
@@ -105,6 +110,105 @@ const themeModeOptions: Array<{
     description: "自动匹配操作系统外观",
   },
 ];
+
+function adapterUpdateCopy(update: AdapterUpdateInfo | null): string {
+  if (!update) {
+    return "仅在你主动检查时访问 npm registry，不会自动升级。";
+  }
+  if (update.updateAvailable) {
+    return `当前 ${update.currentVersion}，可升级至兼容版本 ${update.targetVersion}`;
+  }
+  return `当前 ${update.currentVersion}，已是最新兼容版本`;
+}
+
+function AdapterUpdateControl({
+  disabled,
+  onToolchainChange,
+}: {
+  disabled: boolean;
+  onToolchainChange: (status: ToolchainStatus) => void;
+}) {
+  const { notify } = useAppState();
+  const [update, setUpdate] = useState<AdapterUpdateInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const check = async () => {
+    setBusy(true);
+    try {
+      const updateInfo = await api.checkAdapterUpdate();
+      setUpdate(updateInfo);
+      if (!updateInfo.updateAvailable) {
+        notify({ tone: "success", title: "Adapter 已是最新兼容版本" });
+      }
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "检查 Adapter 更新失败",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const upgrade = async () => {
+    if (!update?.updateAvailable) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api.upgradeAdapter(update.targetVersion);
+      onToolchainChange(result.toolchain);
+      setUpdate({
+        compatible: true,
+        currentVersion: update.targetVersion,
+        targetVersion: update.targetVersion,
+        updateAvailable: false,
+      });
+      notify({
+        tone: "success",
+        title: `Adapter 已升级至 ${update.targetVersion}`,
+        message: "运行环境与 Adapter 诊断已通过",
+      });
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "Adapter 升级失败",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="adapter-update-panel">
+      <div>
+        <strong>Adapter 更新</strong>
+        <p aria-live="polite">{adapterUpdateCopy(update)}</p>
+      </div>
+      <div className="toolchain-recovery">
+        <ActionButton
+          busy={busy}
+          disabled={disabled}
+          onClick={() => runAsync(check())}
+        >
+          检查更新
+        </ActionButton>
+        {update?.updateAvailable ? (
+          <ActionButton
+            busy={busy}
+            disabled={disabled}
+            onClick={() => runAsync(upgrade())}
+            tone="primary"
+          >
+            升级至 {update.targetVersion}
+          </ActionButton>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 export function SettingsPage() {
   const { snapshot, config, patchConfig, notify } = useAppState();
@@ -431,6 +535,13 @@ export function SettingsPage() {
                     </ActionButton>
                   ) : null}
                 </div>
+                {toolchain.adapter?.state === "ready" ? (
+                  <AdapterUpdateControl
+                    disabled={toolchainBusy}
+                    key={toolchain.adapter.version}
+                    onToolchainChange={setToolchain}
+                  />
+                ) : null}
               </div>
             ) : (
               <p className="toolchain-summary">

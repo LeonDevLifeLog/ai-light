@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.27 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.27，2026-08-30） |
+| 文档版本 | V1.28 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.28，2026-08-30） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -273,6 +273,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `TOOLCHAIN_OVERRIDE_INVALID` | 手动路径不存在或验证失败 | 字段级错误 Toast + 恢复卡保持 `invalid_override` 态 | 重新选择 / [恢复自动检测] |
 | `TOOLCHAIN_AMBIGUOUS` / `TOOLCHAIN_PERMISSION_DENIED` | 多组候选无法决策 / 权限不足 | 运行环境恢复卡内联展示 | 用户选择一组工具 / 调整权限 |
 | `TOOLCHAIN_STORE_INVALID` | `toolchain.json` 损坏、非法或 schema 不兼容 | danger tag「配置需要恢复」+ 原文件只读保护 | [恢复自动检测] 后明确重建 |
+| `ADAPTER_UPDATE_FAILED` | 主动检查 registry 或精确版本升级失败 | Settings 外部运行环境内保留原版本信息 + error Toast | 检查网络/registry 后重试 |
 | `EXECUTABLE_TIMEOUT` | 候选验证或 Adapter 命令超时 | Toast "执行超时" + 恢复卡 [查看详情] | 选择其他路径 / 重试 |
 | `INTERNAL` | Rust 侧异常（含 BLE 下发失败） | Toast "服务异常，请查看日志" | 打开日志目录 |
 
@@ -777,6 +778,15 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 - 卡片状态变化通过 `aria-live="polite"` 区域宣告（页面级隐藏文本）
 - [查看详情] 为 `aria-expanded` 按钮；复制按钮带 `aria-label="复制 <工具> 路径"`
 - 状态同时使用图标、文字和颜色表达
+
+**6.7.7 Settings 主动升级扩展**
+
+- 仅 `adapter.state === "ready"` 时渲染 `AdapterUpdateControl`；Integrations 页的缺失/不兼容必需安装链保持独立。
+- [检查更新] 调用 `check_adapter_update`，不得在页面加载、定时器或后台生命周期中自动调用。
+- 查询成功展示当前版本与目标兼容版本；仅 `updateAvailable === true` 时展示 [升级至 `<targetVersion>`]。
+- 升级只把该精确 `targetVersion` 传给 `upgrade_adapter`。按钮执行中禁用检查与升级，避免重复 npm 写操作。
+- 成功以响应中的新 ToolchainStatus 刷新详情并提示版本；后端 doctor 失败视为整体失败，不显示“升级完成”。
+- 辅助文案明确“仅手动访问 npm registry、不会自动升级”，不得提供自动更新 Switch。
 
 ---
 
@@ -1865,6 +1875,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.28 | 2026-08-30 | §4.1 新增 `ADAPTER_UPDATE_FAILED`；§6.7 增加 Settings `AdapterUpdateControl` 契约：用户触发 registry 查询、兼容精确版本升级、完成后重解析与 doctor，无后台自动更新。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（无新增事件）；§4.1 错误码均存在于 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001~0006、KAD 引用有效。 |
 | V1.27 | 2026-08-30 | 工具链核心不变量收敛：§4.1 增加 `TOOLCHAIN_STORE_INVALID` 显式恢复；§6.5 将 `adapter_incompatible` 纳入确认升级；§6.7 增加 `store_invalid` 只读保护态。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（无新增事件）；§4.1 错误码均存在于 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001~0006、KAD 引用有效。 |
 | V1.26 | 2026-08-30 | 工具链发现落地（ADR-0006）：新增 §6.7 `RuntimeEnvironmentCard` 组件契约（摘要/恢复卡/手动选择路径/详情列表）；§6.5 IntegrationCard 增加安装确认态（confirmPending）与工具链 Invokes；§4.1 失败路径矩阵新增 `NODE_NOT_FOUND` / `NODE_INCOMPATIBLE` / `NPM_NOT_FOUND`（工具链语义）/ `TOOLCHAIN_OVERRIDE_INVALID` / `TOOLCHAIN_AMBIGUOUS` / `TOOLCHAIN_PERMISSION_DENIED` / `EXECUTABLE_TIMEOUT` 行。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（无新增事件）；§4.1 全部错误码均存在于 ipc-contract §4（与 ADR-0006 新码同步）；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（未触碰蓝牙章节）；§6~§8 主题字段与 theme-format 字段表一致（未触碰）；ADR-0001~0006、KAD-03/04/06/08/09/10/11/13 引用有效。 |
 | V1.25 | 2026-08-30 | ThemeCard 为所有用户主题新增导出操作与 exporting 态；系统保存窗口取消静默，成功/失败 Toast 反馈，Rust 强制保护内置主题。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 均存在于 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效。 |

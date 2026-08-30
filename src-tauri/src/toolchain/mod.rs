@@ -26,10 +26,10 @@ use std::sync::Arc;
 use model::sources;
 use model::states;
 use model::{
-    build_summary, sanitize_home, AdapterStatusEntry, ResolvedToolchain, SelectedAdapter,
-    SelectedTool, SelectedToolchain, ToolKind, ToolStatusEntry, ToolchainDocument, ToolchainIssue,
-    ToolchainMode, ToolchainOverrides, ToolchainStatus, ValidatedAdapter, ValidatedNode,
-    ValidatedNpm, ADAPTER_COMPAT_RANGE, ADAPTER_PACKAGE,
+    build_summary, sanitize_home, AdapterStatusEntry, AdapterUpdateInfo, ResolvedToolchain,
+    SelectedAdapter, SelectedTool, SelectedToolchain, ToolKind, ToolStatusEntry, ToolchainDocument,
+    ToolchainIssue, ToolchainMode, ToolchainOverrides, ToolchainStatus, ValidatedAdapter,
+    ValidatedNode, ValidatedNpm, ADAPTER_COMPAT_RANGE, ADAPTER_PACKAGE,
 };
 
 /// Node 最低主版本（设计方案 §2.2：不支持 Node 20 以下）
@@ -317,7 +317,70 @@ impl ToolchainService {
     /// 安装 Adapter（设计方案 §9.1：node + npm-cli + 明确版本；§17.3 不装 latest）
     pub async fn install_adapter(&self) -> Result<Arc<ResolvedToolchain>, ToolchainError> {
         let chain = self.resolved_for_write(false).await?;
-        let target = npm_install_target(&chain).map_err(ToolchainError::Io)?;
+        let chain_for_query = chain.clone();
+        let target =
+            tauri::async_runtime::spawn_blocking(move || npm_install_target(&chain_for_query))
+                .await
+                .map_err(|error| ToolchainError::Io(error.to_string()))?
+                .map_err(ToolchainError::Io)?;
+        self.install_adapter_target(chain, &target).await
+    }
+
+    /// 用户主动查询 registry，不在启动或页面加载时自动调用。
+    pub async fn check_adapter_update(&self) -> Result<AdapterUpdateInfo, ToolchainError> {
+        let chain = self.resolved_for_write(true).await?;
+        let adapter = chain.adapter.as_ref().expect("require_adapter 已验证");
+        let current = adapter.version.clone();
+        let chain_for_query = chain.clone();
+        let target = tauri::async_runtime::spawn_blocking(move || {
+            best_registry_compatible_version(&chain_for_query)
+        })
+        .await
+        .map_err(|error| ToolchainError::Io(error.to_string()))?
+        .map_err(ToolchainError::Io)?;
+        Ok(AdapterUpdateInfo {
+            current_version: current.to_string(),
+            target_version: target.to_string(),
+            update_available: target > current,
+            compatible: model::adapter_compat_req().matches(&current),
+        })
+    }
+
+    /// 安装用户确认的明确版本。目标必须兼容且真实存在于 registry。
+    pub async fn upgrade_adapter(
+        &self,
+        target: &str,
+    ) -> Result<Arc<ResolvedToolchain>, ToolchainError> {
+        let target_version = semver::Version::parse(target)
+            .map_err(|error| ToolchainError::Io(format!("目标版本无效: {error}")))?;
+        if !model::adapter_compat_req().matches(&target_version) {
+            return Err(ToolchainError::Io(format!(
+                "目标版本 {target_version} 不在兼容范围 {ADAPTER_COMPAT_RANGE} 内"
+            )));
+        }
+        let chain = self.resolved_for_write(true).await?;
+        let chain_for_query = chain.clone();
+        let expected = target_version.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let versions = registry_compatible_versions(&chain_for_query)?;
+            if versions.contains(&expected) {
+                Ok(())
+            } else {
+                Err(format!("registry 中不存在目标兼容版本 {expected}"))
+            }
+        })
+        .await
+        .map_err(|error| ToolchainError::Io(error.to_string()))?
+        .map_err(ToolchainError::Io)?;
+        self.install_adapter_target(chain, &target_version.to_string())
+            .await
+    }
+
+    async fn install_adapter_target(
+        &self,
+        chain: Arc<ResolvedToolchain>,
+        target: &str,
+    ) -> Result<Arc<ResolvedToolchain>, ToolchainError> {
         tracing::info!(%target, "install.adapter");
         let package = format!("{ADAPTER_PACKAGE}@{target}");
         let package_in_task = package.clone();
@@ -1376,6 +1439,46 @@ fn npm_install_target(chain: &ResolvedToolchain) -> Result<String, String> {
     Ok(ADAPTER_COMPAT_RANGE.to_string())
 }
 
+fn registry_compatible_versions(chain: &ResolvedToolchain) -> Result<Vec<semver::Version>, String> {
+    let captured = runner::npm_view_versions(&chain.node, &chain.npm, ADAPTER_PACKAGE)
+        .map_err(|error| format!("npm 无法启动: {error}"))?;
+    if !captured.success() {
+        return Err(format!(
+            "registry 版本查询失败: {}",
+            validate::stderr_summary(&captured, dirs::home_dir().as_deref())
+        ));
+    }
+    parse_registry_compatible_versions(captured.stdout_text().trim())
+}
+
+fn parse_registry_compatible_versions(text: &str) -> Result<Vec<semver::Version>, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(text).map_err(|error| format!("registry 返回无效 JSON: {error}"))?;
+    let serde_json::Value::Array(items) = value else {
+        return Err("registry 版本响应不是数组".to_string());
+    };
+    let compat = model::adapter_compat_req();
+    let versions = items
+        .iter()
+        .filter_map(|item| item.as_str())
+        .filter_map(|text| semver::Version::parse(text).ok())
+        .filter(|version| compat.matches(version))
+        .collect::<Vec<_>>();
+    if versions.is_empty() {
+        return Err(format!(
+            "registry 中没有满足兼容范围 {ADAPTER_COMPAT_RANGE} 的版本"
+        ));
+    }
+    Ok(versions)
+}
+
+fn best_registry_compatible_version(chain: &ResolvedToolchain) -> Result<semver::Version, String> {
+    registry_compatible_versions(chain)?
+        .into_iter()
+        .max()
+        .ok_or_else(|| "registry 中没有兼容版本".to_string())
+}
+
 // ---------- 缓存指纹（设计方案 §11 内容信号失效） ----------
 
 fn fingerprints_of(resolved: Option<&ResolvedToolchain>) -> Vec<(PathBuf, u64, u64)> {
@@ -1498,14 +1601,21 @@ mod tests {
     /// 兼容范围解析：registry 数组 → 兼容范围内最大版本
     #[test]
     fn compat_range_selects_max_matching_version() {
-        let compat = model::adapter_compat_req();
-        let versions = ["0.1.2", "0.2.0", "0.1.10", "1.0.0"];
-        let best = versions
-            .iter()
-            .filter_map(|text| semver::Version::parse(text).ok())
-            .filter(|version| compat.matches(version))
-            .max()
-            .expect("0.1.x 系列必须存在");
+        let versions = parse_registry_compatible_versions(
+            r#"["0.1.2", "invalid", "0.2.0", "0.1.10", "1.0.0"]"#,
+        )
+        .expect("registry 响应应可解析");
+        let best = versions.into_iter().max().expect("0.1.x 系列必须存在");
         assert_eq!(best.to_string(), "0.1.10");
+    }
+
+    #[test]
+    fn registry_versions_reject_invalid_or_incompatible_payloads() {
+        assert!(parse_registry_compatible_versions(r#"{"latest":"0.1.0"}"#)
+            .unwrap_err()
+            .contains("不是数组"));
+        assert!(parse_registry_compatible_versions(r#"["0.2.0", "1.0.0"]"#)
+            .unwrap_err()
+            .contains(ADAPTER_COMPAT_RANGE));
     }
 }

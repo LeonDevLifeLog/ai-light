@@ -1076,6 +1076,27 @@ pre {
   padding: 14px 0;
   font-size: 12px;
 }
+.adapter-update-panel {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+.adapter-update-panel strong {
+  font-size: 12px;
+}
+.adapter-update-panel p {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+.adapter-update-panel .toolchain-recovery {
+  flex: none;
+  margin-top: 0;
+}
 
 .state-button-grid {
   display: grid;

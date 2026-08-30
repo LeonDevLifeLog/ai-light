@@ -231,6 +231,16 @@ pub struct ToolchainStatus {
     pub checked_at: String,
 }
 
+/// 用户主动检查 Adapter 更新的结果。目标始终限制在 Desktop 兼容范围内。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdapterUpdateInfo {
+    pub current_version: String,
+    pub target_version: String,
+    pub update_available: bool,
+    pub compatible: bool,
+}
+
 /// 验证后的 Node 安装（同族推导的锚点）
 #[derive(Debug, Clone)]
 pub struct ValidatedNode {
