@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.25 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.25，2026-08-30） |
+| 文档版本 | V1.26 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.26，2026-08-30） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -268,6 +268,11 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `DEVICE_NOT_CONNECTED` | preview_scene 时未连接 | Toast "请先连接设备" | 跳转 `/devices` |
 | `DEVICE_DISCONNECT_FAILED` | 主动断开失败 | Toast "无法断开设备：`<reason>`" | 检查设备后重试 |
 | `AUTOSTART_FAILED` | OS 登录项切换失败 | Toast "开机自启设置失败：`<reason>`"；Switch 回滚 | 检查系统权限后重试 |
+| `NODE_NOT_FOUND` / `NODE_INCOMPATIBLE` | 工具链解析未发现 Node 或版本低于 20 | Integrations 运行环境恢复卡内联展示（非仅 Toast） | 安装 Node 20+ / [选择 Node] / [重新检测] |
+| `NPM_NOT_FOUND` | 已发现 Node 但无关联 npm | 运行环境恢复卡内联展示 mixedInstallation 说明 | [选择 npm] / 修复 Node 安装 |
+| `TOOLCHAIN_OVERRIDE_INVALID` | 手动路径不存在或验证失败 | 字段级错误 Toast + 恢复卡保持 `invalid_override` 态 | 重新选择 / [恢复自动检测] |
+| `TOOLCHAIN_AMBIGUOUS` / `TOOLCHAIN_PERMISSION_DENIED` | 多组候选无法决策 / 权限不足 | 运行环境恢复卡内联展示 | 用户选择一组工具 / 调整权限 |
+| `EXECUTABLE_TIMEOUT` | 候选验证或 Adapter 命令超时 | Toast "执行超时" + 恢复卡 [查看详情] | 选择其他路径 / 重试 |
 | `INTERNAL` | Rust 侧异常（含 BLE 下发失败） | Toast "服务异常，请查看日志" | 打开日志目录 |
 
 ### 4.2 蓝牙协议 result code → UI 反馈（V0.4 §3.6）
@@ -646,9 +651,11 @@ Integrations 页的官方 Adapter 卡（Claude Code / Codex）。
 |---|---|---|
 | Props | `client` | `{ id, name, description }` |
 | Props | `status` | `'connected' \| 'unconnected'` |
-| Emit | `onClickConnect(clientId)` | 安装 Adapter 并写入托管 Hook |
+| Props | `confirmPending` | Adapter 缺失时的内联安装确认态（连接按钮文案变为「确认并安装」，卡片展示安装说明 InlineAlert） |
+| Emit | `onClickConnect(clientId)` | 先检查运行环境；就绪→安装 Adapter 并写入托管 Hook；Adapter 缺失→进入确认态 |
 | Emit | `onClickDisconnect(clientId)` | 仅移除托管 Hook |
-| Invoke | `get_integration_status/install_integration/uninstall_integration` | — |
+| Invoke | `get_integration_status/install_integration/uninstall_integration` | 统一经 ToolchainService 解析的工具链执行（ADR-0006） |
+| Invoke | `get_toolchain_status` | 连接前强制复验（`force: true`） |
 
 **6.5.3 视觉态全集**
 
@@ -667,9 +674,10 @@ Integrations 页的官方 Adapter 卡（Claude Code / Codex）。
 | `update_config` | (none) | — |
 
 **6.5.5 边界条件**
-- Adapter 未安装时，[连接] 由后端尝试 npm 全局安装；失败 Toast 说明 Node/npm 或权限原因。
+- Adapter 未安装时，[连接] 先进入内联确认态，用户确认后由后端经已解析工具链（Node + npm-cli.js）安装明确兼容版本；失败 Toast 展示脱敏 stderr 摘要。
+- Node/npm 未就绪时连接直接停止，由 RuntimeEnvironmentCard 恢复卡承接（不再把错误吞成「未连接」）。
 - 配置解析失败时不写文件，Toast 明确要求先修复原配置。
-- [断开] 只移除 AI-Light 标记的托管条目，其他 Hook 保持不变。
+- [断开] 只移除 AI-Light 标记的托管条目，其他 Hook 保持不变；Adapter 不可用时返回 `ADAPTER_NOT_FOUND`（needs_repair 语义）。
 
 **6.5.6 无障碍**
 - 连接和断开均为带文字按钮，不依赖图标表达状态。
@@ -720,6 +728,51 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 **6.6.6 无障碍**
 - 行名 = 可见 `<strong>`；控件自带 `aria-label`（如"开机自启"）
 - 说明为纯展示文本，不承担控件命名职责
+
+---
+
+### 6.7 `RuntimeEnvironmentCard`
+
+**6.7.1 用途**
+Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状态摘要与恢复入口）；详情列表 `ToolchainDetailsList` 同时被 Settings「外部运行环境」折叠区复用（ADR-0006）。
+
+**6.7.2 对外契约**
+
+| 类别 | 项 | 说明 |
+|---|---|---|
+| Props | `status` | `ToolchainStatus \| null`（null = 检查中占位） |
+| Props | `checking` | 重新检测 / 手动选择执行中 |
+| Emit | `onRefresh()` | [重新检测] → `get_toolchain_status(force=true)` |
+| Emit | `onReset()` | [恢复自动检测] → `reset_toolchain_overrides()`（仅 `mode === "manual"` 时出现） |
+| Emit | `onSelect({ kind })` | [选择 Node/npm 路径] → `select_executable(kind)`（后端原生文件选择器 + 立即验证） |
+| Invoke | `get_toolchain_status / set_toolchain_overrides / reset_toolchain_overrides / select_executable` | — |
+
+**6.7.3 视觉态全集**
+
+| 态 | 触发条件 | 视觉 | 可交互 |
+|---|---|---|---|
+| `checking` | `status == null` 或 `checking` | neutral tag「检查中」/ 按钮 loading | 重新检测禁用 |
+| `ready` | `state === "ready"` | success tag「可用」+ 一行摘要 + [查看详情] [重新检测] | 全部可用 |
+| `adapter_missing` | `state === "adapter_missing"` | warning tag「Adapter 待安装」+ 摘要 | 连接卡承接安装确认 |
+| `recovery` | 其余非 ready 态 | danger tag + 恢复卡（问题说明 + 搜索范围 + 恢复动作）内联展示 | [选择路径] / [恢复自动检测] |
+
+**6.7.4 联动矩阵**
+
+| Source Event | 字段 | 同步方式 |
+|---|---|---|
+| `get_toolchain_status` | `ToolchainStatus` | 摘要 / 状态 tag / 详情列表重渲染 |
+| `select_executable` | 新 ToolchainStatus | 手动选择成功即时刷新；失败 Toast 字段级错误并强制复验 |
+
+**6.7.5 边界条件**
+- 摘要成功时只占一行，问题存在才展开恢复卡；不使用仅 Tooltip 的路径展示
+- 详情列表路径等宽字体、允许换行并带复制按钮；来源显示为用户语言（环境 PATH / Node 同安装族 / npm 全局目录 / 版本管理器等）
+- 文件选择取消不改变现有配置（返回当前状态）
+- `mode === "manual"`（存在 override）时提供 [恢复自动检测]
+
+**6.7.6 无障碍**
+- 卡片状态变化通过 `aria-live="polite"` 区域宣告（页面级隐藏文本）
+- [查看详情] 为 `aria-expanded` 按钮；复制按钮带 `aria-label="复制 <工具> 路径"`
+- 状态同时使用图标、文字和颜色表达
 
 ---
 
@@ -1808,6 +1861,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.26 | 2026-08-30 | 工具链发现落地（ADR-0006）：新增 §6.7 `RuntimeEnvironmentCard` 组件契约（摘要/恢复卡/手动选择路径/详情列表）；§6.5 IntegrationCard 增加安装确认态（confirmPending）与工具链 Invokes；§4.1 失败路径矩阵新增 `NODE_NOT_FOUND` / `NODE_INCOMPATIBLE` / `NPM_NOT_FOUND`（工具链语义）/ `TOOLCHAIN_OVERRIDE_INVALID` / `TOOLCHAIN_AMBIGUOUS` / `TOOLCHAIN_PERMISSION_DENIED` / `EXECUTABLE_TIMEOUT` 行。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（无新增事件）；§4.1 全部错误码均存在于 ipc-contract §4（与 ADR-0006 新码同步）；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（未触碰蓝牙章节）；§6~§8 主题字段与 theme-format 字段表一致（未触碰）；ADR-0001~0006、KAD-03/04/06/08/09/10/11/13 引用有效。 |
 | V1.25 | 2026-08-30 | ThemeCard 为所有用户主题新增导出操作与 exporting 态；系统保存窗口取消静默，成功/失败 Toast 反馈，Rust 强制保护内置主题。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 均存在于 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效。 |
 | V1.24 | 2026-08-30 | ThemeCard 为用户主题新增删除操作与 deleting 态；新增 DeleteThemeDialog，当前主题删除会自动回退 default；Rust 端强制保护内置主题。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未新增；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效。 |
 | V1.23 | 2026-08-30 | 设置页移除仲裁 ModeOption；最近活动成为唯一策略（ADR-0005 / KAD-13）。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效。 |
