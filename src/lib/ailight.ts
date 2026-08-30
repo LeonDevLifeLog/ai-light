@@ -81,6 +81,8 @@ export interface AppConfig {
 
 export interface AppError {
   code: string;
+  /** 结构化诊断字段（kind/path/reason 等，设计方案 §7） */
+  details?: Record<string, unknown>;
   message: string;
 }
 
@@ -88,6 +90,62 @@ export interface IntegrationStatus {
   connected: boolean;
   managedCount: number;
   path: string;
+  /** Adapter 缺失时的结构化未连接原因（设计方案 §7） */
+  reason?: "adapter_missing" | string;
+  toolchainState?: string;
+  toolchainSummary?: string;
+}
+
+// ---- 工具链（设计方案 §7 IPC 契约） ----
+
+export type ToolchainToolKind = "node" | "npm" | "adapter";
+
+export type ToolchainState =
+  | "checking"
+  | "ready"
+  | "node_missing"
+  | "node_incompatible"
+  | "npm_missing"
+  | "adapter_missing"
+  | "adapter_incompatible"
+  | "invalid_override"
+  | "ambiguous"
+  | "permission_denied";
+
+export interface ToolStatusEntry {
+  overridden: boolean;
+  path: string | null;
+  source: string | null;
+  state: string;
+  version: string | null;
+}
+
+export interface AdapterStatusEntry extends ToolStatusEntry {
+  launcherPath: string | null;
+}
+
+export interface ToolchainIssue {
+  code: string;
+  message: string;
+  recovery: string | null;
+  tool: ToolchainToolKind | null;
+}
+
+export interface ToolchainStatus {
+  adapter: AdapterStatusEntry | null;
+  checkedAt: string;
+  issues: ToolchainIssue[];
+  mode: "auto" | "manual";
+  node: ToolStatusEntry | null;
+  npm: ToolStatusEntry | null;
+  state: ToolchainState;
+  summary: string;
+}
+
+export interface ToolchainOverridesPatch {
+  adapter?: string | null;
+  node?: string | null;
+  npm?: string | null;
 }
 
 export interface LedTrack {
@@ -163,6 +221,36 @@ const mockConfig: AppConfig = {
   themeMode: "dark",
 };
 
+const mockToolchainStatus: ToolchainStatus = {
+  state: "ready",
+  mode: "auto",
+  summary: "Node.js 22.14.0 · npm 10.9.2 · Adapter 0.1.2",
+  node: {
+    state: "ready",
+    path: "/usr/local/bin/node",
+    version: "22.14.0",
+    source: "processPath",
+    overridden: false,
+  },
+  npm: {
+    state: "ready",
+    path: "/usr/local/lib/node_modules/npm/bin/npm-cli.js",
+    version: "10.9.2",
+    source: "siblingOfNode",
+    overridden: false,
+  },
+  adapter: {
+    state: "ready",
+    path: "/usr/local/lib/node_modules/@ai-light/adapter/dist/cli.js",
+    launcherPath: "/usr/local/bin/ailight-adapter",
+    version: "0.1.2",
+    source: "npmGlobalPrefix",
+    overridden: false,
+  },
+  issues: [],
+  checkedAt: new Date().toISOString(),
+};
+
 const mockTheme: ThemeFile = {
   theme: { name: "default", version: 1 },
   scenes: {
@@ -220,7 +308,11 @@ const normalize = <T>(value: unknown): T => {
 export const asAppError = (error: unknown): AppError => {
   const normalized = normalize<Partial<AppError>>(error);
   if (normalized && typeof normalized === "object" && normalized.message) {
-    return { code: normalized.code ?? "INTERNAL", message: normalized.message };
+    return {
+      code: normalized.code ?? "INTERNAL",
+      message: normalized.message,
+      details: normalized.details,
+    };
   }
   return {
     code: "INTERNAL",
@@ -300,6 +392,22 @@ export const api = {
     call<{ changed: boolean; path: string }>("install_integration", { tool }),
   uninstallIntegration: (tool: "claude-code" | "codex") =>
     call<{ changed: boolean; path: string }>("uninstall_integration", { tool }),
+  getToolchainStatus: async (force = false) =>
+    isTauri()
+      ? call<ToolchainStatus>("get_toolchain_status", { force })
+      : mockToolchainStatus,
+  setToolchainOverrides: async (patch: ToolchainOverridesPatch) =>
+    isTauri()
+      ? call<ToolchainStatus>("set_toolchain_overrides", { patch })
+      : mockToolchainStatus,
+  resetToolchainOverrides: async () =>
+    isTauri()
+      ? call<ToolchainStatus>("reset_toolchain_overrides")
+      : mockToolchainStatus,
+  selectExecutable: async (kind: ToolchainToolKind) =>
+    isTauri()
+      ? call<ToolchainStatus>("select_executable", { kind })
+      : mockToolchainStatus,
 };
 
 export function subscribe<T>(
