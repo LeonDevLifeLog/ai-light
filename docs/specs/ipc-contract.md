@@ -97,11 +97,47 @@
 |---|---|---|---|---|
 | `get_config()` | — | Config（§3） | — | P1 |
 | `update_config(patch)` | patch: Partial\<Config> | 更新后完整 Config | `BAD_REQUEST` / `AUTOSTART_FAILED` | P1 |
-| `get_integration_status(tool)` | `claude-code \| codex` | Adapter 托管状态 | `BAD_REQUEST` / `ADAPTER_*` | P1 |
-| `install_integration(tool)` | `claude-code \| codex` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` / `NPM_NOT_FOUND` | P1 |
-| `uninstall_integration(tool)` | `claude-code \| codex` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` | P1 |
+| `get_integration_status(tool)` | `claude-code \| codex` | Adapter 托管状态 | `BAD_REQUEST` / `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` | P1 |
+| `install_integration(tool)` | `claude-code \| codex` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` / `EXECUTABLE_TIMEOUT` | P1 |
+| `uninstall_integration(tool)` | `claude-code \| codex` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` / `TOOLCHAIN_*` | P1 |
 
 **`update_config` 允许字段**：`token` / `autostart` / `badgeOrientation` / `themeMode`。`portPreference` 为遗留兼容字段，不再接受用户 patch；Hook Server 固定优先 25679 并自动退避，实际地址通过 `~/.ailight/runtime.json` 提供给 Adapter（KAD-11）。`autostart` 采用"先 OS 后 config"：OS 登录项操作成功才写缓存，失败返回 `AUTOSTART_FAILED` 且 config 不变（KAD-09）。`rememberedDevice` 由连接流程管理，不接受用户 patch。仲裁固定为最近活动优先，不属于配置（ADR-0005 / KAD-13）。
+
+**接入域与工具链（ADR-0006）**：`get_integration_status` / `install_integration` / `uninstall_integration` 全部经由 ToolchainService 解析的同一份工具链执行（稳定入口 `node + adapter cli.js`，不依赖 PATH 与 `.cmd` shim）。`get_integration_status` 为只读查询可用缓存；Adapter 缺失时返回结构化未连接状态 `{ connected: false, reason: "adapter_missing", toolchainState, toolchainSummary }` 而非错误。`install_integration` 强制复验；Adapter 缺失时用已选 Node + npm CLI 安装明确兼容版本（不装 `latest`），安装后重新解析。`uninstall_integration` 在 Adapter 不可用时返回 `ADAPTER_NOT_FOUND`（needs_repair 语义），不得误删其他 Hook。
+
+### 2.6 工具链域（ADR-0006）
+
+| Command | 请求 | 响应 | 错误码 | 优先级 |
+|---|---|---|---|---|
+| `get_toolchain_status(force?)` | force?: boolean（默认 false，可用缓存） | ToolchainStatus（下方 schema） | — | P1 |
+| `set_toolchain_overrides(patch)` | patch: `{ node?, npm?, adapter? }`（绝对路径） | ToolchainStatus | `TOOLCHAIN_OVERRIDE_INVALID`（字段级验证错误，details 携带 kind/path/reason） | P1 |
+| `reset_toolchain_overrides()` | — | ToolchainStatus（mode 恢复 auto） | — | P1 |
+| `select_executable(kind)` | kind: `node \| npm \| adapter` | ToolchainStatus（取消选择返回当前状态，不改变配置） | `BAD_REQUEST`（kind 非法）/ `TOOLCHAIN_OVERRIDE_INVALID`（所选路径验证失败） | P1 |
+| `check_adapter_update()` | — | AdapterUpdateInfo `{ currentVersion, targetVersion, updateAvailable, compatible }` | `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` / `ADAPTER_UPDATE_FAILED` | P1 |
+| `upgrade_adapter(targetVersion)` | targetVersion: 精确 semver | `{ toolchain: ToolchainStatus, doctor: object }` | `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` / `ADAPTER_UPDATE_FAILED` / `EXECUTABLE_TIMEOUT` | P1 |
+
+**主动升级约束**：仅在用户点击“检查更新”时访问 npm registry；候选必须位于桌面端兼容范围，升级命令只接受 registry 已发布的精确版本，不使用 `latest`。安装完成后必须重新解析工具链并执行 `doctor --json`，成功结果同时返回新的 ToolchainStatus 与诊断结果。客户端不提供后台自动检查或自动升级开关。
+
+**ToolchainStatus schema**（`state` 全集：`checking / ready / node_missing / node_incompatible / npm_missing / adapter_missing / adapter_incompatible / invalid_override / ambiguous / permission_denied / store_invalid`）：
+
+```jsonc
+{
+  "state": "ready",
+  "mode": "auto",                    // "auto" | "manual"
+  "summary": "Node.js 22.14.0 · npm 10.9.2 · Adapter 0.4.2",
+  "node":   { "state": "ready", "path": "…node.exe", "version": "22.14.0", "source": "windowsRegistry", "overridden": false },
+  "npm":    { "state": "ready", "path": "…npm-cli.js", "version": "10.9.2", "source": "siblingOfNode", "overridden": false },
+  "adapter": { "state": "ready", "path": "…cli.js", "launcherPath": "…ailight-adapter.cmd", "version": "0.4.2", "source": "npmGlobalPrefix", "overridden": false },
+  "issues": [ { "code": "NODE_NOT_FOUND", "message": "…", "tool": "node", "recovery": "安装 Node.js 20+，或点击「选择 Node」手动指定" } ],
+  "checkedAt": "2026-08-30T10:00:00Z"
+}
+```
+
+- 持久化：`~/.ailight/toolchain.json`（schema v1，独立于 config.json；overrides 是用户意图，selected 是可再生的缓存）
+- 损坏、非法或高于当前 schema 的文件进入 `store_invalid` 只读保护态，自动探测不得覆盖原文件；仅用户明确调用 `reset_toolchain_overrides` 后重建
+- `select_executable` 由后端打开原生文件选择器并立即验证；前端不能传任意未确认路径冒充选择结果
+- 缓存失效采用内容信号（文件不存在 / mtime·size 变化 / override 变更 / 安装完成），写操作一律强制复验（ADR-0006）
+- `AILIGHT_ADAPTER_BIN` 环境变量保留为开发/测试 override，但必须作为候选进入 ToolchainService 验证与解析，不得绕过 ResolvedToolchain/ProcessRunner
 
 ## 3. config.json Schema
 
@@ -141,8 +177,19 @@
 | `ADAPTER_NOT_FOUND` | Adapter CLI 不可执行 | 查询或管理 Claude Code/Codex 接入 |
 | `ADAPTER_COMMAND_FAILED` | Adapter 管理命令失败 | 检测、安装或卸载 Hook |
 | `ADAPTER_INSTALL_FAILED` | npm 全局安装失败 | 首次连接工具 |
-| `NPM_NOT_FOUND` | npm 不可执行 | 首次连接且 Adapter 尚未安装 |
+| `ADAPTER_UPDATE_FAILED` | Adapter 主动检查或精确版本升级失败 | Settings 高级运行环境中的检查/升级（恢复：保留现状并重试） |
+| `ADAPTER_INVALID_OUTPUT` | Adapter 返回无法解析的数据 | Adapter 管理命令执行后解析失败 |
+| `NPM_NOT_FOUND` | 已发现 Node，但无关联 npm | 首次连接且 Adapter 尚未安装 |
+| `NODE_NOT_FOUND` | 未发现 Node.js | 工具链解析失败（恢复：安装 Node 20+ 或手动选择） |
+| `NODE_INCOMPATIBLE` | Node 版本低于 20 | 工具链解析发现仅存在低版本（恢复：切换/选择兼容版本） |
+| `TOOLCHAIN_OVERRIDE_INVALID` | 手动路径不存在或验证失败 | set_toolchain_overrides / select_executable / 工具链解析（恢复：重新选择或恢复自动检测） |
+| `TOOLCHAIN_AMBIGUOUS` | 多组候选无法安全决策 | 工具链解析（恢复：用户选择一组 Node） |
+| `TOOLCHAIN_PERMISSION_DENIED` | 文件或子进程权限不足 | 工具链解析/验证（恢复：调整权限/安装范围） |
+| `TOOLCHAIN_STORE_INVALID` | toolchain.json 损坏、非法或 schema 不兼容，处于只读保护态 | 恢复自动检测前禁止自动覆盖和接入写操作 |
+| `EXECUTABLE_TIMEOUT` | 候选验证/命令执行超时 | 工具链验证、Adapter 命令（恢复：选择其他路径/查看诊断） |
 | `INTERNAL` | 内部异常 | 兜底（含 BLE 下发失败） |
+
+**错误 details 字段（ADR-0006）**：工具链域错误的 `AppError` 附加可选 `details`（kind/path/source/reason 或完整 ToolchainStatus），面向诊断展示；不得把完整环境变量或 token 返回前端。
 
 ## 5. Events 清单（Rust → 前端）
 
@@ -171,7 +218,7 @@
 
 ## 7. 第一期实现范围（P1 汇总）
 
-**P1 commands**：get_app_state / get_themes / get_theme / set_active_theme / import_theme / export_theme / delete_theme / scan_devices / connect_device / disconnect_device / forget_device / trigger_state / preview_scene / reset_outputs / get_config / update_config
+**P1 commands**：get_app_state / get_themes / get_theme / set_active_theme / import_theme / export_theme / delete_theme / scan_devices / connect_device / disconnect_device / forget_device / trigger_state / preview_scene / reset_outputs / get_config / update_config / get_integration_status / install_integration / uninstall_integration / get_toolchain_status / set_toolchain_overrides / reset_toolchain_overrides / select_executable
 **P1 events**：business-state-changed / device-connection-changed / device-power-changed / device-fault / theme-changed
 **P2（后续）**：hook-log
 
@@ -181,6 +228,7 @@
 
 - **P1 commands（16 个）**：✅ 全部已注册（`src-tauri/src/commands.rs`）并由前端 `api` 层对接。
 - **P1 events（5 个）**：✅ 全部已 emit。`device-connection-changed` 覆盖连接与断连双向；`device-power-changed` 由握手 GET_POWER_STATUS 与 POWER_CHANGED 主动事件触发；`device-fault` 由 FAULT_EVENT 触发。
+- **工具链域 commands（6 个，ADR-0006，2026-08-30 增补）**：✅ 已注册并对接（`src-tauri/src/toolchain/` + 前端运行环境界面）；接入域三命令统一经 ToolchainService/ProcessRunner 执行；主动检查/升级仅由 Settings 用户操作触发。
 - **UI 导航事件**：`open-config`（托盘「打开配置」）✅ 已 emit，前端订阅跳转 /devices。
 - **P2 event（1 个）**：❌ `hook-log` 未实现。
 - **主题导出**：✅ `export_theme` 已注册并由前端对接；仅用户主题显示入口，Rust 重新校验内容并以系统保存窗口写出，内置主题返回 `THEME_BUILTIN`，取消保存静默结束。

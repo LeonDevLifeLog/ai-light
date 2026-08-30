@@ -5,7 +5,7 @@ AI-Light：智能体状态灯跨平台客户端（macOS / Windows / Linux，Taur
 ## 项目结构
 
 - `crates/ailight-core/` — Rust 核心逻辑（协议编解码 / 主题引擎 / 状态仲裁 / HTTP 接入 / 单 writer 队列 / BLE），**无 Tauri 依赖**，独立可测
-- `src-tauri/` — Tauri 应用壳（12 个 commands、events 桥接、托盘、单实例）
+- `src-tauri/` — Tauri 应用壳（20 个 commands、toolchain 工具链解析、events 桥接、托盘、单实例）
 - 仓库根 — 前端（React 19 + TypeScript + Tailwind v4 + shadcn/ui + Vite）
 - `docs/` — 设计文档体系：`specs/`（hook-api / theme-format / ipc-contract / architecture）、`decisions/`（ADR）、`research/`、`requirements/`、`specs/themes/`（6 套内置主题）
 

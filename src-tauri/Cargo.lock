@@ -19,11 +19,12 @@ dependencies = [
 
 [[package]]
 name = "ai-light"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "ailight-core",
  "dirs 6.0.0",
  "rand",
+ "semver",
  "serde",
  "serde_json",
  "tauri",
@@ -35,6 +36,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tokio",
  "tracing",
+ "winreg 0.55.0",
 ]
 
 [[package]]

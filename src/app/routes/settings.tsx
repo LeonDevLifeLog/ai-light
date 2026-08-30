@@ -5,6 +5,7 @@ import {
   Monitor,
   Moon,
   Palette,
+  RefreshCw,
   ShieldCheck,
   Sun,
   SunMoon,
@@ -20,7 +21,16 @@ import {
   StatusTag,
   themeDisplayName,
 } from "@/components/app-ui";
-import type { AppConfig, ThemeFile } from "@/lib/ailight";
+import {
+  ToolchainDetailsList,
+  toolchainStateCopy,
+} from "@/features/toolchain/runtime-environment";
+import type {
+  AdapterUpdateInfo,
+  AppConfig,
+  ThemeFile,
+  ToolchainStatus,
+} from "@/lib/ailight";
 import { api, asAppError } from "@/lib/ailight";
 import { cn, runAsync } from "@/lib/utils";
 
@@ -101,6 +111,105 @@ const themeModeOptions: Array<{
   },
 ];
 
+function adapterUpdateCopy(update: AdapterUpdateInfo | null): string {
+  if (!update) {
+    return "仅在你主动检查时访问 npm registry，不会自动升级。";
+  }
+  if (update.updateAvailable) {
+    return `当前 ${update.currentVersion}，可升级至兼容版本 ${update.targetVersion}`;
+  }
+  return `当前 ${update.currentVersion}，已是最新兼容版本`;
+}
+
+function AdapterUpdateControl({
+  disabled,
+  onToolchainChange,
+}: {
+  disabled: boolean;
+  onToolchainChange: (status: ToolchainStatus) => void;
+}) {
+  const { notify } = useAppState();
+  const [update, setUpdate] = useState<AdapterUpdateInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const check = async () => {
+    setBusy(true);
+    try {
+      const updateInfo = await api.checkAdapterUpdate();
+      setUpdate(updateInfo);
+      if (!updateInfo.updateAvailable) {
+        notify({ tone: "success", title: "Adapter 已是最新兼容版本" });
+      }
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "检查 Adapter 更新失败",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const upgrade = async () => {
+    if (!update?.updateAvailable) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api.upgradeAdapter(update.targetVersion);
+      onToolchainChange(result.toolchain);
+      setUpdate({
+        compatible: true,
+        currentVersion: update.targetVersion,
+        targetVersion: update.targetVersion,
+        updateAvailable: false,
+      });
+      notify({
+        tone: "success",
+        title: `Adapter 已升级至 ${update.targetVersion}`,
+        message: "运行环境与 Adapter 诊断已通过",
+      });
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "Adapter 升级失败",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="adapter-update-panel">
+      <div>
+        <strong>Adapter 更新</strong>
+        <p aria-live="polite">{adapterUpdateCopy(update)}</p>
+      </div>
+      <div className="toolchain-recovery">
+        <ActionButton
+          busy={busy}
+          disabled={disabled}
+          onClick={() => runAsync(check())}
+        >
+          检查更新
+        </ActionButton>
+        {update?.updateAvailable ? (
+          <ActionButton
+            busy={busy}
+            disabled={disabled}
+            onClick={() => runAsync(upgrade())}
+            tone="primary"
+          >
+            升级至 {update.targetVersion}
+          </ActionButton>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const { snapshot, config, patchConfig, notify } = useAppState();
   const [saving, setSaving] = useState<string | null>(null);
@@ -109,6 +218,8 @@ export function SettingsPage() {
     swatches: Array<{ state: string; color: string }>;
     hasSound: boolean;
   } | null>(null);
+  const [toolchain, setToolchain] = useState<ToolchainStatus | null>(null);
+  const [toolchainBusy, setToolchainBusy] = useState(false);
   const activeTheme = config?.activeTheme;
 
   useEffect(() => {
@@ -135,6 +246,28 @@ export function SettingsPage() {
       cancelled = true;
     };
   }, [activeTheme]);
+
+  // 外部运行环境：惰性探测，不阻塞设置页（设计方案 §6.1）
+  useEffect(() => {
+    let cancelled = false;
+    runAsync(
+      api
+        .getToolchainStatus(false)
+        .then((status) => {
+          if (!cancelled) {
+            setToolchain(status);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setToolchain(null);
+          }
+        })
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (!config) {
     return null;
@@ -171,6 +304,37 @@ export function SettingsPage() {
       });
     } finally {
       setOpeningDocs(false);
+    }
+  };
+
+  const refreshToolchain = async (force: boolean) => {
+    setToolchainBusy(true);
+    try {
+      setToolchain(await api.getToolchainStatus(force));
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "无法获取运行环境状态",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setToolchainBusy(false);
+    }
+  };
+
+  const resetToolchain = async () => {
+    setToolchainBusy(true);
+    try {
+      setToolchain(await api.resetToolchainOverrides());
+      notify({ tone: "success", title: "已恢复自动检测" });
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "恢复自动检测失败",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setToolchainBusy(false);
     }
   };
 
@@ -329,6 +493,62 @@ export function SettingsPage() {
           系统
         </h2>
         <Card className="settings-card">
+          <SettingRow
+            description="接入工具依赖的 Node.js / npm / Adapter 运行环境"
+            icon={<Monitor />}
+            title="外部运行环境"
+          >
+            <StatusTag
+              tone={
+                toolchain ? toolchainStateCopy(toolchain.state).tone : "neutral"
+              }
+            >
+              {toolchain ? toolchainStateCopy(toolchain.state).label : "检查中"}
+            </StatusTag>
+          </SettingRow>
+          <details className="settings-advanced">
+            <summary>运行环境详情与操作</summary>
+            {toolchain ? (
+              <div className="settings-toolchain">
+                <p className="toolchain-summary">{toolchain.summary}</p>
+                <ToolchainDetailsList status={toolchain} />
+                <p className="toolchain-mode">
+                  检测模式：
+                  {toolchain.mode === "manual" ? "手动（存在覆盖项）" : "自动"}·
+                  检测时间 {toolchain.checkedAt}
+                </p>
+                <div className="toolchain-recovery">
+                  <ActionButton
+                    busy={toolchainBusy}
+                    onClick={() => runAsync(refreshToolchain(true))}
+                  >
+                    <RefreshCw aria-hidden="true" size={14} /> 重新检测
+                  </ActionButton>
+                  {toolchain.mode === "manual" ||
+                  toolchain.state === "store_invalid" ? (
+                    <ActionButton
+                      busy={toolchainBusy}
+                      onClick={() => runAsync(resetToolchain())}
+                      tone="ghost"
+                    >
+                      恢复自动检测
+                    </ActionButton>
+                  ) : null}
+                </div>
+                {toolchain.adapter?.state === "ready" ? (
+                  <AdapterUpdateControl
+                    disabled={toolchainBusy}
+                    key={toolchain.adapter.version}
+                    onToolchainChange={setToolchain}
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <p className="toolchain-summary">
+                暂无检测结果；打开「接入外部工具」页会自动检测。
+              </p>
+            )}
+          </details>
           <SettingRow
             description="登录系统后自动启动 AI-Light"
             icon={<Monitor />}

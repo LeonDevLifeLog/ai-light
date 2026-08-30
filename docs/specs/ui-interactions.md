@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.26 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.26，2026-08-30） |
+| 文档版本 | V1.29 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.29，2026-08-30） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -177,7 +177,17 @@ UI 反馈：设备卡状态 tag 立即更新；失败显示 Toast（原因 + 重
 
 ### 5.2 操作
 
-客户端卡只包含一个上下文主动作：未连接时 [连接]，已连接时 [断开]。连接由后端检测/安装 `@ai-light/adapter`，CLI 备份并合并工具配置；断开只删除 AI-Light 托管 Hook。按钮执行时进入 loading 并禁止重复触发，结果通过 Toast 反馈。
+客户端卡只包含一个上下文主动作：未连接时 [连接]，已连接时 [断开]。连接前先检查运行环境（ToolchainService 强制复验）：就绪时直接写入托管 Hook；Adapter 缺失或版本不兼容时按钮分别进入「确认并安装」/「确认并升级」态，并内联展示操作说明（目标包 `@ai-light/adapter`、使用已检测的 Node.js 与 npm、不提权不改 PATH），用户确认后才执行兼容版本安装；Node/npm 未就绪时停止连接，由运行环境恢复卡提供手动选择路径或重新检测。断开只删除 AI-Light 托管 Hook。按钮执行时进入 loading（文案「正在检查运行环境」）并禁止重复触发，结果通过 Toast 反馈。
+
+### 5.2.1 运行环境卡（ADR-0006）
+
+接入页顶部常驻一张运行环境卡：
+
+- 自动检测成功时只显示一行摘要（如 `Node.js 22.14.0 · npm 10.9.2 · Adapter 0.1.2`）+ [查看详情] [重新检测]
+- [查看详情] 展开各工具的路径（等宽字体、可换行、带复制按钮）、版本、来源（环境 PATH / Node 同安装族 / npm 全局目录 / 版本管理器等）与检测模式
+- 自动检测失败时原地展开恢复卡：说明问题与搜索范围，提供 [选择 Node/npm 路径]（由后端打开原生文件选择器并立即验证）与 [恢复自动检测]；恢复操作与错误一律内联呈现，不只用 Toast
+- `toolchain.json` 损坏、非法或 schema 不兼容时显示“配置需要恢复”，保留原文件且禁止接入写操作；只有用户明确点击 [恢复自动检测] 才重建配置
+- 状态同时用图标、文字和颜色表达；异步结果通过 `aria-live` 区域宣告
 
 ### 5.3 Codex 特殊说明
 
@@ -368,6 +378,7 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 
 - 连接安全：用户说明强调工具只能从本机连接；状态标签为「仅限本机」/「已启用身份验证」。第一版 UI 不开放 Token 编辑入口（服务端 Bearer 校验见 hook-api §7）。
 - 高级服务信息：默认折叠，只包含接口文档；端口由 AI-Light 自动管理，不提供用户编辑或普通接入页展示。[打开 API 文档] 使用系统默认浏览器打开当前实际监听地址 `http://127.0.0.1:{service.port}/docs/`。打开中显示「正在打开…」并屏蔽重复触发；应用状态尚未就绪时禁用。成功不额外提示，打开失败显示原因 Toast。
+- 外部运行环境：默认折叠，复用 Node.js / npm / Adapter 详情与路径恢复能力。Adapter 已就绪时为高级用户提供 [检查更新]；只有用户触发后才访问 npm registry，并展示当前版本、目标兼容版本与是否可升级。升级按钮必须明确写出精确目标版本（如「升级至 0.1.10」），不得安装 `latest`；完成后重新检测工具链并运行 Adapter doctor，成功 Toast 展示新版本，失败保留当前信息与可重试操作。不提供后台自动检查或自动升级开关。
 
 ### 9.2 显示
 
@@ -732,7 +743,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 |---|---|---|
 | Dashboard | （无可交互元素，焦点默认 body） | — |
 | Devices | 重新查找 → 扫描结果 [连接] × N | Cmd/Ctrl+R = 重新查找 |
-| Integrations | 客户端卡 × 4：[测试连接] → [查看 JSON] → [复制] | — |
+| Integrations | 运行环境 [重新检测] → [查看详情] → 恢复动作（按状态出现）→ Claude Code/Codex [连接或断开] | — |
 | Themes | 编辑当前主题 → 导入新主题 → 主题卡 [使用此主题] → 用户主题 [删除] | Cmd/Ctrl+I = 导入；Esc = 关闭删除确认 |
 | Preview | 5 标准按钮 → 自定义输入 → [触发] → 最近 N → [全部重置] | `1`~`5` = 标准状态；`0` = 全部重置 |
 | Settings | 按视觉顺序 Tab | Esc 关闭 Dialog |
@@ -752,6 +763,9 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.29 | 2026-08-30 | Settings 外部运行环境增加高级用户主动检查/精确版本升级：仅点击后访问 npm registry，只选择桌面端兼容版本，升级后重解析并执行 doctor，不引入自动更新。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 新增 `ADAPTER_UPDATE_FAILED` 已同步 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（未触碰）；§6~§8 主题字段与 theme-format 一致（未触碰）；ADR-0001~0006、KAD 引用有效。 |
+| V1.28 | 2026-08-30 | 工具链核心不变量收敛：§5.2 将 `adapter_incompatible` 接入「确认并升级」恢复链；§5.2.1 增加 `store_invalid` 只读保护与显式恢复；附录 Tab 顺序同步当前 Integrations 结构。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 新增 `TOOLCHAIN_STORE_INVALID` 已同步 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（未触碰）；§6~§8 主题字段与 theme-format 一致（未触碰）；ADR-0001~0006、KAD 引用有效。 |
+| V1.27 | 2026-08-30 | 工具链发现落地（ADR-0006）：§5.2 连接流程加入运行环境检查与 Adapter 缺失确认态；新增 §5.2.1 运行环境卡（摘要/详情/恢复卡/手动选择路径）。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（新增 `NODE_*` / `TOOLCHAIN_*` / `EXECUTABLE_TIMEOUT` 已同步收录）；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（未触碰蓝牙章节）；§6~§8 主题字段与 theme-format 字段表一致（未触碰）；ADR-0001~0006、KAD 引用有效。 |
 | V1.26 | 2026-08-30 | 实装用户主题导出：所有非内置主题显示导出入口，Rust 校验后通过系统保存窗口原样写出；内置主题强制保护，取消保存静默结束。对齐报告：§2 Source Events 与 ipc-contract §5 一致；错误码均存在于 ipc-contract §4；蓝牙 result code 与 V0.4 §3.6 一致；主题字段未变；ADR/KAD 引用有效。 |
 | V1.25 | 2026-08-30 | 实装用户主题删除：仅用户主题展示删除入口，确认 Dialog 明示不可恢复；删除当前主题自动回退 default，Rust 强制保护内置主题。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未新增；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效。 |
 | V1.24 | 2026-08-30 | 设置页移除“多个工具同时运行时”，仲裁固定为最近活动优先（ADR-0005 / KAD-13）。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效。 |
