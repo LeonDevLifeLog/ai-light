@@ -56,7 +56,7 @@
 
 ### L2 业务层（✅ 已明确）
 
-- **状态仲裁**：同一 source 的生命周期事件始终推进；不同 source 之间按 `ERROR > SUCCESS > WORKING > WAITING > IDLE` 抢占，同级最近活跃。可配置切换“最近活跃”。——✅ 已确定（ADR-0001 Q8，KAD-12 澄清）
+- **状态仲裁**：最后上报的来源接管灯效，固定为最近活动优先；状态优先级只表达主题视觉强度，不参与上屏判断。——✅ 已确定（ADR-0005，KAD-13；取代 ADR-0001 Q8 / KAD-12）
 - **状态模型**：标准 5 态（IDLE/WORKING/WAITING/SUCCESS/ERROR）+ 开放状态名，主题映射表驱动。——✅ 已确定（ADR-0001 Q1）
 - **主题系统**：命名 SCENE 库 + 状态引用（`.ailight-theme.json`），UI 可编辑、可分享导入；终态 hold_ms 驻留。——✅ 已确定（ADR-0002，规范 `docs/specs/theme-format.md`）
 - **SCENE 编译**：业务状态 → SCENE 名 → JSON → V0.4 OutputScene，幂等去重（APPLY_IF_CHANGED）。——✅ 已明确（协议 §8.4）
@@ -115,6 +115,7 @@
 | D-21 | 自定义状态 | 随用随写；未映射状态 → IDLE + 记日志 | 08-19 | ADR-0002 T-05 |
 | D-22 | 校验容错 | 整体校验，任一非法 → 拒绝生效，默认主题兜底 | 08-19 | ADR-0002 T-06 |
 | D-23 | AI 工具接入 | 独立 Node.js Adapter CLI（npm 全局安装、独立升级）注入 Claude Code / Codex hooks；运行时信息统一存放 `~/.ailight/`；固定回环端口不开放配置 | 08-22 | KAD-11 |
+| D-24 | L2 仲裁规则收敛 | 固定最近活动优先；移除优先级仲裁配置，最后上报的工具接管灯效 | 08-30 | ADR-0005 / KAD-13（取代 D-15） |
 
 ## 5. 待确认问题（截至 08-19 晚）
 

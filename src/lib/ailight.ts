@@ -65,7 +65,6 @@ export interface RememberedDevice {
 
 export interface AppConfig {
   activeTheme: string;
-  arbitrationMode: "priority" | "last_active";
   autostart: boolean;
   badgeOrientation: "horizontal" | "vertical";
   portPreference: number;
@@ -150,7 +149,6 @@ const mockSnapshot: AppSnapshot = {
 
 const mockConfig: AppConfig = {
   version: 1,
-  arbitrationMode: "priority",
   activeTheme: "default",
   portPreference: 25_679,
   rememberedDevice: null,

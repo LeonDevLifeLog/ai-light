@@ -1,10 +1,7 @@
-//! 状态仲裁器（ADR-0001 Q8）
+//! 状态仲裁器（ADR-0001 Q8，KAD-13）
 //!
 //! 规则：
-//! - `Priority` 模式：默认优先级抢占 ERROR(5) > SUCCESS(4) > WORKING(3) > WAITING(2) > 自定义(1) > IDLE(0)；
-//!   同一 source 的生命周期事件始终允许推进；不同 source 才按优先级抢占，同级按"最近活跃"；
-//!   **IDLE 事件总是生效**（显式清除，优先级模型下的特例）
-//! - `LastActive` 模式：任何事件都生效（最近活跃优先）
+//! - 最近活跃：任何非幂等事件都生效，最后上报的工具接管灯效
 //! - 终态驻留（hold_ms）：进入 SUCCESS/ERROR 且配置了 hold_ms>0 时，到期自动回落 IDLE
 
 use serde::Serialize;
@@ -35,30 +32,6 @@ pub fn is_standard_state(state: &str) -> bool {
         state,
         ST_IDLE | ST_WORKING | ST_WAITING | ST_SUCCESS | ST_ERROR
     )
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ArbitrationMode {
-    /// 优先级抢占（默认）
-    Priority,
-    /// 最近活跃
-    LastActive,
-}
-
-impl ArbitrationMode {
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "priority" => Some(ArbitrationMode::Priority),
-            "last_active" => Some(ArbitrationMode::LastActive),
-            _ => None,
-        }
-    }
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            ArbitrationMode::Priority => "priority",
-            ArbitrationMode::LastActive => "last_active",
-        }
-    }
 }
 
 /// 一次 hook 事件（hook-api V1.0 的 state_change 归一化）
@@ -103,27 +76,17 @@ pub enum ApplyOutcome {
 
 #[derive(Debug)]
 pub struct Arbiter {
-    mode: ArbitrationMode,
     current: BusinessState,
     /// 事件计数器（最近活跃排序辅助/调试）
     event_count: u64,
 }
 
 impl Arbiter {
-    pub fn new(mode: ArbitrationMode, now_ms: u64) -> Self {
+    pub fn new(now_ms: u64) -> Self {
         Self {
-            mode,
             current: BusinessState::idle(now_ms),
             event_count: 0,
         }
-    }
-
-    pub fn mode(&self) -> ArbitrationMode {
-        self.mode
-    }
-
-    pub fn set_mode(&mut self, mode: ArbitrationMode) {
-        self.mode = mode;
     }
 
     pub fn current(&self) -> &BusinessState {
@@ -138,25 +101,6 @@ impl Arbiter {
         self.event_count += 1;
         let hold = hold_ms.unwrap_or(0);
         let hold_until = if hold > 0 { Some(now_ms + hold) } else { None };
-
-        let should_switch = match self.mode {
-            ArbitrationMode::LastActive => true,
-            ArbitrationMode::Priority => {
-                if ev.state == ST_IDLE {
-                    // IDLE 总是生效（显式清除）
-                    true
-                } else if self.current.source.as_deref() == Some(ev.source.as_str()) {
-                    // 同一工具内部是生命周期推进，不参与跨工具优先级竞争。
-                    true
-                } else {
-                    state_priority(&ev.state) >= state_priority(&self.current.state)
-                }
-            }
-        };
-
-        if !should_switch {
-            return ApplyOutcome::NoChange(self.current.clone());
-        }
 
         // 相同 source + state 且未驻留中 → 幂等不重复（hook-api §3.2）
         if self.current.state == ev.state
@@ -215,42 +159,9 @@ mod tests {
         matches!(out, ApplyOutcome::Applied(_))
     }
 
-    fn current_state(out: &ApplyOutcome) -> String {
-        match out {
-            ApplyOutcome::Applied(s) | ApplyOutcome::NoChange(s) => s.state.clone(),
-        }
-    }
-
-    #[test]
-    fn priority_preemption() {
-        let mut a = Arbiter::new(ArbitrationMode::Priority, 0);
-        // WORKING 生效
-        assert!(applied(&a.apply(&ev("cc", ST_WORKING, 1), None, 1)));
-        // 同级 WORKING（另一 source）→ 最近活跃覆盖
-        assert!(applied(&a.apply(&ev("codex", ST_WORKING, 2), None, 2)));
-        assert_eq!(a.current().source.as_deref(), Some("codex"));
-        // 另一 source 的低优先级 WAITING → 忽略
-        assert!(!applied(&a.apply(&ev("cc", ST_WAITING, 3), None, 3)));
-        assert_eq!(a.current().state, ST_WORKING);
-        // ERROR 抢占
-        assert!(applied(&a.apply(&ev("cc", ST_ERROR, 4), None, 4)));
-        // IDLE 清除（优先级模型特例）
-        assert!(applied(&a.apply(&ev("cc", ST_IDLE, 5), None, 5)));
-        assert_eq!(a.current().state, ST_IDLE);
-    }
-
-    #[test]
-    fn same_source_lifecycle_can_move_from_working_to_waiting() {
-        let mut a = Arbiter::new(ArbitrationMode::Priority, 0);
-        assert!(applied(&a.apply(&ev("claude-code", ST_WORKING, 1), None, 1)));
-        assert!(applied(&a.apply(&ev("claude-code", ST_WAITING, 2), None, 2)));
-        assert_eq!(a.current().state, ST_WAITING);
-        assert!(applied(&a.apply(&ev("claude-code", ST_SUCCESS, 3), None, 3)));
-    }
-
     #[test]
     fn idempotent_same_source_state() {
-        let mut a = Arbiter::new(ArbitrationMode::Priority, 0);
+        let mut a = Arbiter::new(0);
         assert!(applied(&a.apply(&ev("cc", ST_WORKING, 1), None, 1)));
         // 相同 source+state 重复 → NoChange（applied=false）
         assert!(!applied(&a.apply(&ev("cc", ST_WORKING, 2), None, 2)));
@@ -259,17 +170,24 @@ mod tests {
     }
 
     #[test]
-    fn last_active_mode() {
-        let mut a = Arbiter::new(ArbitrationMode::LastActive, 0);
-        assert!(applied(&a.apply(&ev("cc", ST_ERROR, 1), None, 1)));
-        // 低优先级也覆盖
-        assert!(applied(&a.apply(&ev("cc", ST_IDLE, 2), None, 2)));
-        assert!(applied(&a.apply(&ev("cc", ST_WAITING, 3), None, 3)));
+    fn latest_source_always_takes_over() {
+        let mut a = Arbiter::new(0);
+        assert!(applied(&a.apply(&ev("claude-code", ST_ERROR, 1), None, 1)));
+        assert!(applied(&a.apply(&ev("codex", ST_WAITING, 2), None, 2)));
+        assert_eq!(a.current().source.as_deref(), Some("codex"));
+        assert_eq!(a.current().state, ST_WAITING);
+        assert!(applied(&a.apply(
+            &ev("claude-code", ST_WORKING, 3),
+            None,
+            3
+        )));
+        assert_eq!(a.current().source.as_deref(), Some("claude-code"));
+        assert_eq!(a.current().state, ST_WORKING);
     }
 
     #[test]
     fn hold_rollback_to_idle() {
-        let mut a = Arbiter::new(ArbitrationMode::Priority, 0);
+        let mut a = Arbiter::new(0);
         // SUCCESS hold 5000ms
         assert!(applied(&a.apply(
             &ev("cc", ST_SUCCESS, 1000),
@@ -286,7 +204,7 @@ mod tests {
 
     #[test]
     fn hold_zero_means_stay_until_next_event() {
-        let mut a = Arbiter::new(ArbitrationMode::Priority, 0);
+        let mut a = Arbiter::new(0);
         // ERROR hold 0 → 驻留到下一事件（无 hold_until）
         assert!(applied(&a.apply(&ev("cc", ST_ERROR, 1), Some(0), 1)));
         assert_eq!(a.current().hold_until_ms, None);
@@ -297,46 +215,20 @@ mod tests {
     }
 
     #[test]
-    fn custom_state_priority() {
+    fn custom_state_is_supported() {
         assert_eq!(state_priority("REVIEW"), 1);
-        let mut a = Arbiter::new(ArbitrationMode::Priority, 0);
-        // 自定义状态生效
+        let mut a = Arbiter::new(0);
         assert!(applied(&a.apply(&ev("cc", "REVIEW", 1), None, 1)));
-        // WAITING(2) > REVIEW(1) → 抢占
         assert!(applied(&a.apply(&ev("cc", ST_WAITING, 2), None, 2)));
-        // REVIEW(1) < WAITING(2) → 忽略
-        assert!(!applied(&a.apply(&ev("codex", "REVIEW", 3), None, 3)));
+        assert!(applied(&a.apply(&ev("codex", "REVIEW", 3), None, 3)));
     }
 
     #[test]
     fn reset_clears() {
-        let mut a = Arbiter::new(ArbitrationMode::Priority, 0);
+        let mut a = Arbiter::new(0);
         a.apply(&ev("cc", ST_ERROR, 1), None, 1);
         let s = a.reset(100);
         assert_eq!(s.state, ST_IDLE);
         assert_eq!(a.current().state, ST_IDLE);
-    }
-
-    #[test]
-    fn mode_switch_runtime() {
-        // 运行时切换仲裁模式（update_config 会用到）
-        let mut a = Arbiter::new(ArbitrationMode::Priority, 0);
-        a.apply(&ev("cc", ST_ERROR, 1), None, 1);
-        assert_eq!(a.mode(), ArbitrationMode::Priority);
-
-        // 切 LastActive：低优先级事件也覆盖
-        a.set_mode(ArbitrationMode::LastActive);
-        assert!(applied(&a.apply(&ev("cc", ST_WORKING, 2), None, 2)));
-        assert_eq!(a.current().state, ST_WORKING);
-        // 再降级也能覆盖
-        assert!(applied(&a.apply(&ev("cc", ST_WAITING, 3), None, 3)));
-
-        // 切回 Priority：低优先级不再覆盖（ERROR 抢占，WAITING 被忽略）
-        a.set_mode(ArbitrationMode::Priority);
-        assert!(applied(&a.apply(&ev("cc", ST_ERROR, 4), None, 4)));
-        assert!(!applied(&a.apply(&ev("codex", ST_WAITING, 5), None, 5)));
-        assert_eq!(a.current().state, ST_ERROR);
-        // IDLE 特例仍生效（显式清除）
-        assert!(applied(&a.apply(&ev("cc", ST_IDLE, 6), None, 6)));
     }
 }

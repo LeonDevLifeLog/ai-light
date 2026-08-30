@@ -7,7 +7,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 use tokio::sync::mpsc;
 
-use ailight_core::arbiter::{ArbitrationMode, ST_IDLE};
+use ailight_core::arbiter::ST_IDLE;
 use ailight_core::ble::{self, BleDeviceInfo};
 use ailight_core::config::{AppConfig, RememberedDevice};
 use ailight_core::engine::{self, EngineError};
@@ -690,7 +690,6 @@ pub fn get_config(app: AppHandle) -> CmdResult<AppConfig> {
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigPatch {
-    pub arbitration_mode: Option<String>,
     pub token: Option<String>,
     pub autostart: Option<bool>,
     pub badge_orientation: Option<String>,
@@ -709,13 +708,6 @@ pub async fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppC
 
     let mut cfg = state.config.write().map_err(|_| internal("config 锁"))?;
 
-    if let Some(mode) = &patch.arbitration_mode {
-        let m = ArbitrationMode::from_str(mode)
-            .ok_or_else(|| err("BAD_REQUEST", format!("arbitration_mode 非法: {mode}")))?;
-        cfg.arbitration_mode = mode.clone();
-        // 立即生效（引擎热切换）
-        state.engine.set_arbitration_mode(m);
-    }
     if let Some(token) = &patch.token {
         cfg.token = token.clone();
         let runtime_token = if token.is_empty() {

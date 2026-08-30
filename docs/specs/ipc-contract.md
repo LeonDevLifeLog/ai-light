@@ -97,7 +97,7 @@
 | `install_integration(tool)` | `claude-code \| codex` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` / `NPM_NOT_FOUND` | P1 |
 | `uninstall_integration(tool)` | `claude-code \| codex` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` | P1 |
 
-**`update_config` 允许字段**：`arbitrationMode` / `token` / `autostart` / `badgeOrientation` / `themeMode`。`portPreference` 为遗留兼容字段，不再接受用户 patch；Hook Server 固定优先 25679 并自动退避，实际地址通过 `~/.ailight/runtime.json` 提供给 Adapter（KAD-11）。`autostart` 采用"先 OS 后 config"：OS 登录项操作成功才写缓存，失败返回 `AUTOSTART_FAILED` 且 config 不变（KAD-09）。`rememberedDevice` 由连接流程管理，不接受用户 patch。
+**`update_config` 允许字段**：`token` / `autostart` / `badgeOrientation` / `themeMode`。`portPreference` 为遗留兼容字段，不再接受用户 patch；Hook Server 固定优先 25679 并自动退避，实际地址通过 `~/.ailight/runtime.json` 提供给 Adapter（KAD-11）。`autostart` 采用"先 OS 后 config"：OS 登录项操作成功才写缓存，失败返回 `AUTOSTART_FAILED` 且 config 不变（KAD-09）。`rememberedDevice` 由连接流程管理，不接受用户 patch。仲裁固定为最近活动优先，不属于配置（ADR-0005 / KAD-13）。
 
 ## 3. config.json Schema
 
@@ -106,7 +106,6 @@
 ```jsonc
 {
   "version": 1,                    // schema 版本，当前 = 1
-  "arbitrationMode": "priority",   // "priority"（默认）| "last_active"（ADR-0001 Q8）
   "portPreference": 25679,         // 遗留兼容字段；运行时不接受用户修改
   "rememberedDevice": {            // 记住的设备；null = 无
     "address": "AA:BB:CC:DD:EE:FF",
@@ -162,7 +161,7 @@
 |---|---|
 | trigger_state / reset_outputs 语义 | hook-api V1.0（manual source）、协议 V0.4 §12.4 |
 | 主题相关 commands | theme-format V1.0（校验/编译）、ADR-0002 |
-| arbitrationMode | ADR-0001 Q8、KAD-12（同 source 生命周期推进；跨 source 仲裁） |
+| 状态仲裁 | ADR-0005、KAD-13（固定最近活动优先，不进入 Config） |
 | 设备识别/握手 | 协议 V0.4 §5、pyPcTest 识别逻辑 |
 | 事件命名风格 | KAD-03（events 只读推送） |
 

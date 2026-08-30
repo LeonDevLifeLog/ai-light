@@ -10,7 +10,6 @@ use std::sync::{Arc, RwLock};
 use tauri::{Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 
-use ailight_core::arbiter::ArbitrationMode;
 use ailight_core::ble::DeviceIo;
 use ailight_core::config::{AppConfig, DEFAULT_PORT};
 use ailight_core::engine::Engine;
@@ -82,9 +81,7 @@ pub fn run() {
             }
 
             // 共享状态 + 主题
-            let mode = ArbitrationMode::from_str(&config.arbitration_mode)
-                .unwrap_or(ArbitrationMode::Priority);
-            let shared = SharedState::new(env!("CARGO_PKG_VERSION"), mode, now_ms);
+            let shared = SharedState::new(env!("CARGO_PKG_VERSION"), now_ms);
             let theme = theme::load_builtin(&config.active_theme)
                 .or_else(|| theme::load_builtin("default"))
                 .expect("内置 default 主题必须合法");

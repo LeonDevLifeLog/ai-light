@@ -1238,22 +1238,9 @@ input[type="range"] {
   gap: 3px;
   min-width: 0;
 }
-.mode-option__title {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
 .mode-option__name {
   font-size: 13px;
   font-weight: 600;
-}
-.mode-option__tag {
-  padding: 0 7px;
-  font-size: 10px;
-  line-height: 16px;
-  color: var(--text-tertiary);
-  border: 1px solid var(--border-soft);
-  border-radius: 99px;
 }
 .mode-option__desc {
   font-size: 11px;
