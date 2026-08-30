@@ -7,6 +7,12 @@ use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// 版本探测超时（设计方案 §6.3）
 pub const VERSION_TIMEOUT: Duration = Duration::from_secs(3);
 /// 安装/升级上限（npm 网络操作，远长于版本探测）
@@ -81,6 +87,9 @@ fn read_capped(stream: &mut impl Read, cap: usize) -> (Vec<u8>, bool) {
 /// 受控执行：args 数组、超时、输出上限、stdin 关闭。
 /// 调用方必须在 `spawn_blocking` 中使用（设计方案 §12.1）。
 pub fn run_captured(cmd: &mut Command, timeout: Duration, cap: usize) -> std::io::Result<Captured> {
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+
     cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
