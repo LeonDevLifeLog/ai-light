@@ -2,6 +2,7 @@
 
 mod commands;
 mod storage;
+mod toolchain;
 mod tray;
 
 use std::sync::atomic::AtomicU64;
@@ -27,6 +28,8 @@ pub struct AppState {
     pub connection_lock: tokio::sync::Mutex<()>,
     pub connection_generation: AtomicU64,
     pub runtime_token: RwLock<String>,
+    /// Node/npm/Adapter 工具链解析（设计方案 §4：ToolchainService）
+    pub toolchain: toolchain::ToolchainService,
 }
 
 fn now_ms() -> u64 {
@@ -151,6 +154,7 @@ pub fn run() {
                 connection_lock: tokio::sync::Mutex::new(()),
                 connection_generation: AtomicU64::new(0),
                 runtime_token: RwLock::new(runtime_token),
+                toolchain: toolchain::ToolchainService::new(),
             });
 
             // L1 HTTP 接入服务：启动期允许从首选端口向后退避。
@@ -267,6 +271,10 @@ pub fn run() {
             commands::get_integration_status,
             commands::install_integration,
             commands::uninstall_integration,
+            commands::get_toolchain_status,
+            commands::set_toolchain_overrides,
+            commands::reset_toolchain_overrides,
+            commands::select_executable,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

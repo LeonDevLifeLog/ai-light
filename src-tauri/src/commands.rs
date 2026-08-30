@@ -1,8 +1,9 @@
-//! Tauri commands（ipc-contract V1.0 §2：P1 全部 14 个）
+//! Tauri commands（ipc-contract V1.0 §2：P1 全部 14 个 + 工具链 4 个，设计方案 §7）
 
 use serde::Serialize;
 use std::process::Command;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_dialog::DialogExt;
@@ -15,14 +16,23 @@ use ailight_core::engine::{self, EngineError};
 use ailight_core::hook_server::{BusinessSnapshot, DeviceSnapshot, ServiceSnapshot, SharedState};
 use ailight_core::theme::{self, ThemeFile};
 
+use crate::toolchain::model::states;
+use crate::toolchain::model::{
+    ResolvedToolchain, ToolKind, ToolchainOverrides, ToolchainStatus,
+};
+use crate::toolchain::{runner, validate, ToolchainError};
 use crate::AppState;
 
-// ---- 错误模型（ipc-contract §4） ----
+// ---- 错误模型（ipc-contract §4 + 设计方案 §7 错误码扩展） ----
 
 #[derive(Debug, Serialize)]
 pub struct AppError {
     pub code: &'static str,
     pub message: String,
+    /// 结构化诊断字段（kind/path/source/reason 等，设计方案 §7；
+    /// 不返回完整环境变量或 token）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<serde_json::Value>,
 }
 
 type CmdResult<T> = Result<T, AppError>;
@@ -31,6 +41,19 @@ fn err(code: &'static str, message: impl Into<String>) -> AppError {
     AppError {
         code,
         message: message.into(),
+        details: None,
+    }
+}
+
+fn err_with_details(
+    code: &'static str,
+    message: impl Into<String>,
+    details: serde_json::Value,
+) -> AppError {
+    AppError {
+        code,
+        message: message.into(),
+        details: Some(details),
     }
 }
 
@@ -42,16 +65,62 @@ fn shared(app: &AppHandle) -> std::sync::Arc<SharedState> {
     app.state::<AppState>().shared.clone()
 }
 
-// ---- Adapter CLI 集成 ----
+// ---- Adapter CLI 集成（统一走 ToolchainService / ProcessRunner，设计方案 §4） ----
 
 fn valid_integration_tool(tool: &str) -> bool {
     matches!(tool, "claude-code" | "codex")
 }
 
-fn adapter_command(args: &[&str]) -> CmdResult<serde_json::Value> {
-    let executable =
-        std::env::var_os("AILIGHT_ADAPTER_BIN").unwrap_or_else(|| "ailight-adapter".into());
-    let output = Command::new(executable)
+/// ToolchainError → AppError（设计方案 §7 错误码表）
+fn map_toolchain_error(error: ToolchainError) -> AppError {
+    match error {
+        ToolchainError::InvalidOverride { kind, path, reason } => err_with_details(
+            "TOOLCHAIN_OVERRIDE_INVALID",
+            format!("{} 路径不可用: {reason}", kind_label(kind)),
+            serde_json::json!({ "kind": kind.as_str(), "path": path, "reason": reason }),
+        ),
+        ToolchainError::Resolution(status) => resolution_error(&status),
+        ToolchainError::Io(message) => internal(message),
+    }
+}
+
+fn kind_label(kind: ToolKind) -> &'static str {
+    match kind {
+        ToolKind::Node => "Node",
+        ToolKind::Npm => "npm",
+        ToolKind::Adapter => "Adapter",
+    }
+}
+
+fn resolution_error(status: &ToolchainStatus) -> AppError {
+    let (code, message) = match status.state.as_str() {
+        states::NODE_MISSING => ("NODE_NOT_FOUND", "未找到可用的 Node.js（需要 20+）"),
+        states::NODE_INCOMPATIBLE => ("NODE_INCOMPATIBLE", "Node.js 版本低于 20，请切换或选择兼容版本"),
+        states::NPM_MISSING => ("NPM_NOT_FOUND", "已发现 Node.js，但未找到关联的 npm"),
+        states::INVALID_OVERRIDE => (
+            "TOOLCHAIN_OVERRIDE_INVALID",
+            "手动路径不可用，请重新选择或恢复自动检测",
+        ),
+        states::AMBIGUOUS => ("TOOLCHAIN_AMBIGUOUS", "多组候选无法安全决策，请手动选择一组 Node"),
+        states::PERMISSION_DENIED => ("TOOLCHAIN_PERMISSION_DENIED", "文件或子进程权限不足"),
+        states::ADAPTER_MISSING => ("ADAPTER_NOT_FOUND", "Adapter 未安装，可在接入页一键安装"),
+        states::ADAPTER_INCOMPATIBLE => ("ADAPTER_INCOMPATIBLE", "Adapter 版本不兼容，请升级"),
+        _ => ("INTERNAL", "工具链状态异常"),
+    };
+    err_with_details(
+        code,
+        message,
+        serde_json::to_value(status).unwrap_or(serde_json::Value::Null),
+    )
+}
+
+/// `AILIGHT_ADAPTER_BIN` 开发/测试 override：保持旧行为直接执行（设计方案 §13.2）
+fn dev_override_active() -> bool {
+    std::env::var_os("AILIGHT_ADAPTER_BIN").is_some_and(|value| !value.is_empty())
+}
+
+fn adapter_command_dev(bin: &std::ffi::OsStr, args: &[&str]) -> CmdResult<serde_json::Value> {
+    let output = Command::new(bin)
         .args(args)
         .arg("--json")
         .output()
@@ -61,13 +130,17 @@ fn adapter_command(args: &[&str]) -> CmdResult<serde_json::Value> {
                 format!("无法启动 Adapter CLI: {error}"),
             )
         })?;
-    let value = serde_json::from_slice::<serde_json::Value>(&output.stdout).map_err(|error| {
+    dev_output_to_value(&output.stdout, output.status.code())
+}
+
+fn dev_output_to_value(stdout: &[u8], exit_code: Option<i32>) -> CmdResult<serde_json::Value> {
+    let value = serde_json::from_slice::<serde_json::Value>(stdout).map_err(|error| {
         err(
             "ADAPTER_INVALID_OUTPUT",
             format!("Adapter 返回无效数据: {error}"),
         )
     })?;
-    if !output.status.success() || value.get("ok") != Some(&serde_json::Value::Bool(true)) {
+    if exit_code != Some(0) || value.get("ok") != Some(&serde_json::Value::Bool(true)) {
         let message = value
             .pointer("/error/message")
             .and_then(|item| item.as_str())
@@ -80,55 +153,224 @@ fn adapter_command(args: &[&str]) -> CmdResult<serde_json::Value> {
         .unwrap_or(serde_json::Value::Null))
 }
 
-fn ensure_adapter_installed() -> CmdResult<()> {
-    if adapter_command(&["version"]).is_ok() {
-        return Ok(());
-    }
-    let output = Command::new("npm")
-        .args(["install", "--global", "@ai-light/adapter"])
-        .output()
-        .map_err(|error| err("NPM_NOT_FOUND", format!("无法启动 npm: {error}")))?;
-    if !output.status.success() {
-        return Err(err(
-            "ADAPTER_INSTALL_FAILED",
-            String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        ));
-    }
-    adapter_command(&["version"])?;
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn get_integration_status(tool: String) -> CmdResult<serde_json::Value> {
-    if !valid_integration_tool(&tool) {
-        return Err(err("BAD_REQUEST", "不支持的接入工具"));
-    }
-    tauri::async_runtime::spawn_blocking(move || adapter_command(&["detect", &tool]))
-        .await
-        .map_err(internal)?
-}
-
-#[tauri::command]
-pub async fn install_integration(tool: String) -> CmdResult<serde_json::Value> {
-    if !valid_integration_tool(&tool) {
-        return Err(err("BAD_REQUEST", "不支持的接入工具"));
-    }
-    tauri::async_runtime::spawn_blocking(move || {
-        ensure_adapter_installed()?;
-        adapter_command(&["install", &tool])
+/// 通过已解析工具链执行 Adapter 管理命令（稳定入口：node + cli.js，设计方案 §6.5）
+async fn adapter_command_with_chain(
+    chain: &Arc<ResolvedToolchain>,
+    args: &[&str],
+) -> CmdResult<serde_json::Value> {
+    let adapter = chain
+        .adapter
+        .as_ref()
+        .ok_or_else(|| err("ADAPTER_NOT_FOUND", "Adapter 未安装，可在接入页一键安装"))?;
+    let node = chain.node.clone();
+    let adapter = adapter.clone();
+    let mut argv: Vec<String> = args.iter().map(|item| item.to_string()).collect();
+    argv.push("--json".to_string());
+    let captured = tauri::async_runtime::spawn_blocking(move || {
+        let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+        runner::run_adapter(&node, &adapter, &argv, validate::VERSION_TIMEOUT)
     })
     .await
     .map_err(internal)?
+    .map_err(|error| err("ADAPTER_COMMAND_FAILED", format!("无法启动 Adapter: {error}")))?;
+    captured_to_value(captured)
+}
+
+fn captured_to_value(captured: validate::Captured) -> CmdResult<serde_json::Value> {
+    if captured.timed_out {
+        return Err(err("EXECUTABLE_TIMEOUT", "Adapter 命令执行超时"));
+    }
+    dev_output_to_value(&captured.stdout, captured.exit_code)
 }
 
 #[tauri::command]
-pub async fn uninstall_integration(tool: String) -> CmdResult<serde_json::Value> {
+pub async fn get_integration_status(app: AppHandle, tool: String) -> CmdResult<serde_json::Value> {
     if !valid_integration_tool(&tool) {
         return Err(err("BAD_REQUEST", "不支持的接入工具"));
     }
-    tauri::async_runtime::spawn_blocking(move || adapter_command(&["uninstall", &tool]))
+    if dev_override_active() {
+        let bin = std::env::var_os("AILIGHT_ADAPTER_BIN").expect("已检查存在");
+        return adapter_command_dev(&bin, &["detect", &tool]);
+    }
+    let service = &app.state::<AppState>().toolchain;
+    // 只读查询：可用进程内缓存（设计方案 §11）；Adapter 缺失时返回结构化未连接状态（§7）
+    let chain = service
+        .resolved_for_write(false)
         .await
-        .map_err(internal)?
+        .map_err(map_toolchain_error)?;
+    let Some(_) = chain.adapter.as_ref() else {
+        let status = service.status(false).await;
+        return Ok(serde_json::json!({
+            "connected": false,
+            "managedCount": 0,
+            "path": "",
+            "reason": "adapter_missing",
+            "toolchainState": status.state,
+            "toolchainSummary": status.summary,
+        }));
+    };
+    adapter_command_with_chain(&chain, &["detect", &tool]).await
+}
+
+#[tauri::command]
+pub async fn install_integration(app: AppHandle, tool: String) -> CmdResult<serde_json::Value> {
+    if !valid_integration_tool(&tool) {
+        return Err(err("BAD_REQUEST", "不支持的接入工具"));
+    }
+    if dev_override_active() {
+        let bin = std::env::var_os("AILIGHT_ADAPTER_BIN").expect("已检查存在");
+        return adapter_command_dev(&bin, &["install", &tool]);
+    }
+    let service = &app.state::<AppState>().toolchain;
+    // 写操作：强制复验（设计方案 §6.1 / §11）
+    let chain = service
+        .resolved_for_write(false)
+        .await
+        .map_err(map_toolchain_error)?;
+    // Adapter 缺失：用已选 Node + npm CLI 安装后重新解析（设计方案 §7 / §9.1）
+    let chain = if chain.adapter.is_none() {
+        service.install_adapter().await.map_err(map_toolchain_error)?
+    } else {
+        chain
+    };
+    adapter_command_with_chain(&chain, &["install", &tool]).await
+}
+
+#[tauri::command]
+pub async fn uninstall_integration(app: AppHandle, tool: String) -> CmdResult<serde_json::Value> {
+    if !valid_integration_tool(&tool) {
+        return Err(err("BAD_REQUEST", "不支持的接入工具"));
+    }
+    if dev_override_active() {
+        let bin = std::env::var_os("AILIGHT_ADAPTER_BIN").expect("已检查存在");
+        return adapter_command_dev(&bin, &["uninstall", &tool]);
+    }
+    let service = &app.state::<AppState>().toolchain;
+    // 工具链损坏（Adapter 不可用）→ needs_repair 语义，不得误删其他 Hook（设计方案 §7）
+    let chain = service
+        .resolved_for_write(true)
+        .await
+        .map_err(|error| match error {
+            ToolchainError::Resolution(status)
+                if status.state == states::ADAPTER_MISSING =>
+            {
+                err(
+                    "ADAPTER_NOT_FOUND",
+                    "Adapter 不可用，无法安全卸载 Hook；请先修复运行环境后重试（needs_repair）",
+                )
+            }
+            other => map_toolchain_error(other),
+        })?;
+    adapter_command_with_chain(&chain, &["uninstall", &tool]).await
+}
+
+// ---- 工具链域（设计方案 §7 IPC 契约） ----
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolchainOverridesPatch {
+    pub node: Option<String>,
+    pub npm: Option<String>,
+    pub adapter: Option<String>,
+}
+
+#[tauri::command]
+pub async fn get_toolchain_status(
+    app: AppHandle,
+    force: Option<bool>,
+) -> CmdResult<ToolchainStatus> {
+    Ok(app
+        .state::<AppState>()
+        .toolchain
+        .status(force.unwrap_or(false))
+        .await)
+}
+
+#[tauri::command]
+pub async fn set_toolchain_overrides(
+    app: AppHandle,
+    patch: ToolchainOverridesPatch,
+) -> CmdResult<ToolchainStatus> {
+    let overrides = ToolchainOverrides {
+        node: patch.node,
+        npm: patch.npm,
+        adapter: patch.adapter,
+    };
+    app.state::<AppState>()
+        .toolchain
+        .set_overrides(overrides)
+        .await
+        .map_err(map_toolchain_error)
+}
+
+#[tauri::command]
+pub async fn reset_toolchain_overrides(app: AppHandle) -> CmdResult<ToolchainStatus> {
+    app.state::<AppState>()
+        .toolchain
+        .reset_overrides()
+        .await
+        .map_err(map_toolchain_error)
+}
+
+#[tauri::command]
+pub async fn select_executable(app: AppHandle, kind: String) -> CmdResult<ToolchainStatus> {
+    let kind = ToolKind::parse(&kind)
+        .ok_or_else(|| err("BAD_REQUEST", format!("kind 非法: {kind}")))?;
+    // 原生文件选择器由后端打开，前端不能传任意未确认路径冒充选择结果（设计方案 §7）
+    let handle = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || pick_executable(&handle, kind))
+        .await
+        .map_err(internal)?;
+    let Some(path) = picked else {
+        // 取消选择不改变现有配置（设计方案 §8.2）
+        return Ok(app.state::<AppState>().toolchain.current_status().await);
+    };
+    app.state::<AppState>()
+        .toolchain
+        .select_executable(kind, path)
+        .await
+        .map_err(map_toolchain_error)
+}
+
+fn pick_executable(app: &AppHandle, kind: ToolKind) -> Option<std::path::PathBuf> {
+    let dialog = app.dialog().file().set_title(match kind {
+        ToolKind::Node => "选择 Node.js 可执行文件（需要 20+）",
+        ToolKind::Npm => "选择 npm（npm-cli.js 或平台 launcher）",
+        ToolKind::Adapter => "选择 Adapter（dist/cli.js）",
+    });
+    let dialog = match kind {
+        ToolKind::Node => {
+            #[cfg(windows)]
+            {
+                dialog.add_filter("node 可执行文件", &["exe"])
+            }
+            #[cfg(not(windows))]
+            {
+                dialog
+            }
+        }
+        ToolKind::Npm => {
+            #[cfg(windows)]
+            {
+                dialog.add_filter("npm", &["cmd", "exe", "js"])
+            }
+            #[cfg(not(windows))]
+            {
+                dialog
+            }
+        }
+        ToolKind::Adapter => {
+            #[cfg(windows)]
+            {
+                dialog.add_filter("Adapter 脚本", &["cmd", "js"])
+            }
+            #[cfg(not(windows))]
+            {
+                dialog
+            }
+        }
+    };
+    dialog.blocking_pick_file().and_then(|file| file.into_path().ok())
 }
 
 // ---- 状态查询 ----
