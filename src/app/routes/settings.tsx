@@ -420,7 +420,8 @@ export function SettingsPage() {
                   >
                     <RefreshCw aria-hidden="true" size={14} /> 重新检测
                   </ActionButton>
-                  {toolchain.mode === "manual" ? (
+                  {toolchain.mode === "manual" ||
+                  toolchain.state === "store_invalid" ? (
                     <ActionButton
                       busy={toolchainBusy}
                       onClick={() => runAsync(resetToolchain())}

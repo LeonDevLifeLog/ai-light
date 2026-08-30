@@ -114,7 +114,7 @@
 | `reset_toolchain_overrides()` | — | ToolchainStatus（mode 恢复 auto） | — | P1 |
 | `select_executable(kind)` | kind: `node \| npm \| adapter` | ToolchainStatus（取消选择返回当前状态，不改变配置） | `BAD_REQUEST`（kind 非法）/ `TOOLCHAIN_OVERRIDE_INVALID`（所选路径验证失败） | P1 |
 
-**ToolchainStatus schema**（`state` 全集：`checking / ready / node_missing / node_incompatible / npm_missing / adapter_missing / adapter_incompatible / invalid_override / ambiguous / permission_denied`）：
+**ToolchainStatus schema**（`state` 全集：`checking / ready / node_missing / node_incompatible / npm_missing / adapter_missing / adapter_incompatible / invalid_override / ambiguous / permission_denied / store_invalid`）：
 
 ```jsonc
 {
@@ -130,9 +130,10 @@
 ```
 
 - 持久化：`~/.ailight/toolchain.json`（schema v1，独立于 config.json；overrides 是用户意图，selected 是可再生的缓存）
+- 损坏、非法或高于当前 schema 的文件进入 `store_invalid` 只读保护态，自动探测不得覆盖原文件；仅用户明确调用 `reset_toolchain_overrides` 后重建
 - `select_executable` 由后端打开原生文件选择器并立即验证；前端不能传任意未确认路径冒充选择结果
 - 缓存失效采用内容信号（文件不存在 / mtime·size 变化 / override 变更 / 安装完成），写操作一律强制复验（ADR-0006）
-- `AILIGHT_ADAPTER_BIN` 环境变量保留为开发/测试 override，直接执行并跳过解析器（ADR-0006 §13.2）
+- `AILIGHT_ADAPTER_BIN` 环境变量保留为开发/测试 override，但必须作为候选进入 ToolchainService 验证与解析，不得绕过 ResolvedToolchain/ProcessRunner
 
 ## 3. config.json Schema
 
@@ -179,6 +180,7 @@
 | `TOOLCHAIN_OVERRIDE_INVALID` | 手动路径不存在或验证失败 | set_toolchain_overrides / select_executable / 工具链解析（恢复：重新选择或恢复自动检测） |
 | `TOOLCHAIN_AMBIGUOUS` | 多组候选无法安全决策 | 工具链解析（恢复：用户选择一组 Node） |
 | `TOOLCHAIN_PERMISSION_DENIED` | 文件或子进程权限不足 | 工具链解析/验证（恢复：调整权限/安装范围） |
+| `TOOLCHAIN_STORE_INVALID` | toolchain.json 损坏、非法或 schema 不兼容，处于只读保护态 | 恢复自动检测前禁止自动覆盖和接入写操作 |
 | `EXECUTABLE_TIMEOUT` | 候选验证/命令执行超时 | 工具链验证、Adapter 命令（恢复：选择其他路径/查看诊断） |
 | `INTERNAL` | 内部异常 | 兜底（含 BLE 下发失败） |
 

@@ -35,3 +35,12 @@
 - `src-tauri` 单元测试：schema 兼容（未知字段/坏版本/相对路径 override）、`.cmd` shim 解析、候选去重与版本目录上限、超时/截断/非零退出、家目录脱敏、兼容范围择版、override 失败不回退、解析器真实执行冒烟。
 - `pnpm check` / `pnpm typecheck` / `pnpm build` / `cargo test`（core）全部通过。
 - Windows 实机冒烟（注册表发现、`.cmd`、空格/中文路径）与三平台版本管理器回归按设计方案 §14.2/§14.3 在 CI 实机覆盖。
+
+## 追加决策：核心执行不变量收敛（2026-08-30）
+
+实现复核后追加以下 MUST，不改写上方历史记录：
+
+1. `detect/install/uninstall/doctor` 等 Adapter 管理命令只能消费一次 ToolchainService 解析得到的 `ResolvedToolchain`，并通过 ProcessRunner 执行；`AILIGHT_ADAPTER_BIN` 仅作为开发候选参与同一解析链，禁止直接执行旁路。
+2. 损坏、非法或高于当前 schema 的 `toolchain.json` 进入 `store_invalid` 只读保护态。自动探测可以提供诊断，但不得覆盖原文件或执行接入写操作；只有用户明确“恢复自动检测”才允许重建。
+3. 所有 Node/npm/Adapter 子进程统一使用清理后的 ProcessRunner 环境；移除 `NODE_OPTIONS` 与 `NPM_CONFIG_*`，使用参数数组、超时与输出上限。达到输出上限后继续排空管道，只停止累积，避免 EPIPE 或子进程异常退出。
+4. ToolchainStatus 每个状态都必须存在 UI 恢复动作；`adapter_incompatible` 进入“确认并升级”链，`store_invalid` 进入“恢复自动检测”链，不允许仅显示不可操作错误。

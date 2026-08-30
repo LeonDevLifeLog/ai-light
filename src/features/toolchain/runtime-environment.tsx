@@ -38,6 +38,8 @@ export function toolchainStateCopy(state: ToolchainStatus["state"]): {
       return { label: "存在多组候选", tone: "warning" };
     case "permission_denied":
       return { label: "权限不足", tone: "danger" };
+    case "store_invalid":
+      return { label: "配置需要恢复", tone: "danger" };
     default:
       return { label: state, tone: "warning" };
   }
@@ -79,6 +81,10 @@ export function sourceLabel(source: string | null): string {
     return "—";
   }
   return sourceLabels[source] ?? source;
+}
+
+function canResetToolchain(status: ToolchainStatus): boolean {
+  return status.mode === "manual" || status.state === "store_invalid";
 }
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -183,11 +189,16 @@ export function RuntimeEnvironmentCard({
   }
   const { label, tone } = toolchainStateCopy(status.state);
   const blocked = blockingTool(status);
-  const blockingIssue: ToolchainIssue | undefined = status.issues.find(
-    (issue) =>
-      blocked != null &&
-      (issue.tool === blocked || issue.code === "TOOLCHAIN_OVERRIDE_INVALID")
+  const storeIssue = status.issues.find(
+    (issue) => issue.code === "TOOLCHAIN_STORE"
   );
+  const blockingIssue: ToolchainIssue | undefined =
+    status.issues.find(
+      (issue) =>
+        blocked != null &&
+        (issue.tool === blocked || issue.code === "TOOLCHAIN_OVERRIDE_INVALID")
+    ) ?? storeIssue;
+  const resetAvailable = canResetToolchain(status);
   const needsRecovery =
     status.state !== "ready" &&
     status.state !== "adapter_missing" &&
@@ -221,7 +232,7 @@ export function RuntimeEnvironmentCard({
               "AI-Light 已搜索系统 PATH、Node.js 安装信息与常见版本管理器目录。"}
           </p>
           <div className="toolchain-recovery">
-            {blocked ? (
+            {blocked && status.state !== "store_invalid" ? (
               <ActionButton
                 busy={checking}
                 onClick={() => onSelect({ kind: blocked })}
@@ -230,7 +241,7 @@ export function RuntimeEnvironmentCard({
                 选择 {toolLabels[blocked]} 路径
               </ActionButton>
             ) : null}
-            {status.mode === "manual" ? (
+            {resetAvailable ? (
               <ActionButton busy={checking} onClick={onReset}>
                 恢复自动检测
               </ActionButton>
@@ -250,7 +261,7 @@ export function RuntimeEnvironmentCard({
             检测模式：{status.mode === "manual" ? "手动（存在覆盖项）" : "自动"}
             · 检测时间 {status.checkedAt}
           </p>
-          {status.mode === "manual" ? (
+          {resetAvailable ? (
             <ActionButton busy={checking} onClick={onReset} tone="ghost">
               恢复自动检测
             </ActionButton>

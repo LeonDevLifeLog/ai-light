@@ -43,7 +43,12 @@ pub fn node_candidates() -> Vec<Candidate> {
 
     // ---- 注册表 / 官方安装器（rank 40） ----
     for path in registry_node_install_paths() {
-        discovery::push_if_file(&mut out, path.join(&exe), sources::WINDOWS_REGISTRY, discovery::rank::REGISTRY);
+        discovery::push_if_file(
+            &mut out,
+            path.join(&exe),
+            sources::WINDOWS_REGISTRY,
+            discovery::rank::REGISTRY,
+        );
     }
     for base in [
         env_dir_join("ProgramFiles", "nodejs"),
@@ -122,8 +127,11 @@ pub fn node_candidates() -> Vec<Candidate> {
 pub fn os_query_candidates(name: &str) -> Vec<Candidate> {
     let mut cmd = std::process::Command::new("where.exe");
     cmd.arg(name);
-    let Ok(captured) = super::validate::run_captured(&mut cmd, super::validate::VERSION_TIMEOUT, super::validate::OUTPUT_CAP)
-    else {
+    let Ok(captured) = super::validate::run_captured(
+        &mut cmd,
+        super::validate::VERSION_TIMEOUT,
+        super::validate::OUTPUT_CAP,
+    ) else {
         return Vec::new();
     };
     if !captured.success() {
@@ -136,9 +144,8 @@ pub fn os_query_candidates(name: &str) -> Vec<Candidate> {
         .filter(|line| !line.is_empty())
         .filter_map(|line| {
             let path = PathBuf::from(line);
-            path.is_file().then(|| {
-                Candidate::new(path, sources::OS_QUERY, discovery::rank::OS_QUERY)
-            })
+            path.is_file()
+                .then(|| Candidate::new(path, sources::OS_QUERY, discovery::rank::OS_QUERY))
         })
         .collect()
 }
@@ -148,7 +155,9 @@ fn registry_node_install_paths() -> Vec<PathBuf> {
     let mut out = Vec::new();
     #[cfg(windows)]
     {
-        use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_32KEY, KEY_WOW64_64KEY};
+        use winreg::enums::{
+            HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_32KEY, KEY_WOW64_64KEY,
+        };
         use winreg::RegKey;
         for hive in [HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER] {
             for view in [KEY_READ | KEY_WOW64_64KEY, KEY_READ | KEY_WOW64_32KEY] {

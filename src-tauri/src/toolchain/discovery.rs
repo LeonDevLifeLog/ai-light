@@ -80,7 +80,8 @@ pub fn find_on_path(name: &str) -> Vec<Candidate> {
         .into_iter()
         .filter_map(|dir| {
             let path = dir.join(&exe);
-            path.is_file().then(|| Candidate::new(path, sources::PROCESS_PATH, rank::PROCESS_PATH))
+            path.is_file()
+                .then(|| Candidate::new(path, sources::PROCESS_PATH, rank::PROCESS_PATH))
         })
         .collect()
 }
@@ -148,7 +149,12 @@ pub fn dedup(mut candidates: Vec<Candidate>) -> Vec<Candidate> {
 /// npm 全局安装的包内脚本绝对路径（设计方案 §6.5 第 3 条）
 pub fn adapter_script_in_prefix(prefix: &Path) -> PathBuf {
     if cfg!(windows) {
-        prefix.join("node_modules").join("@ai-light").join("adapter").join("dist").join("cli.js")
+        prefix
+            .join("node_modules")
+            .join("@ai-light")
+            .join("adapter")
+            .join("dist")
+            .join("cli.js")
     } else {
         prefix.join("lib/node_modules/@ai-light/adapter/dist/cli.js")
     }
@@ -170,7 +176,9 @@ pub fn npm_cli_in_node_tree(node_exe: &Path) -> Option<PathBuf> {
         node_dir.join("node_modules/npm/bin/npm-cli.js")
     } else {
         // /usr/bin/node → /usr/lib/...；/opt/homebrew/bin/node → /opt/homebrew/lib/...
-        node_dir.parent()?.join("lib/node_modules/npm/bin/npm-cli.js")
+        node_dir
+            .parent()?
+            .join("lib/node_modules/npm/bin/npm-cli.js")
     };
     cli.is_file().then_some(cli)
 }
@@ -267,14 +275,25 @@ mod tests {
         for index in 0..(MAX_VERSION_DIRS + 10) {
             std::fs::create_dir_all(base.join(format!("v9.{index}.0"))).unwrap();
         }
-        assert_eq!(version_dirs(&base, |name| name.starts_with('v')).len(), MAX_VERSION_DIRS);
+        assert_eq!(
+            version_dirs(&base, |name| name.starts_with('v')).len(),
+            MAX_VERSION_DIRS
+        );
         let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
     fn dedup_keeps_higher_rank_and_is_deterministic() {
-        let dup_a = Candidate::new(PathBuf::from("/opt/node"), sources::PROCESS_PATH, rank::PROCESS_PATH);
-        let dup_b = Candidate::new(PathBuf::from("/opt/node"), sources::COMMON_DIRECTORY, rank::REGISTRY);
+        let dup_a = Candidate::new(
+            PathBuf::from("/opt/node"),
+            sources::PROCESS_PATH,
+            rank::PROCESS_PATH,
+        );
+        let dup_b = Candidate::new(
+            PathBuf::from("/opt/node"),
+            sources::COMMON_DIRECTORY,
+            rank::REGISTRY,
+        );
         let other = Candidate::new(
             PathBuf::from("/usr/bin/node"),
             sources::COMMON_DIRECTORY,
@@ -292,7 +311,8 @@ mod tests {
         let content = "@ECHO off\r\nGOTO start\r\n:start\r\nSETLOCAL\r\n\
             IF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n) ELSE (\r\n)\
             \r\n\"%_prog%\" \"%dp0%\\node_modules\\npm\\bin\\npm-cli.js\" %*\r\n";
-        let target = parse_cmd_shim_target(content, Path::new("C:\\Program Files\\nodejs")).unwrap();
+        let target =
+            parse_cmd_shim_target(content, Path::new("C:\\Program Files\\nodejs")).unwrap();
         assert_eq!(
             target,
             PathBuf::from("C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js")
@@ -301,7 +321,10 @@ mod tests {
 
     #[test]
     fn parse_cmd_shim_ignores_comments_and_non_js() {
-        assert_eq!(parse_cmd_shim_target("REM nothing here", Path::new("/x")), None);
+        assert_eq!(
+            parse_cmd_shim_target("REM nothing here", Path::new("/x")),
+            None
+        );
         assert_eq!(
             parse_cmd_shim_target("node \"%~dp0\\bin\\run.js\" %*", Path::new("C:\\tools")),
             Some(PathBuf::from("C:\\tools\\bin\\run.js"))
@@ -312,7 +335,9 @@ mod tests {
     fn adapter_prefix_paths_follow_platform_layout() {
         let prefix = Path::new("/usr");
         let script = adapter_script_in_prefix(prefix);
-        assert!(script.to_string_lossy().contains("node_modules/@ai-light/adapter/dist/cli.js"));
+        assert!(script
+            .to_string_lossy()
+            .contains("node_modules/@ai-light/adapter/dist/cli.js"));
         let launcher = adapter_launcher_in_prefix(prefix);
         assert!(launcher.to_string_lossy().ends_with("bin/ailight-adapter"));
     }

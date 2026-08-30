@@ -7,6 +7,14 @@ use std::path::{Path, PathBuf};
 
 use super::model::{ToolchainDocument, TOOLCHAIN_SCHEMA_VERSION};
 
+/// 加载后的持久化策略。损坏或来自更高 schema 的文件保持只读，直到用户明确恢复。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoadedDocument {
+    pub doc: ToolchainDocument,
+    pub warning: Option<String>,
+    pub write_protected: bool,
+}
+
 /// toolchain.json 路径
 pub fn toolchain_path() -> Result<PathBuf, String> {
     Ok(crate::storage::ai_light_home()?.join("toolchain.json"))
@@ -49,26 +57,32 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 }
 
 /// 加载结果：文档 + 可恢复告警。文件缺失 → 默认文档（首次升级，设计方案 §13.1）。
-pub fn load() -> Result<(ToolchainDocument, Option<String>), String> {
+pub fn load() -> Result<LoadedDocument, String> {
     let path = toolchain_path()?;
     load_from(&path)
 }
 
-pub fn load_from(path: &Path) -> Result<(ToolchainDocument, Option<String>), String> {
+pub fn load_from(path: &Path) -> Result<LoadedDocument, String> {
     if !path.exists() {
-        return Ok((ToolchainDocument::new(), None));
+        return Ok(LoadedDocument {
+            doc: ToolchainDocument::new(),
+            warning: None,
+            write_protected: false,
+        });
     }
     let content =
         std::fs::read_to_string(path).map_err(|e| format!("读取 toolchain.json 失败: {e}"))?;
     match parse_document(&content) {
         Ok(mut doc) => {
             let mut warning = None;
+            let mut write_protected = false;
             if doc.version != TOOLCHAIN_SCHEMA_VERSION {
                 warning = Some(format!(
                     "toolchain.json schema 版本 {} 不受支持（当前 {}），已忽略缓存",
                     doc.version, TOOLCHAIN_SCHEMA_VERSION
                 ));
                 doc = ToolchainDocument::new();
+                write_protected = true;
             }
             // 路径必须为绝对（设计方案 §5.2：不做 ~ / 环境变量展开）；
             // 非绝对 override 视为无效意图并告警（不静默删除，仅本次忽略）。
@@ -83,16 +97,22 @@ pub fn load_from(path: &Path) -> Result<(ToolchainDocument, Option<String>), Str
                     }
                     warning = Some(format!("{kind} override 不是绝对路径，已忽略: {v}"));
                     *value = None;
+                    write_protected = true;
                 }
             }
-            Ok((doc, warning))
+            Ok(LoadedDocument {
+                doc,
+                warning,
+                write_protected,
+            })
         }
-        Err(error) => Ok((
-            ToolchainDocument::new(),
-            Some(format!(
+        Err(error) => Ok(LoadedDocument {
+            doc: ToolchainDocument::new(),
+            warning: Some(format!(
                 "toolchain.json 无法解析，已按默认配置继续（原文件未修改）: {error}"
             )),
-        )),
+            write_protected: true,
+        }),
     }
 }
 
@@ -140,9 +160,10 @@ mod tests {
     #[test]
     fn load_missing_file_returns_default_without_warning() {
         let dir = temp_dir("missing");
-        let (doc, warning) = load_from(&dir.join("toolchain.json")).unwrap();
-        assert_eq!(doc, ToolchainDocument::new());
-        assert!(warning.is_none());
+        let loaded = load_from(&dir.join("toolchain.json")).unwrap();
+        assert_eq!(loaded.doc, ToolchainDocument::new());
+        assert!(loaded.warning.is_none());
+        assert!(!loaded.write_protected);
     }
 
     #[test]
@@ -150,9 +171,10 @@ mod tests {
         let dir = temp_dir("corrupt");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("toolchain.json"), "{broken").unwrap();
-        let (doc, warning) = load_from(&dir.join("toolchain.json")).unwrap();
-        assert_eq!(doc, ToolchainDocument::new());
-        assert!(warning.unwrap().contains("无法解析"));
+        let loaded = load_from(&dir.join("toolchain.json")).unwrap();
+        assert_eq!(loaded.doc, ToolchainDocument::new());
+        assert!(loaded.warning.unwrap().contains("无法解析"));
+        assert!(loaded.write_protected);
         assert_eq!(
             std::fs::read_to_string(dir.join("toolchain.json")).unwrap(),
             "{broken"
@@ -169,9 +191,24 @@ mod tests {
             r#"{"version":1,"mode":"manual","overrides":{"node":"node.exe"}}"#,
         )
         .unwrap();
-        let (doc, warning) = load_from(&dir.join("toolchain.json")).unwrap();
-        assert!(doc.overrides.node.is_none());
-        assert!(warning.unwrap().contains("不是绝对路径"));
+        let loaded = load_from(&dir.join("toolchain.json")).unwrap();
+        assert!(loaded.doc.overrides.node.is_none());
+        assert!(loaded.warning.unwrap().contains("不是绝对路径"));
+        assert!(loaded.write_protected);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_future_schema_is_write_protected_and_keeps_file() {
+        let dir = temp_dir("future");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("toolchain.json");
+        let original = r#"{"version":99,"futureField":true}"#;
+        std::fs::write(&path, original).unwrap();
+        let loaded = load_from(&path).unwrap();
+        assert!(loaded.write_protected);
+        assert!(loaded.warning.unwrap().contains("不受支持"));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -184,9 +221,10 @@ mod tests {
         let raw = std::fs::read_to_string(dir.join("toolchain.json")).unwrap();
         assert!(raw.contains("\"version\": 1"));
         assert!(raw.contains("\"mode\": \"manual\""));
-        let (back, warning) = load_from(&dir.join("toolchain.json")).unwrap();
-        assert_eq!(back, doc);
-        assert!(warning.is_none());
+        let loaded = load_from(&dir.join("toolchain.json")).unwrap();
+        assert_eq!(loaded.doc, doc);
+        assert!(loaded.warning.is_none());
+        assert!(!loaded.write_protected);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

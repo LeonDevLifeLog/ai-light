@@ -9,24 +9,22 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use super::model::{ValidatedAdapter, ValidatedNpm, ValidatedNode};
+use super::model::{ValidatedAdapter, ValidatedNode, ValidatedNpm};
 use super::validate::{run_captured, Captured, INSTALL_TIMEOUT, VERSION_TIMEOUT};
 
 /// 构造清理后的环境（继承基础环境，仅移除受污染键）
 pub fn apply_clean_env(cmd: &mut Command) {
+    cmd.env_remove("NODE_OPTIONS");
     let dirty: Vec<String> = std::env::vars_os()
         .filter_map(|(key, _)| key.to_str().map(str::to_string))
-        .filter(|key| {
-            key.eq_ignore_ascii_case("NODE_OPTIONS")
-                || key.to_ascii_uppercase().starts_with("NPM_CONFIG_")
-        })
+        .filter(|key| key.to_ascii_uppercase().starts_with("NPM_CONFIG_"))
         .collect();
     for key in dirty {
         cmd.env_remove(&key);
     }
 }
 
-fn base_command(executable: &Path) -> Command {
+pub fn clean_command(executable: &Path) -> Command {
     let mut cmd = Command::new(executable);
     apply_clean_env(&mut cmd);
     cmd
@@ -35,29 +33,60 @@ fn base_command(executable: &Path) -> Command {
 /// `<node> <npm-cli.js> <args...>`；无法定位 npm-cli.js 时退回平台 launcher
 /// （设计方案 §6.4：只有无法解析时才使用 launcher，args 仍为数组；
 /// Windows `.cmd` 经 std 受控转义执行，不手工拼接 shell 字符串）
-pub fn run_npm(node: &ValidatedNode, npm: &ValidatedNpm, args: &[&str], timeout: Duration) -> std::io::Result<Captured> {
+pub fn run_npm(
+    node: &ValidatedNode,
+    npm: &ValidatedNpm,
+    args: &[&str],
+    timeout: Duration,
+) -> std::io::Result<Captured> {
     match &npm.cli_script {
-        Some(cli) => run_captured(base_command(&node.path).arg(cli).args(args), timeout, super::validate::OUTPUT_CAP),
-        None => run_captured(base_command(&npm.launcher_path()).args(args), timeout, super::validate::OUTPUT_CAP),
+        Some(cli) => run_captured(
+            clean_command(&node.path).arg(cli).args(args),
+            timeout,
+            super::validate::OUTPUT_CAP,
+        ),
+        None => run_captured(
+            clean_command(&npm.launcher_path()).args(args),
+            timeout,
+            super::validate::OUTPUT_CAP,
+        ),
     }
 }
 
 /// `<node> <adapter-cli.js> <args...>`（设计方案 §6.5：统一稳定执行入口）
-pub fn run_adapter(node: &ValidatedNode, adapter: &ValidatedAdapter, args: &[&str], timeout: Duration) -> std::io::Result<Captured> {
+pub fn run_adapter(
+    node: &ValidatedNode,
+    adapter: &ValidatedAdapter,
+    args: &[&str],
+    timeout: Duration,
+) -> std::io::Result<Captured> {
     run_captured(
-        base_command(&node.path).arg(&adapter.script).args(args),
+        clean_command(&node.path).arg(&adapter.script).args(args),
         timeout,
         super::validate::OUTPUT_CAP,
     )
 }
 
 /// `npm view <pkg> versions --json`（安装前解析兼容范围内的明确版本）
-pub fn npm_view_versions(node: &ValidatedNode, npm: &ValidatedNpm, package: &str) -> std::io::Result<Captured> {
-    run_npm(node, npm, &["view", package, "versions", "--json"], VERSION_TIMEOUT.max(Duration::from_secs(30)))
+pub fn npm_view_versions(
+    node: &ValidatedNode,
+    npm: &ValidatedNpm,
+    package: &str,
+) -> std::io::Result<Captured> {
+    run_npm(
+        node,
+        npm,
+        &["view", package, "versions", "--json"],
+        VERSION_TIMEOUT.max(Duration::from_secs(30)),
+    )
 }
 
 /// `npm install --global <pkg>@<version>`（设计方案 §9.1：指定明确版本）
-pub fn npm_install_global(node: &ValidatedNode, npm: &ValidatedNpm, target: &str) -> std::io::Result<Captured> {
+pub fn npm_install_global(
+    node: &ValidatedNode,
+    npm: &ValidatedNpm,
+    target: &str,
+) -> std::io::Result<Captured> {
     run_npm(node, npm, &["install", "--global", target], INSTALL_TIMEOUT)
 }
 
@@ -85,7 +114,13 @@ mod tests {
     #[test]
     fn clean_env_removes_node_and_npm_config_keys() {
         // 验证过滤规则本身（大小写不敏感、前缀匹配）
-        let keys = ["NODE_OPTIONS", "NPM_CONFIG_REGISTRY", "npm_config_prefix", "PATH", "HOME"];
+        let keys = [
+            "NODE_OPTIONS",
+            "NPM_CONFIG_REGISTRY",
+            "npm_config_prefix",
+            "PATH",
+            "HOME",
+        ];
         let removed: Vec<&str> = keys
             .iter()
             .copied()
@@ -94,7 +129,19 @@ mod tests {
                     || key.to_ascii_uppercase().starts_with("NPM_CONFIG_")
             })
             .collect();
-        assert_eq!(removed, vec!["NODE_OPTIONS", "NPM_CONFIG_REGISTRY", "npm_config_prefix"]);
+        assert_eq!(
+            removed,
+            vec!["NODE_OPTIONS", "NPM_CONFIG_REGISTRY", "npm_config_prefix"]
+        );
+
+        let cmd = clean_command(Path::new("node"));
+        let removed_from_command: Vec<String> = cmd
+            .get_envs()
+            .filter_map(|(key, value)| value.is_none().then(|| key.to_string_lossy().to_string()))
+            .collect();
+        assert!(removed_from_command
+            .iter()
+            .any(|key| key.eq_ignore_ascii_case("NODE_OPTIONS")));
     }
 
     #[test]

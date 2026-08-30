@@ -110,7 +110,8 @@ export type ToolchainState =
   | "adapter_incompatible"
   | "invalid_override"
   | "ambiguous"
-  | "permission_denied";
+  | "permission_denied"
+  | "store_invalid";
 
 export interface ToolStatusEntry {
   overridden: boolean;

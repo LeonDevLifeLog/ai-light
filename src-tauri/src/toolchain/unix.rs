@@ -40,7 +40,10 @@ pub fn node_candidates() -> Vec<Candidate> {
         );
     }
     // Volta / asdf / mise 的 shim 即当前激活入口
-    for shim_dir in [volta_bin(), asdf_shims(), mise_shims()].into_iter().flatten() {
+    for shim_dir in [volta_bin(), asdf_shims(), mise_shims()]
+        .into_iter()
+        .flatten()
+    {
         discovery::push_if_file(
             &mut out,
             shim_dir.join(&exe),
@@ -61,9 +64,9 @@ pub fn node_candidates() -> Vec<Candidate> {
 
     // ---- 其他版本管理器版本目录（rank 50，数量受限） ----
     for base in nvm_bases() {
-        for version in discovery::version_dirs(&base.join("versions/node"), |name| {
-            name.starts_with('v')
-        }) {
+        for version in
+            discovery::version_dirs(&base.join("versions/node"), |name| name.starts_with('v'))
+        {
             discovery::push_if_file(
                 &mut out,
                 version.join("bin").join(&exe),
@@ -109,7 +112,10 @@ fn nvm_active_node() -> Option<PathBuf> {
         if version.is_empty() {
             continue;
         }
-        let candidate = base.join("versions/node").join(format!("v{version}")).join("bin/node");
+        let candidate = base
+            .join("versions/node")
+            .join(format!("v{version}"))
+            .join("bin/node");
         if candidate.is_file() {
             return Some(candidate);
         }

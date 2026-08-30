@@ -48,11 +48,18 @@ const integrations: Integration[] = [
   },
 ];
 
-function connectButtonLabel(busy: boolean, confirmPending: boolean): string {
+function connectButtonLabel(
+  busy: boolean,
+  confirmPending: boolean,
+  upgradePending: boolean
+): string {
   if (busy) {
     return "正在检查运行环境";
   }
-  return confirmPending ? "确认并安装" : "连接";
+  if (!confirmPending) {
+    return "连接";
+  }
+  return upgradePending ? "确认并升级" : "确认并安装";
 }
 
 function IntegrationRow({
@@ -63,6 +70,7 @@ function IntegrationRow({
   onConnect,
   onDisconnect,
   status,
+  upgradePending,
 }: {
   busy: boolean;
   confirmPending: boolean;
@@ -71,6 +79,7 @@ function IntegrationRow({
   onConnect: (integration: Integration) => void;
   onDisconnect: (integration: Integration) => void;
   status?: IntegrationStatus;
+  upgradePending: boolean;
 }) {
   const connected = status?.connected ?? false;
   return (
@@ -105,17 +114,20 @@ function IntegrationRow({
                 tone="primary"
               >
                 <PlugZap size={16} />
-                {connectButtonLabel(busy, confirmPending)}
+                {connectButtonLabel(busy, confirmPending, upgradePending)}
               </ActionButton>
             )}
           </div>
         </div>
         <p>{integration.description}</p>
         {confirmPending ? (
-          <InlineAlert title="将通过 npm 安装 @ai-light/adapter" tone="info">
+          <InlineAlert
+            title={`将通过 npm ${upgradePending ? "升级" : "安装"} @ai-light/adapter`}
+            tone="info"
+          >
             <p>
               即将使用 {status?.toolchainSummary ?? "已检测的 Node.js 与 npm"}{" "}
-              全局安装 AI-Light Adapter，随后注入
+              全局{upgradePending ? "升级" : "安装"} AI-Light Adapter，随后注入
               Hook。安装过程不提升权限、不修改系统 PATH。
             </p>
           </InlineAlert>
@@ -198,8 +210,11 @@ export function IntegrationsPage() {
       // 连接前先检查运行环境（设计方案 §8.2.2）
       const status = await api.getToolchainStatus(true);
       setToolchain(status);
-      if (status.state === "adapter_missing") {
-        // Adapter 缺失：内联确认后由 install_integration 经 npm 安装（§8.2.4）
+      if (
+        status.state === "adapter_missing" ||
+        status.state === "adapter_incompatible"
+      ) {
+        // Adapter 缺失或不兼容：确认后由 install_integration 安装明确兼容版本。
         setConfirmingTool(integration.id);
         return;
       }
@@ -351,6 +366,10 @@ export function IntegrationsPage() {
             }
             onDisconnect={(item) => runAsync(disconnect(item))}
             status={statuses[integration.id]}
+            upgradePending={
+              confirmingTool === integration.id &&
+              toolchain?.state === "adapter_incompatible"
+            }
           />
         ))}
       </div>

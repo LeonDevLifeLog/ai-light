@@ -21,16 +21,15 @@ mod unix;
 mod windows;
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Arc;
 
-use model::states;
 use model::sources;
+use model::states;
 use model::{
     build_summary, sanitize_home, AdapterStatusEntry, ResolvedToolchain, SelectedAdapter,
-    SelectedTool, SelectedToolchain, ToolKind, ToolchainDocument, ToolchainIssue, ToolchainMode,
-    ToolchainOverrides, ToolchainStatus, ToolStatusEntry, ValidatedAdapter, ValidatedNpm,
-    ValidatedNode, ADAPTER_COMPAT_RANGE, ADAPTER_PACKAGE,
+    SelectedTool, SelectedToolchain, ToolKind, ToolStatusEntry, ToolchainDocument, ToolchainIssue,
+    ToolchainMode, ToolchainOverrides, ToolchainStatus, ValidatedAdapter, ValidatedNode,
+    ValidatedNpm, ADAPTER_COMPAT_RANGE, ADAPTER_PACKAGE,
 };
 
 /// Node 最低主版本（设计方案 §2.2：不支持 Node 20 以下）
@@ -45,6 +44,7 @@ pub enum ToolchainError {
         reason: String,
     },
     Resolution(Box<ToolchainStatus>),
+    StoreProtected(String),
     Io(String),
 }
 
@@ -55,6 +55,7 @@ pub struct ToolchainService {
 struct ServiceState {
     doc: ToolchainDocument,
     warning: Option<String>,
+    write_protected: bool,
     cache: Option<Cached>,
 }
 
@@ -82,14 +83,19 @@ pub fn now_ms() -> u64 {
 impl ToolchainService {
     /// 加载持久化文档（首次升级无 toolchain.json → 默认文档，设计方案 §13.1）
     pub fn new() -> Self {
-        let (doc, warning) = store::load().unwrap_or_else(|error| {
+        let loaded = store::load().unwrap_or_else(|error| {
             tracing::warn!("toolchain.json 读取失败，按默认配置继续: {error}");
-            (ToolchainDocument::new(), Some(error))
+            store::LoadedDocument {
+                doc: ToolchainDocument::new(),
+                warning: Some(error),
+                write_protected: true,
+            }
         });
         Self {
             inner: tokio::sync::Mutex::new(ServiceState {
-                doc,
-                warning,
+                doc: loaded.doc,
+                warning: loaded.warning,
+                write_protected: loaded.write_protected,
                 cache: None,
             }),
         }
@@ -110,14 +116,19 @@ impl ToolchainService {
         }
         let doc = state.doc.clone();
         let warning = state.warning.clone();
-        let outcome =
-            tauri::async_runtime::spawn_blocking(move || resolve(&doc, warning.as_deref()))
-                .await
-                .unwrap_or_else(|error| {
-                    tracing::error!("工具链解析任务失败: {error}");
-                    emergency_outcome(&error.to_string())
-                });
-        if let Some(new_doc) = outcome.persist_doc {
+        let write_protected = state.write_protected;
+        let outcome = tauri::async_runtime::spawn_blocking(move || {
+            resolve(&doc, warning.as_deref(), write_protected)
+        })
+        .await
+        .unwrap_or_else(|error| {
+            tracing::error!("工具链解析任务失败: {error}");
+            emergency_outcome(&error.to_string())
+        });
+        if let Some(new_doc) = outcome
+            .persist_doc
+            .filter(|_| persistence_allowed(state.write_protected))
+        {
             match store::save(&new_doc) {
                 Ok(()) => state.doc = new_doc,
                 Err(error) => tracing::warn!("toolchain.json 写入失败（保留内存态）: {error}"),
@@ -140,6 +151,9 @@ impl ToolchainService {
         require_adapter: bool,
     ) -> Result<Arc<ResolvedToolchain>, ToolchainError> {
         let status = self.status(true).await;
+        if status.state == states::STORE_INVALID {
+            return Err(ToolchainError::StoreProtected(status.summary));
+        }
         let resolved = self
             .inner
             .lock()
@@ -162,6 +176,7 @@ impl ToolchainService {
         &self,
         patch: ToolchainOverrides,
     ) -> Result<ToolchainStatus, ToolchainError> {
+        self.ensure_store_writable().await?;
         let mut provided: Vec<(ToolKind, String)> = Vec::new();
         if let Some(path) = &patch.node {
             provided.push((ToolKind::Node, path.clone()));
@@ -236,6 +251,7 @@ impl ToolchainService {
             let mut state = self.inner.lock().await;
             state.doc = new_doc;
             state.warning = None;
+            state.write_protected = false;
             state.cache = None;
         }
         Ok(self.status(true).await)
@@ -248,6 +264,7 @@ impl ToolchainService {
         kind: ToolKind,
         picked: PathBuf,
     ) -> Result<ToolchainStatus, ToolchainError> {
+        self.ensure_store_writable().await?;
         let path =
             std::fs::canonicalize(&picked).map_err(|error| ToolchainError::InvalidOverride {
                 kind,
@@ -265,8 +282,7 @@ impl ToolchainService {
         let new_doc = {
             let state = self.inner.lock().await;
             let mut doc = state.doc.clone();
-            doc.overrides
-                .set(kind, Some(path_text.clone()));
+            doc.overrides.set(kind, Some(path_text.clone()));
             doc.mode = ToolchainMode::Manual;
             doc
         };
@@ -285,6 +301,19 @@ impl ToolchainService {
         self.status(true).await
     }
 
+    async fn ensure_store_writable(&self) -> Result<(), ToolchainError> {
+        let state = self.inner.lock().await;
+        if state.write_protected {
+            return Err(ToolchainError::StoreProtected(
+                state
+                    .warning
+                    .clone()
+                    .unwrap_or_else(|| "工具链配置处于只读保护状态".to_string()),
+            ));
+        }
+        Ok(())
+    }
+
     /// 安装 Adapter（设计方案 §9.1：node + npm-cli + 明确版本；§17.3 不装 latest）
     pub async fn install_adapter(&self) -> Result<Arc<ResolvedToolchain>, ToolchainError> {
         let chain = self.resolved_for_write(false).await?;
@@ -297,9 +326,9 @@ impl ToolchainService {
         let captured = tauri::async_runtime::spawn_blocking(move || {
             runner::npm_install_global(&node, &npm, &package_in_task)
         })
-            .await
-            .map_err(|error| ToolchainError::Io(error.to_string()))?
-            .map_err(|error| ToolchainError::Io(format!("npm 无法启动: {error}")))?;
+        .await
+        .map_err(|error| ToolchainError::Io(error.to_string()))?
+        .map_err(|error| ToolchainError::Io(format!("npm 无法启动: {error}")))?;
         if !captured.success() {
             let home = dirs::home_dir();
             return Err(ToolchainError::Io(format!(
@@ -378,7 +407,9 @@ fn validate_candidate_blocking(
                 if validate::node_meets_gate(&version) {
                     None
                 } else {
-                    Some(format!("Node.js {version} 低于最低要求 20（设计方案 §2.2）"))
+                    Some(format!(
+                        "Node.js {version} 低于最低要求 20（设计方案 §2.2）"
+                    ))
                 }
             }
             Err(reason) => Some(reason),
@@ -441,7 +472,12 @@ fn collect_npm_candidates(
     }
     // 同族优先：选定 Node 安装树内的 npm-cli.js（设计方案 §6.4）
     if let Some(cli) = discovery::npm_cli_in_node_tree(&node.path) {
-        discovery::push_if_file(&mut out, cli, sources::SIBLING_OF_NODE, discovery::rank::SAME_FAMILY);
+        discovery::push_if_file(
+            &mut out,
+            cli,
+            sources::SIBLING_OF_NODE,
+            discovery::rank::SAME_FAMILY,
+        );
     }
     // canonicalize 后的 Node 树（symlink 场景，如 /usr/local/bin/node → Cellar）
     if let Ok(canonical) = std::fs::canonicalize(&node.path) {
@@ -468,8 +504,7 @@ fn volta_npm_candidates(node: &ValidatedNode) -> Vec<discovery::Candidate> {
     else {
         return Vec::new();
     };
-    let node_canonical =
-        std::fs::canonicalize(&node.path).unwrap_or_else(|_| node.path.clone());
+    let node_canonical = std::fs::canonicalize(&node.path).unwrap_or_else(|_| node.path.clone());
     let under_volta = node_canonical
         .to_string_lossy()
         .to_lowercase()
@@ -544,7 +579,7 @@ fn collect_adapter_candidates(
 // ---------- 验证 ----------
 
 fn validate_node_candidate(path: &Path) -> Result<semver::Version, String> {
-    let mut cmd = Command::new(path);
+    let mut cmd = runner::clean_command(path);
     cmd.arg("--version");
     let captured =
         validate::run_captured(&mut cmd, validate::VERSION_TIMEOUT, validate::OUTPUT_CAP)
@@ -566,8 +601,7 @@ enum NpmForm {
 }
 
 fn classify_npm_candidate(candidate: &Path) -> NpmForm {
-    let canonical =
-        std::fs::canonicalize(candidate).unwrap_or_else(|_| candidate.to_path_buf());
+    let canonical = std::fs::canonicalize(candidate).unwrap_or_else(|_| candidate.to_path_buf());
     if canonical
         .extension()
         .map(|ext| ext == "js")
@@ -603,8 +637,7 @@ fn validate_npm_candidate(node: &ValidatedNode, candidate: &Path) -> Result<Vali
         Some(cli) => run_npm_cli(&node.path, cli, &["--version"])?,
         None => {
             let launcher = launcher.as_ref().expect("cli 或 launcher 必有其一");
-            let mut cmd = Command::new(launcher);
-            runner::apply_clean_env(&mut cmd);
+            let mut cmd = runner::clean_command(launcher);
             cmd.arg("--version");
             validate::run_captured(&mut cmd, validate::VERSION_TIMEOUT, validate::OUTPUT_CAP)
                 .map_err(|error| format!("无法启动 npm launcher: {error}"))?
@@ -627,8 +660,7 @@ fn validate_npm_candidate(node: &ValidatedNode, candidate: &Path) -> Result<Vali
         Some(cli) => run_npm_cli(&node.path, cli, &["prefix", "--global"])?,
         None => {
             let launcher = launcher.as_ref().expect("cli 或 launcher 必有其一");
-            let mut cmd = Command::new(launcher);
-            runner::apply_clean_env(&mut cmd);
+            let mut cmd = runner::clean_command(launcher);
             cmd.args(["prefix", "--global"]);
             validate::run_captured(&mut cmd, validate::VERSION_TIMEOUT, validate::OUTPUT_CAP)
                 .map_err(|error| format!("无法启动 npm launcher: {error}"))?
@@ -658,8 +690,7 @@ fn validate_npm_candidate(node: &ValidatedNode, candidate: &Path) -> Result<Vali
 }
 
 fn run_npm_cli(node_path: &Path, cli: &Path, args: &[&str]) -> Result<validate::Captured, String> {
-    let mut cmd = Command::new(node_path);
-    runner::apply_clean_env(&mut cmd);
+    let mut cmd = runner::clean_command(node_path);
     cmd.arg(cli).args(args);
     validate::run_captured(&mut cmd, validate::VERSION_TIMEOUT, validate::OUTPUT_CAP)
         .map_err(|error| format!("无法用选定 Node 运行 npm-cli.js: {error}"))
@@ -668,8 +699,7 @@ fn run_npm_cli(node_path: &Path, cli: &Path, args: &[&str]) -> Result<validate::
 /// Node 安装树根（同族判定基准，设计方案 §6.4）
 /// Windows：nodejs 目录本身；unix：bin 的父目录（/usr/bin/node → /usr）
 fn node_install_root(node_exe: &Path) -> PathBuf {
-    let canonical =
-        std::fs::canonicalize(node_exe).unwrap_or_else(|_| node_exe.to_path_buf());
+    let canonical = std::fs::canonicalize(node_exe).unwrap_or_else(|_| node_exe.to_path_buf());
     match canonical.parent() {
         Some(dir) if cfg!(windows) => dir.to_path_buf(),
         Some(bin_dir) => bin_dir
@@ -680,12 +710,14 @@ fn node_install_root(node_exe: &Path) -> PathBuf {
     }
 }
 
-fn validate_adapter_script(node: &ValidatedNode, script: &Path) -> Result<ValidatedAdapter, String> {
+fn validate_adapter_script(
+    node: &ValidatedNode,
+    script: &Path,
+) -> Result<ValidatedAdapter, String> {
     if !script.is_file() {
         return Err("文件不存在".to_string());
     }
-    let mut cmd = Command::new(&node.path);
-    runner::apply_clean_env(&mut cmd);
+    let mut cmd = runner::clean_command(&node.path);
     cmd.arg(script).args(["version", "--json"]);
     let captured =
         validate::run_captured(&mut cmd, validate::VERSION_TIMEOUT, validate::OUTPUT_CAP)
@@ -731,8 +763,7 @@ fn validate_adapter_script(node: &ValidatedNode, script: &Path) -> Result<Valida
 
 /// launcher 反查实际脚本（设计方案 §6.5 第 4 条）
 fn adapter_script_from_launcher(launcher: &Path) -> Option<PathBuf> {
-    let canonical =
-        std::fs::canonicalize(launcher).unwrap_or_else(|_| launcher.to_path_buf());
+    let canonical = std::fs::canonicalize(launcher).unwrap_or_else(|_| launcher.to_path_buf());
     if canonical
         .extension()
         .map(|ext| ext == "js")
@@ -755,7 +786,11 @@ fn adapter_script_from_launcher(launcher: &Path) -> Option<PathBuf> {
 
 // ---------- 解析主流程 ----------
 
-fn resolve(doc: &ToolchainDocument, warning: Option<&str>) -> ResolveOutcome {
+fn resolve(
+    doc: &ToolchainDocument,
+    warning: Option<&str>,
+    write_protected: bool,
+) -> ResolveOutcome {
     let home = dirs::home_dir();
     let mut issues: Vec<ToolchainIssue> = Vec::new();
     if let Some(message) = warning {
@@ -771,17 +806,23 @@ fn resolve(doc: &ToolchainDocument, warning: Option<&str>) -> ResolveOutcome {
     let (npm_pick, adapter_pick) = match node_pick.resolved {
         Some(ref node) => {
             let npm = pick_npm(doc, node, &mut issues, home.as_deref());
-            let adapter = pick_adapter(doc, node, npm.resolved.as_ref(), &mut issues, home.as_deref());
+            let adapter = pick_adapter(
+                doc,
+                node,
+                npm.resolved.as_ref(),
+                &mut issues,
+                home.as_deref(),
+            );
             (npm, adapter)
         }
         None => (blocked_npm_pick(doc), blocked_adapter_pick(doc)),
     };
 
-    let overall = overall_state(
-        &node_pick.state,
-        &npm_pick.state,
-        &adapter_pick.state,
-    );
+    let overall = if write_protected {
+        states::STORE_INVALID.to_string()
+    } else {
+        overall_state(&node_pick.state, &npm_pick.state, &adapter_pick.state)
+    };
     let summary = build_summary(
         node_pick.resolved.as_ref(),
         npm_pick.resolved.as_ref(),
@@ -957,7 +998,8 @@ fn pick_node(
     if candidates.is_empty() {
         issues.push(issue(
             "NODE_NOT_FOUND",
-            "未在任何已知位置发现 Node.js（PATH、注册表、版本管理器与常见目录均未命中）".to_string(),
+            "未在任何已知位置发现 Node.js（PATH、注册表、版本管理器与常见目录均未命中）"
+                .to_string(),
             Some(ToolKind::Node),
             Some("安装 Node.js 20+，或点击「选择 Node」手动指定"),
         ));
@@ -990,10 +1032,7 @@ fn pick_node(
                         }),
                         entry: Some(ToolStatusEntry {
                             state: states::READY.to_string(),
-                            path: Some(sanitize_home(
-                                &candidate.path.display().to_string(),
-                                home,
-                            )),
+                            path: Some(sanitize_home(&candidate.path.display().to_string(), home)),
                             version: Some(version_text),
                             source: Some(candidate.source.to_string()),
                             overridden,
@@ -1029,10 +1068,7 @@ fn pick_node(
         }
     }
     let override_failed = doc.overrides.node.is_some()
-        && candidates
-            .first()
-            .map(|candidate| candidate.source)
-            == Some(sources::OVERRIDE);
+        && candidates.first().map(|candidate| candidate.source) == Some(sources::OVERRIDE);
     let state = if override_failed {
         issues.push(issue(
             "TOOLCHAIN_OVERRIDE_INVALID",
@@ -1142,10 +1178,7 @@ fn pick_npm(
         }
     }
     let override_failed = doc.overrides.npm.is_some()
-        && candidates
-            .first()
-            .map(|candidate| candidate.source)
-            == Some(sources::OVERRIDE);
+        && candidates.first().map(|candidate| candidate.source) == Some(sources::OVERRIDE);
     if override_failed {
         issues.push(issue(
             "TOOLCHAIN_OVERRIDE_INVALID",
@@ -1269,10 +1302,7 @@ fn pick_adapter(
         }
     }
     let override_failed = doc.overrides.adapter.is_some()
-        && candidates
-            .first()
-            .map(|candidate| candidate.source)
-            == Some(sources::OVERRIDE);
+        && candidates.first().map(|candidate| candidate.source) == Some(sources::OVERRIDE);
     if override_failed {
         issues.push(issue(
             "TOOLCHAIN_OVERRIDE_INVALID",
@@ -1292,7 +1322,10 @@ fn pick_adapter(
             Some(ToolKind::Adapter),
             Some("一键升级或选择其他版本"),
         ));
-        return placeholder(states::ADAPTER_INCOMPATIBLE, doc.overrides.adapter.is_some());
+        return placeholder(
+            states::ADAPTER_INCOMPATIBLE,
+            doc.overrides.adapter.is_some(),
+        );
     }
     issues.push(issue(
         "ADAPTER_NOT_FOUND",
@@ -1377,6 +1410,10 @@ fn fingerprints_match(cache: &Cached) -> bool {
     })
 }
 
+fn persistence_allowed(write_protected: bool) -> bool {
+    !write_protected
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1398,7 +1435,7 @@ mod tests {
             states::CHECKING,
         ];
         let doc = ToolchainDocument::new();
-        let outcome = resolve(&doc, None);
+        let outcome = resolve(&doc, None, false);
         assert!(KNOWN_STATES.contains(&outcome.status.state.as_str()));
         assert!(!outcome.status.summary.is_empty());
         assert!(!outcome.status.checked_at.is_empty());
@@ -1410,6 +1447,19 @@ mod tests {
             assert!(chain.adapter.is_some());
             assert!(outcome.persist_doc.is_some());
         }
+    }
+
+    #[test]
+    fn protected_store_surfaces_recovery_state_and_blocks_automatic_persistence() {
+        let doc = ToolchainDocument::new();
+        let outcome = resolve(&doc, Some("future schema"), true);
+        assert_eq!(outcome.status.state, states::STORE_INVALID);
+        assert!(outcome
+            .status
+            .issues
+            .iter()
+            .any(|issue| issue.code == "TOOLCHAIN_STORE"));
+        assert!(!persistence_allowed(true));
     }
 
     /// override 失败 → 不静默回退：状态 invalid_override（设计方案 §3.1）
@@ -1435,7 +1485,7 @@ mod tests {
         }
         let mut doc = ToolchainDocument::new();
         doc.overrides.node = Some(fake.display().to_string());
-        let outcome = resolve(&doc, None);
+        let outcome = resolve(&doc, None, false);
         assert_eq!(outcome.status.state, states::INVALID_OVERRIDE);
         assert!(outcome
             .status

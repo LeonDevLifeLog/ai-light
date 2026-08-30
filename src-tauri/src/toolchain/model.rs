@@ -165,6 +165,7 @@ pub mod states {
     pub const INVALID_OVERRIDE: &str = "invalid_override";
     pub const AMBIGUOUS: &str = "ambiguous";
     pub const PERMISSION_DENIED: &str = "permission_denied";
+    pub const STORE_INVALID: &str = "store_invalid";
 }
 
 /// 候选来源标识（设计方案 §5.2 source / §15 可观测性）

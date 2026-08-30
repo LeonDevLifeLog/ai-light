@@ -56,19 +56,21 @@ pub fn stderr_summary(captured: &Captured, home: Option<&std::path::Path>) -> St
 fn read_capped(stream: &mut impl Read, cap: usize) -> (Vec<u8>, bool) {
     let mut buf = Vec::new();
     let mut chunk = [0u8; 8192];
+    let mut truncated = false;
     loop {
         match stream.read(&mut chunk) {
-            Ok(0) => return (buf, false),
+            Ok(0) => return (buf, truncated),
             Ok(n) => {
                 let remaining = cap.saturating_sub(buf.len());
                 if remaining == 0 {
-                    // 已达上限：继续排干直到 EOF/超时由外层超时兜底，但不再累积内存
-                    return (buf, true);
+                    // 达到上限后继续排空管道，避免子进程因 EPIPE/管道写满异常退出。
+                    truncated = true;
+                    continue;
                 }
                 let take = remaining.min(n);
                 buf.extend_from_slice(&chunk[..take]);
                 if take < n {
-                    return (buf, true);
+                    truncated = true;
                 }
             }
             Err(_) => return (buf, true),
@@ -217,6 +219,7 @@ mod tests {
         let captured = run_captured(&mut cmd, VERSION_TIMEOUT, 1024).unwrap();
         assert!(captured.truncated);
         assert!(captured.stdout.len() <= 1024);
+        assert!(captured.success());
     }
 
     #[test]
