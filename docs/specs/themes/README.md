@@ -7,7 +7,7 @@
 | 文件格式 | `.ailight-theme.json`（单文件，可分享/导入） |
 | 数量 | 6 套（随客户端编译进二进制分发） |
 
-> 所有主题遵守"主题集宪法"：**视觉强度严格对齐仲裁优先级 `ERROR > SUCCESS > WORKING > WAITING > IDLE`**——风格可换，语义强度层级不可破。IDLE 均不显式定义（内置熄灭语义）。
+> 所有主题遵守"主题集宪法"：**视觉强度严格对齐状态语义强度 `ERROR > SUCCESS > WORKING > WAITING > IDLE`**——风格可换，语义强度层级不可破。IDLE 均不显式定义（内置熄灭语义）。
 
 ---
 
@@ -15,7 +15,7 @@
 
 | 文件 | 主题名 | 风格 | 服务人群 | 主打硬件特性 |
 |---|---|---|---|---|
-| `default.ailight-theme.json` | Default 经典 | 均衡克制 | 大多数人 | TRIANGLE 呼吸 / CONSTANT 常亮 / SQUARE 闪烁 / 蜂鸣一声 |
+| `default.ailight-theme.json` | Default 经典 | 清晰通用 | 大多数人 | TRIANGLE 相位呼吸 / CONSTANT 常亮 / SQUARE 闪烁 / 蜂鸣一声 |
 | `minimal.ailight-theme.json` | Minimal 极简 | 单色白灰、几乎无动画、全静音 | 极简主义者、办公环境 | CONSTANT 为主 + 唯一慢呼吸（WAITING） |
 | `neon.ailight-theme.json` | Neon 霓虹 | 高饱和荧光、快节奏 | 电竞、科技感爱好者 | **SAW_UP 扫光跑马（相位 120°）+ 全套蜂鸣（SUCCESS 提示音 + ERROR 三连）** |
 | `nature.ailight-theme.json` | Nature 自然 | 低饱和大地色、超慢呼吸、长过渡 | 安静偏好者 | 最长过渡（800~1000ms）+ 最低蜂鸣音量 |
@@ -30,7 +30,7 @@
 | TRIANGLE 呼吸 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | SQUARE 闪烁 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | SAW_UP 扫光 | — | — | ✓ WORKING | — | — | — |
-| 相位跑马（120°） | — | — | ✓ | — | ✓ | — |
+| 相位跑马（120°） | ✓ WORKING | — | ✓ | — | ✓ | — |
 | 三灯独立异色 | — | — | — | — | ✓ | — |
 | 单灯（顶/底 null） | — | — | — | — | — | ✓ |
 | 蜂鸣（任意） | ✓ ERROR | — | ✓ SUCCESS+ERROR | ✓ ERROR | ✓ ERROR | ✓ ERROR |
@@ -53,10 +53,10 @@
 ### Default 经典
 | 状态 | 灯效 | 过渡 |
 |---|---|---|
-| WORKING | 三灯同相蓝呼吸 1200ms（#003366→#4A9EFF，60） | 300ms |
-| WAITING | 三灯同相琥珀慢呼吸 1800ms（#3D2B00→#FFB400，50） | 300ms |
-| SUCCESS | 三灯绿常亮 #00E676（70） | 500ms，hold 5s |
-| ERROR | 红闪 8 次 400ms → 红常亮 + 蜂鸣一声 | 0ms，驻留 |
+| WORKING | 三灯依次蓝呼吸 1200ms，相位 0/120/240（#003366→#4A9EFF，70） | 300ms |
+| WAITING | 三灯同相琥珀慢呼吸 1800ms（#3D2B00→#FFB400，60） | 300ms |
+| SUCCESS | 三灯绿常亮 #00E676（80） | 500ms，持续到下一状态 |
+| ERROR | 红闪 8 次 400ms → 红常亮（90）+ 蜂鸣一声 | 0ms，驻留 |
 
 ### Minimal 极简
 | 状态 | 灯效 | 过渡 |
