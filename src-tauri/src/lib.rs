@@ -10,7 +10,6 @@ use std::sync::{Arc, RwLock};
 use tauri::{Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 
-use ailight_core::arbiter::ArbitrationMode;
 use ailight_core::ble::DeviceIo;
 use ailight_core::config::{AppConfig, DEFAULT_PORT};
 use ailight_core::engine::Engine;
@@ -39,6 +38,7 @@ fn now_ms() -> u64 {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -82,9 +82,7 @@ pub fn run() {
             }
 
             // 共享状态 + 主题
-            let mode = ArbitrationMode::from_str(&config.arbitration_mode)
-                .unwrap_or(ArbitrationMode::Priority);
-            let shared = SharedState::new(env!("CARGO_PKG_VERSION"), mode, now_ms);
+            let shared = SharedState::new(env!("CARGO_PKG_VERSION"), now_ms);
             let theme = theme::load_builtin(&config.active_theme)
                 .or_else(|| theme::load_builtin("default"))
                 .expect("内置 default 主题必须合法");
@@ -255,6 +253,8 @@ pub fn run() {
             commands::get_theme,
             commands::set_active_theme,
             commands::import_theme,
+            commands::export_theme,
+            commands::delete_theme,
             commands::scan_devices,
             commands::connect_device,
             commands::disconnect_device,

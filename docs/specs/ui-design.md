@@ -260,7 +260,7 @@
 
 - 顶部：[导入主题] 按钮（打开 Dialog：文件选择器 或 粘贴 JSON 文本框）
 - **主题网格**（响应式 2~4 列卡片）：
-  - 每张卡片：主题名 / builtin or user 徽章 / 缩略灯效示意（红绿灯静态预览）/ [应用] 按钮
+  - 每张卡片：主题名 / builtin or user 徽章 / 缩略灯效示意（红绿灯静态预览）/ [应用] 按钮；用户主题额外提供 [删除] 并二次确认
   - 内置主题 6 张卡片（default / minimal / neon / nature / aurora / focus）
   - 用户主题 N 张（按文件系统枚举）
 - **右侧详情面板**（选中主题时展开）：
@@ -321,7 +321,6 @@
 
 - **服务**：
   - 服务端口（默认 25679；1024~65535；保存后仅热重启 Hook Server，失败保留旧服务）
-  - 仲裁模式（**两张选项卡片**：优先级抢占[默认] / 最近活跃，各带效果说明；选中 = 绿描边 + 淡绿底 + 圆点）
   - 接入保护（状态标签："仅限本机" / "Token 已启用"；第一版不开放 Token 编辑，V2 再评估）
 - **显示**：
   - **外观模式**（单选卡片 ×3，各带图标 + 一句说明）：亮色（"明亮底色，适合白天环境"）/ 暗色（"OLED 深色，弱光下更护眼"，默认）/ 跟随系统（"自动匹配操作系统外观"）
@@ -426,7 +425,7 @@ UI: Toast 提示"设备已断开"（不阻塞）
 [任意]
     --(reset_outputs)-->                                       [IDLE]
 [任意非 ERROR]
-    --(ERROR 事件)-->                                          [ERROR]   // 优先级抢占
+    --(任意新状态事件)-->                                     [新状态]  // 最近活动接管
 ```
 
 ### 7.4 主题朝向偏好 ✅
@@ -456,7 +455,7 @@ persisted to config.json via update_config
 | Dialog | 导入主题确认 / 断开确认 / 主题详情 | P1 需新增 |
 | Badge | builtin/user 徽章 / 状态标签 | P1 需新增 |
 | Switch | 开机自启开关 | ✅ 已实现（自绘 `.switch`：关闭灰底 / 开启 `--accent` 绿底 + 滑块右移） |
-| Select | 仲裁模式 / 主题选择 / 朝向选择 | P1 需新增 |
+| Select | 主题选择 / 朝向选择 | P1 需新增 |
 | Input | 自定义状态名 / 主题名 | P1 需新增 |
 | ScrollArea | 扫描结果列表 / 主题网格 | P1 需新增 |
 | Progress | 扫描倒计时 | P1 需新增 |
@@ -638,7 +637,8 @@ z/tooltip    = 300
 - **token Bearer 校验**：✅ 已实现。hook_server 在配置 token 后强制 Bearer 校验，含 `token_auth` 单测；UI 设置入口按设计不开放（V2）
 - **`autostart` 真实启用**：✅ 已实现（2026-08-21）。`update_config` 先 OS 后 config（`AUTOSTART_FAILED` 错误码）；setup 启动校准；Settings 页 Switch 真实化；平台 = macOS LaunchAgent / Win Run key / Linux XDG autostart（U-08 三平台实机待完成）
 - **`badgeOrientation` 设置项**：✅ 已实现（Settings 页 + Dashboard 实时生效 + config 持久化）
-- **P2 commands/events**：❌ `export_theme` / `delete_theme` / `hook-log` 未实现（ipc-contract §7）
+- **P1 主题删除**：✅ `delete_theme` 已实现；仅用户主题可删，删除当前主题自动回退 default
+- **P2 commands/events**：❌ `export_theme` / `hook-log` 未实现（ipc-contract §7）
 
 ### 11.3 待定（V2 / 远期）
 

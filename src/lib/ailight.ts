@@ -51,6 +51,11 @@ export interface ThemeMeta {
   name: string;
 }
 
+export interface ExportThemeResult {
+  fileName?: string;
+  status: "exported" | "cancelled";
+}
+
 export interface ScannedDevice {
   address: string;
   name: string;
@@ -65,7 +70,6 @@ export interface RememberedDevice {
 
 export interface AppConfig {
   activeTheme: string;
-  arbitrationMode: "priority" | "last_active";
   autostart: boolean;
   badgeOrientation: "horizontal" | "vertical";
   portPreference: number;
@@ -150,7 +154,6 @@ const mockSnapshot: AppSnapshot = {
 
 const mockConfig: AppConfig = {
   version: 1,
-  arbitrationMode: "priority",
   activeTheme: "default",
   portPreference: 25_679,
   rememberedDevice: null,
@@ -260,6 +263,12 @@ export const api = {
     isTauri()
       ? call<string>("import_theme", { content })
       : (JSON.parse(content) as ThemeFile).theme.name,
+  exportTheme: async (name: string) =>
+    isTauri()
+      ? call<ExportThemeResult>("export_theme", { name })
+      : { fileName: `${name}.ailight-theme.json`, status: "exported" as const },
+  deleteTheme: async (name: string) =>
+    isTauri() ? call<{ ok: boolean }>("delete_theme", { name }) : { ok: true },
   scanDevices: async () =>
     isTauri() ? call<ScannedDevice[]>("scan_devices") : [],
   connectDevice: (address: string) => call<void>("connect_device", { address }),

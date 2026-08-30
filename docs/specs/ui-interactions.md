@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.21 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.21，2026-08-22） |
+| 文档版本 | V1.26 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.26，2026-08-30） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -23,7 +23,7 @@
 | `/integrations` | 接入外部工具 | 配置 Claude Code / Codex 等的 hook |
 | `/themes` | 主题中心 | 浏览 / 切换 / 编辑主题 |
 | `/preview` | 试听 | 模拟业务状态；连接设备后试听实际灯光与声音 |
-| `/settings` | 设置 | 服务（状态显示规则 / 连接安全 / 高级服务信息）+ 显示（外观模式 / 灯组朝向 / 当前主题）+ 系统（开机自启） |
+| `/settings` | 设置 | 服务（连接安全 / 高级服务信息）+ 显示（外观模式 / 灯组朝向 / 当前主题）+ 系统（开机自启） |
 
 切换：单击 sidebar 任意项 → 对应 page-section 激活（其余隐藏）。
 
@@ -55,7 +55,7 @@
 
 ### 2.2 配置写入
 
-任何"修改后立即生效"的设置（外观模式、灯组朝向、自启动、仲裁模式、主题名、主题编辑）走：
+任何"修改后立即生效"的设置（外观模式、灯组朝向、自启动、主题名、主题编辑）走：
 
 ```
 前端 invoke `update_*` 或对应 command
@@ -202,7 +202,7 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 ### 6.1 浏览
 
 - 6 张内置主题卡（默认 / 极简 / 专注 / 自然 / 极光 / 霓虹）
-- 主题卡含：主题名 + 中文描述 + 缩略图（3 灯条色块）+ [使用此主题] / [正在使用] 按钮
+- 主题卡含：主题名 + 中文描述 + 缩略图（3 灯条色块）+ [使用此主题] / [正在使用] 按钮；用户主题额外显示 [导出]、[删除]
 - 当前激活主题有外发光边框 + `当前使用` tag
 
 ### 6.2 切换主题
@@ -229,6 +229,22 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
    - 解析失败 → 错误 Toast（指出校验失败原因）
    - 与内置同名 → 错误 Toast（CONFLICT）
    - 成功 → 写 `themes/<name>.ailight-theme.json`，网格自动刷新
+
+### 6.5 导出用户主题
+
+- 所有 `builtin == false` 的用户主题均显示 [导出]，包括通过文件导入后保存的主题；内置主题不显示，Rust 侧仍以 `THEME_BUILTIN` 阻止绕过 UI 的请求。
+- 点击 [导出] → Rust 重新读取并校验持久化主题 → 打开系统保存窗口；默认文件名为 `<name>.ailight-theme.json`，文件内容保持原样，可由现有导入流程重新导入。
+- 导出期间当前卡片的 [导出] 显示 loading，并禁用该卡片的应用、导出和删除；其他主题卡仍可操作。
+- 保存成功 → Toast“主题已导出：`<name>.ailight-theme.json`”；用户取消系统保存窗口 → 静默结束；读取、校验或写入失败 → Toast“主题导出失败：`<reason>`”。
+- 导出不切换当前主题、不修改配置、不触发事件、不改变设备灯效。
+
+### 6.6 删除用户主题
+
+- 内置主题不显示删除入口，Rust 侧仍以 `THEME_BUILTIN` 阻止绕过 UI 的删除请求。
+- 用户主题点击 [删除] → Dialog 显示主题名并说明不可恢复；确认按钮使用危险操作样式，删除期间禁用重复操作。
+- 普通用户主题删除成功 → 移除本机主题文件、刷新网格、关闭对应详情并显示成功 Toast。
+- 当前用户主题删除前，Dialog 明示将切换默认主题；确认后先应用内置 `default`（含配置持久化、`theme-changed` 和当前 SCENE 重放），再删除文件。
+- 删除失败 → Dialog 内显示具体原因并保留主题；若文件删除失败，后端尝试恢复原主题。
 
 ---
 
@@ -315,7 +331,7 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 
 点击 → `trigger_state(state, meta)`：
 1. 后端 `engine::process_event(source='manual', state, None, None)`
-2. 走仲裁器（manual 也参与优先级抢占）
+2. 走仲裁器（manual 与其他来源一样按最近活动接管）
 3. 主题映射 → SCENE 编译 → SET_SCENE 下发
 4. 触发 `business-state-changed`
 5. Dashboard 红绿灯立即变化
@@ -350,16 +366,12 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 
 ### 9.1 服务
 
-- 状态显示规则：说明明确“同一工具始终跟随最新状态；多个工具冲突时决定显示谁”。两张选项卡片独占选择，选中态 = 绿色描边 + 淡绿底 + 圆点填充；「重要状态优先」带「推荐」标签。选项与效果：
-  - 重要状态优先：仅在多个工具冲突时，错误 > 完成 > 进行中 > 等待 > 空闲
-  - 最近活动优先：仅在多个工具冲突时，由最后上报的工具接管灯效
-  - 切换经 `update_config(arbitrationMode)` 即时生效（引擎热切换）。
 - 连接安全：用户说明强调工具只能从本机连接；状态标签为「仅限本机」/「已启用身份验证」。第一版 UI 不开放 Token 编辑入口（服务端 Bearer 校验见 hook-api §7）。
 - 高级服务信息：默认折叠，只包含接口文档；端口由 AI-Light 自动管理，不提供用户编辑或普通接入页展示。[打开 API 文档] 使用系统默认浏览器打开当前实际监听地址 `http://127.0.0.1:{service.port}/docs/`。打开中显示「正在打开…」并屏蔽重复触发；应用状态尚未就绪时禁用。成功不额外提示，打开失败显示原因 Toast。
 
 ### 9.2 显示
 
-- 外观模式（`themeMode`）：三张选项卡片（亮色 / 暗色 / 跟随系统），各带图标 + 一句说明；选中态同仲裁模式卡片（绿描边 + 淡绿底 + 圆点填充）。切换即时生效：
+- 外观模式（`themeMode`）：三张选项卡片（亮色 / 暗色 / 跟随系统），各带图标 + 一句说明；选中态为绿描边 + 淡绿底 + 圆点填充。切换即时生效：
   - 亮色：`<html data-theme="light">`，slate 浅底 + 深绿链接色
   - 暗色：`<html data-theme="dark">`（默认，既有体验不变）
   - 跟随系统：`data-theme` 随 `prefers-color-scheme` 实时切换（含 OS 运行中变更）
@@ -464,6 +476,8 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | 主题导入失败（JSON 非法）| Dialog 错误提示（含校验失败原因）|
 | 主题与内置同名 | Dialog 错误提示（CONFLICT）|
 | 主题保存失败（写文件失败）| Toast + 保持当前编辑状态 |
+| 主题导出失败 | Toast“主题导出失败：`<reason>`”；取消系统保存窗口不提示 |
+| 主题删除失败 | Dialog 保留并显示原因；主题卡不移除 |
 | 设备扫描失败（蓝牙权限 / 系统错误）| 红色告警条 + 重试按钮 |
 | 设备连接失败 | Toast（含原因）+ 保留在 /devices |
 | 主动断开失败 | Toast（含原因）+ 保留连接与记忆设备 |
@@ -691,7 +705,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | `NOT_FOUND` | Toast "`<对象>` 不存在" |
 | `THEME_INVALID` | Dialog "主题校验失败：`<details>`" |
 | `CONFLICT` | Dialog "与内置主题 `<X>` 同名" |
-| `THEME_BUILTIN` | Dialog "内置主题不可删除" |
+| `THEME_BUILTIN` | Toast / Dialog“内置主题不可导出或删除” |
 | `BAD_REQUEST` | Toast "请求参数非法：`<reason>`" |
 | `DEVICE_NOT_CONNECTED` | Toast "请先连接设备" + 跳转 `/devices` |
 | `DEVICE_DISCONNECT_FAILED` | Toast "无法断开设备：`<reason>`"，保留记忆设备 |
@@ -719,7 +733,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | Dashboard | （无可交互元素，焦点默认 body） | — |
 | Devices | 重新查找 → 扫描结果 [连接] × N | Cmd/Ctrl+R = 重新查找 |
 | Integrations | 客户端卡 × 4：[测试连接] → [查看 JSON] → [复制] | — |
-| Themes | 编辑当前主题 → 导入新主题 → 主题卡 [使用此主题] × N | Cmd/Ctrl+I = 导入 |
+| Themes | 编辑当前主题 → 导入新主题 → 主题卡 [使用此主题] → 用户主题 [删除] | Cmd/Ctrl+I = 导入；Esc = 关闭删除确认 |
 | Preview | 5 标准按钮 → 自定义输入 → [触发] → 最近 N → [全部重置] | `1`~`5` = 标准状态；`0` = 全部重置 |
 | Settings | 按视觉顺序 Tab | Esc 关闭 Dialog |
 | 全局 | — | Esc 关闭最上层 Dialog；Enter 提交当前焦点表单 |
@@ -738,6 +752,9 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.26 | 2026-08-30 | 实装用户主题导出：所有非内置主题显示导出入口，Rust 校验后通过系统保存窗口原样写出；内置主题强制保护，取消保存静默结束。对齐报告：§2 Source Events 与 ipc-contract §5 一致；错误码均存在于 ipc-contract §4；蓝牙 result code 与 V0.4 §3.6 一致；主题字段未变；ADR/KAD 引用有效。 |
+| V1.25 | 2026-08-30 | 实装用户主题删除：仅用户主题展示删除入口，确认 Dialog 明示不可恢复；删除当前主题自动回退 default，Rust 强制保护内置主题。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未新增；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效。 |
+| V1.24 | 2026-08-30 | 设置页移除“多个工具同时运行时”，仲裁固定为最近活动优先（ADR-0005 / KAD-13）。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效。 |
 | V1.23 | 2026-08-22 | KAD-12 仲裁语义澄清：§9.1 明确同一工具始终跟随最新生命周期状态，优先级与最近活动规则仅在多个工具冲突时生效；设置页文案同步。对齐报告：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR/KAD 引用有效，新增 KAD-12 可解析。 |
 | V1.22 | 2026-08-22 | Node Adapter CLI 接入：§5 改为 Claude Code/Codex 一键连接与断开，移除复制 curl、伪测试与端口展示；§9.1 移除用户端口编辑，实际地址由 `~/.ailight/runtime.json` 自动发现。对齐报告：§3 Source Events 未变且均存在于 ipc-contract §5；新增 Adapter AppError.code 已同步 ipc-contract §4；蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10/11 引用有效。 |
 | V1.21 | 2026-08-22 | 设置页高级服务信息新增「接口文档」快捷入口：基于 `service.port` 用系统浏览器打开 Hook Server `/docs/` Swagger UI，包含 loading/disabled/失败 Toast，避免端口退避或热切换后打开旧地址。对齐报告：§3 Source Events 未变且均存在于 ipc-contract §5；§4.1 未新增 AppError.code，既有清单一致；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增主题字段，与 theme-format 一致；ADR-0001/0002/0003/0004、KAD-03/04/06/08/09/10 引用有效。 |

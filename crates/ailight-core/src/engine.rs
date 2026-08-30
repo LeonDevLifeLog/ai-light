@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use crate::arbiter::{ApplyOutcome, ArbitrationMode, HookEvent};
+use crate::arbiter::{ApplyOutcome, HookEvent};
 use crate::hook_server::SharedState;
 use crate::protocol::{self, OutputScene};
 use crate::theme;
@@ -193,13 +193,6 @@ impl Engine {
             .map(|_| ())
             .map_err(EngineError::Transport)
     }
-
-    /// 设置仲裁模式（ipc-contract update_config）
-    pub fn set_arbitration_mode(&self, mode: ArbitrationMode) {
-        if let Ok(mut arb) = self.shared.arbiter.write() {
-            arb.set_mode(mode);
-        }
-    }
 }
 
 async fn transport_set_scene(
@@ -297,7 +290,7 @@ mod tests {
     }
 
     fn setup() -> (Arc<SharedState>, Arc<MockIo>, Engine) {
-        let shared = SharedState::new("test", ArbitrationMode::Priority, || 1000);
+        let shared = SharedState::new("test", || 1000);
         *shared.theme.write().unwrap() = Some(load_default_theme());
         let io = MockIo::new();
         let engine = Engine::new(shared.clone(), io.clone());
@@ -501,7 +494,7 @@ mod tests {
     #[test]
     #[cfg(debug_assertions)]
     fn engine_new_requires_tokio_runtime() {
-        let shared = SharedState::new("test", ArbitrationMode::Priority, || 1000);
+        let shared = SharedState::new("test", || 1000);
         *shared.theme.write().unwrap() = Some(load_default_theme());
         let io = MockIo::new();
 

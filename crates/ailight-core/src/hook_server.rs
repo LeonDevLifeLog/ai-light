@@ -17,7 +17,7 @@ use tokio::sync::mpsc;
 use utoipa::{Modify, OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::arbiter::{Arbiter, ArbitrationMode};
+use crate::arbiter::Arbiter;
 use crate::config::{DEFAULT_PORT, PORT_FALLBACK_ATTEMPTS};
 use crate::engine;
 use crate::protocol::OutputScene;
@@ -126,16 +126,12 @@ pub struct SharedState {
 }
 
 impl SharedState {
-    pub fn new(
-        app_version: &str,
-        mode: ArbitrationMode,
-        now_ms: impl Fn() -> u64 + Send + Sync + 'static,
-    ) -> Arc<Self> {
+    pub fn new(app_version: &str, now_ms: impl Fn() -> u64 + Send + Sync + 'static) -> Arc<Self> {
         let now = now_ms();
         let (outbound_tx, outbound_rx) = mpsc::unbounded_channel();
         Arc::new(Self {
             app_version: app_version.to_string(),
-            arbiter: RwLock::new(Arbiter::new(mode, now)),
+            arbiter: RwLock::new(Arbiter::new(now)),
             theme: RwLock::new(None),
             theme_name: RwLock::new("default".into()),
             device: RwLock::new(DeviceSnapshot::default()),
@@ -500,14 +496,13 @@ pub async fn serve(state: Arc<SharedState>, preferred: u16) -> Result<HookServer
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::arbiter::ArbitrationMode;
     use axum::body::Body;
     use axum::http::{Request, StatusCode as HttpStatus};
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
     fn test_state() -> Arc<SharedState> {
-        let state = SharedState::new("test", ArbitrationMode::Priority, || 1000);
+        let state = SharedState::new("test", || 1000);
         // 挂一个最小主题（hold_ms 查询用）
         let theme = serde_json::from_str::<ThemeFile>(
             r#"{"theme":{"name":"t","version":1},

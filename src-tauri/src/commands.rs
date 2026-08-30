@@ -5,9 +5,10 @@ use std::process::Command;
 use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_dialog::DialogExt;
 use tokio::sync::mpsc;
 
-use ailight_core::arbiter::{ArbitrationMode, ST_IDLE};
+use ailight_core::arbiter::ST_IDLE;
 use ailight_core::ble::{self, BleDeviceInfo};
 use ailight_core::config::{AppConfig, RememberedDevice};
 use ailight_core::engine::{self, EngineError};
@@ -276,6 +277,102 @@ pub fn import_theme(app: AppHandle, content: String) -> CmdResult<String> {
     std::fs::create_dir_all(&dir).map_err(internal)?;
     std::fs::write(dir.join(format!("{name}.ailight-theme.json")), content).map_err(internal)?;
     Ok(name)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportThemeResult {
+    pub status: &'static str,
+    pub file_name: Option<String>,
+}
+
+#[tauri::command]
+pub async fn export_theme(app: AppHandle, name: String) -> CmdResult<ExportThemeResult> {
+    validate_export_theme_name(&name)?;
+    let path = user_theme_dir(&app)
+        .map_err(internal)?
+        .join(format!("{name}.ailight-theme.json"));
+    let content = match std::fs::read_to_string(path) {
+        Ok(content) => Some(content),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(internal(error)),
+    };
+    let content = prepare_theme_export(&name, content)?;
+    let file_name = format!("{name}.ailight-theme.json");
+    let destination = app
+        .dialog()
+        .file()
+        .add_filter("AI-Light 主题", &["json"])
+        .set_file_name(&file_name)
+        .blocking_save_file();
+    let Some(destination) = destination else {
+        return Ok(ExportThemeResult {
+            status: "cancelled",
+            file_name: None,
+        });
+    };
+    let destination = destination.into_path().map_err(internal)?;
+    let exported_file_name = destination
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(&file_name)
+        .to_string();
+    std::fs::write(destination, content).map_err(internal)?;
+    Ok(ExportThemeResult {
+        status: "exported",
+        file_name: Some(exported_file_name),
+    })
+}
+
+fn prepare_theme_export(name: &str, content: Option<String>) -> CmdResult<String> {
+    validate_export_theme_name(name)?;
+    let content = content.ok_or_else(|| err("NOT_FOUND", format!("主题不存在: {name}")))?;
+    theme::load(&content).map_err(|error| err("THEME_INVALID", error.to_string()))?;
+    Ok(content)
+}
+
+fn validate_export_theme_name(name: &str) -> CmdResult<()> {
+    if !valid_theme_name(name) {
+        return Err(err("BAD_REQUEST", format!("主题名称非法: {name}")));
+    }
+    if theme::builtin_theme_names().contains(&name) {
+        return Err(err("THEME_BUILTIN", format!("内置主题不可导出: {name}")));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_theme(app: AppHandle, name: String) -> CmdResult<serde_json::Value> {
+    if theme::builtin_theme_names().contains(&name.as_str()) {
+        return Err(err("THEME_BUILTIN", format!("内置主题不可删除: {name}")));
+    }
+    if !valid_theme_name(&name) {
+        return Err(err("BAD_REQUEST", format!("主题名称非法: {name}")));
+    }
+
+    let path = user_theme_dir(&app)
+        .map_err(internal)?
+        .join(format!("{name}.ailight-theme.json"));
+    if !path.is_file() {
+        return Err(err("NOT_FOUND", format!("主题不存在: {name}")));
+    }
+
+    let is_active = shared(&app)
+        .theme_name
+        .read()
+        .map(|current| current.as_str() == name)
+        .map_err(|_| internal("theme_name 锁"))?;
+    if is_active {
+        set_active_theme(app.clone(), "default".into())?;
+    }
+
+    if let Err(error) = std::fs::remove_file(path) {
+        if is_active {
+            let _ = set_active_theme(app.clone(), name.clone());
+        }
+        return Err(internal(error));
+    }
+    Ok(serde_json::json!({ "ok": true }))
 }
 
 // ---- 设备域 ----
@@ -690,7 +787,6 @@ pub fn get_config(app: AppHandle) -> CmdResult<AppConfig> {
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigPatch {
-    pub arbitration_mode: Option<String>,
     pub token: Option<String>,
     pub autostart: Option<bool>,
     pub badge_orientation: Option<String>,
@@ -709,13 +805,6 @@ pub async fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppC
 
     let mut cfg = state.config.write().map_err(|_| internal("config 锁"))?;
 
-    if let Some(mode) = &patch.arbitration_mode {
-        let m = ArbitrationMode::from_str(mode)
-            .ok_or_else(|| err("BAD_REQUEST", format!("arbitration_mode 非法: {mode}")))?;
-        cfg.arbitration_mode = mode.clone();
-        // 立即生效（引擎热切换）
-        state.engine.set_arbitration_mode(m);
-    }
     if let Some(token) = &patch.token {
         cfg.token = token.clone();
         let runtime_token = if token.is_empty() {
@@ -789,6 +878,14 @@ fn builtin_theme_content(name: &str) -> Option<&'static str> {
         .map(|(_, c)| *c)
 }
 
+fn valid_theme_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+}
+
 fn resolve_theme(app: &AppHandle, name: &str) -> Result<ThemeFile, String> {
     if let Some(content) = builtin_theme_content(name) {
         return theme::load(content).map_err(|e| e.to_string());
@@ -816,4 +913,48 @@ fn persist_active_theme(app: &AppHandle, name: &str) -> CmdResult<()> {
         persist_config(app, &cfg)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{prepare_theme_export, valid_theme_name};
+
+    #[test]
+    fn user_theme_name_rejects_path_components() {
+        assert!(valid_theme_name("my-theme_2"));
+        assert!(!valid_theme_name("../default"));
+        assert!(!valid_theme_name("nested/theme"));
+        assert!(!valid_theme_name(""));
+    }
+
+    #[test]
+    fn export_rejects_invalid_builtin_missing_and_corrupt_themes() {
+        assert_eq!(
+            prepare_theme_export("../theme", None).unwrap_err().code,
+            "BAD_REQUEST"
+        );
+        assert_eq!(
+            prepare_theme_export("default", None).unwrap_err().code,
+            "THEME_BUILTIN"
+        );
+        assert_eq!(
+            prepare_theme_export("mine", None).unwrap_err().code,
+            "NOT_FOUND"
+        );
+        assert_eq!(
+            prepare_theme_export("mine", Some("{broken".into()))
+                .unwrap_err()
+                .code,
+            "THEME_INVALID"
+        );
+    }
+
+    #[test]
+    fn export_preserves_valid_user_theme_content() {
+        let content = r#"{"theme":{"name":"mine","version":1},"scenes":{"off":{"leds":[null,null,null]}},"states":{"IDLE":{"scene":"off"}}}"#;
+        assert_eq!(
+            prepare_theme_export("mine", Some(content.into())).unwrap(),
+            content
+        );
+    }
 }

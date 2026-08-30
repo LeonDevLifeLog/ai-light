@@ -5,7 +5,6 @@ import {
   Monitor,
   Moon,
   Palette,
-  Radio,
   ShieldCheck,
   Sun,
   SunMoon,
@@ -186,68 +185,6 @@ export function SettingsPage() {
           服务
         </h2>
         <Card className="settings-card">
-          <SettingRow
-            description="同一工具始终跟随最新状态；多个工具冲突时决定显示谁"
-            icon={<Radio />}
-            stacked
-            title="多个工具同时运行时"
-          >
-            <fieldset aria-label="状态显示规则" className="mode-options">
-              <button
-                aria-pressed={config.arbitrationMode === "priority"}
-                className={cn(
-                  "mode-option",
-                  config.arbitrationMode === "priority" && "mode-option--active"
-                )}
-                disabled={saving === "arbitrationMode"}
-                onClick={() =>
-                  runAsync(
-                    update("arbitrationMode", { arbitrationMode: "priority" })
-                  )
-                }
-                type="button"
-              >
-                <span aria-hidden="true" className="mode-option__indicator" />
-                <span className="mode-option__body">
-                  <span className="mode-option__title">
-                    <span className="mode-option__name">重要状态优先</span>
-                    <span className="mode-option__tag">推荐</span>
-                  </span>
-                  <span className="mode-option__desc">
-                    仅在多个工具冲突时：错误 &gt; 完成 &gt; 进行中 &gt; 等待
-                    &gt; 空闲
-                  </span>
-                </span>
-              </button>
-              <button
-                aria-pressed={config.arbitrationMode === "last_active"}
-                className={cn(
-                  "mode-option",
-                  config.arbitrationMode === "last_active" &&
-                    "mode-option--active"
-                )}
-                disabled={saving === "arbitrationMode"}
-                onClick={() =>
-                  runAsync(
-                    update("arbitrationMode", {
-                      arbitrationMode: "last_active",
-                    })
-                  )
-                }
-                type="button"
-              >
-                <span aria-hidden="true" className="mode-option__indicator" />
-                <span className="mode-option__body">
-                  <span className="mode-option__title">
-                    <span className="mode-option__name">最近活动优先</span>
-                  </span>
-                  <span className="mode-option__desc">
-                    仅在多个工具冲突时，由最后上报的工具接管灯效
-                  </span>
-                </span>
-              </button>
-            </fieldset>
-          </SettingRow>
           <SettingRow
             description="工具只能从这台电脑连接；当前无需额外密钥"
             icon={<ShieldCheck />}

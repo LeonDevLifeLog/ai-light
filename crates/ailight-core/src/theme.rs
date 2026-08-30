@@ -706,13 +706,17 @@ mod tests {
             "{THEMES_DIR}/default.ailight-theme.json"
         )))
         .unwrap();
-        // WORKING：三灯 TRIANGLE 呼吸
+        // WORKING：三灯 TRIANGLE 依次呼吸
         let scene = compile_state(&theme, "WORKING").unwrap();
         assert_eq!(scene.transition_ms, 300);
         for led in &scene.leds {
             assert_eq!(led.curve, CURVE_TRIANGLE);
             assert_eq!(led.period_ms, 1200);
         }
+        assert_eq!(scene.leds[0].brightness, 70);
+        assert_eq!(scene.leds[0].phase, 0x0000);
+        assert_eq!(scene.leds[1].phase, 0x5555);
+        assert_eq!(scene.leds[2].phase, 0xAAAA);
         assert!(scene.buzzer.segments.is_empty());
         // ERROR：SQUARE 闪 8 次 + 蜂鸣一声 + hold 0
         let scene = compile_state(&theme, "ERROR").unwrap();
@@ -723,11 +727,12 @@ mod tests {
             assert_eq!(led.end_level, END_HIGH);
         }
         assert_eq!(scene.buzzer.segments.len(), 1);
-        // SUCCESS：CONSTANT 绿 + hold 5000
+        // SUCCESS：CONSTANT 绿，持续到下一状态
         let scene = compile_state(&theme, "SUCCESS").unwrap();
         assert_eq!(scene.leds[0].curve, CURVE_CONSTANT);
         assert_eq!(scene.leds[0].high, Rgb(0x00, 0xE6, 0x76));
-        assert_eq!(theme.states["SUCCESS"].hold_ms, Some(5000));
+        assert_eq!(scene.leds[0].brightness, 80);
+        assert_eq!(theme.states["SUCCESS"].hold_ms, Some(0));
     }
 
     #[test]

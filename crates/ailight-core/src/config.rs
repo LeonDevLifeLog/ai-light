@@ -23,9 +23,6 @@ pub struct RememberedDevice {
 pub struct AppConfig {
     /// schema 版本，当前 = 1
     pub version: u32,
-    /// 仲裁模式："priority" | "last_active"（ADR-0001 Q8）
-    #[serde(alias = "arbitration_mode")]
-    pub arbitration_mode: String,
     /// 当前生效主题名（默认 "default"）
     #[serde(alias = "active_theme")]
     pub active_theme: String,
@@ -51,7 +48,6 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             version: 1,
-            arbitration_mode: "priority".into(),
             active_theme: "default".into(),
             port_preference: DEFAULT_PORT,
             remembered_device: None,
@@ -73,13 +69,6 @@ impl AppConfig {
                 if cfg.version != 1 {
                     warn.push(format!("version 非法({}), 回退 1", cfg.version));
                     cfg.version = 1;
-                }
-                if cfg.arbitration_mode != "priority" && cfg.arbitration_mode != "last_active" {
-                    warn.push(format!(
-                        "arbitration_mode 非法({}), 回退 priority",
-                        cfg.arbitration_mode
-                    ));
-                    cfg.arbitration_mode = "priority".into();
                 }
                 if cfg.port_preference < MIN_USER_PORT {
                     warn.push(format!(
@@ -138,7 +127,6 @@ mod tests {
     #[test]
     fn default_config() {
         let cfg = AppConfig::default();
-        assert_eq!(cfg.arbitration_mode, "priority");
         assert_eq!(cfg.port_preference, 25679);
         assert!(cfg.remembered_device.is_none());
         assert!(cfg.token.is_empty());
@@ -153,12 +141,12 @@ mod tests {
                 "token":"secret","autostart":true}"#,
         );
         assert!(warn.is_none());
-        assert_eq!(cfg.arbitration_mode, "last_active");
         assert_eq!(cfg.port_preference, 25685);
-        assert_eq!(cfg.remembered_device.unwrap().address, "AA:BB:CC");
+        assert_eq!(cfg.remembered_device.as_ref().unwrap().address, "AA:BB:CC");
         assert_eq!(cfg.token, "secret");
         assert!(cfg.autostart);
         assert_eq!(cfg.theme_mode, "dark");
+        assert!(!cfg.to_json().contains("arbitrationMode"));
     }
 
     #[test]
@@ -172,7 +160,6 @@ mod tests {
             AppConfig::load(r#"{"version":9,"arbitration_mode":"weird","port_preference":99999}"#);
         assert!(warn.is_some());
         assert_eq!(cfg.version, 1);
-        assert_eq!(cfg.arbitration_mode, "priority");
         assert_eq!(cfg.port_preference, 25679);
         assert_eq!(cfg.theme_mode, "dark");
     }

@@ -32,7 +32,7 @@ pnpm typecheck        # tsc --noEmit
 
 - **机制与策略分离**：设备只执行 SCENE（灯效/声音参数），不理解业务语义（`PROCESSING`/`ERROR` 等）。业务状态 → 灯效的映射全在客户端（主题文件），换主题永不升级固件。
 - **六层边界** L1 接入层 ~ L6 工程层，见 `docs/requirements/product-boundary.md`。
-- **标准状态 5 态**：`IDLE / WORKING / WAITING / SUCCESS / ERROR` + 开放自定义状态；仲裁 = 优先级抢占（ERROR > SUCCESS > WORKING > WAITING > IDLE，同级最近活跃）。详见 ADR-0001。
+- **标准状态 5 态**：`IDLE / WORKING / WAITING / SUCCESS / ERROR` + 开放自定义状态；仲裁固定为最近活动优先，最后上报的工具接管灯效；状态强度顺序仅用于主题视觉语义，不参与上屏判断。详见 ADR-0005 / KAD-13。
 - **主题格式**：命名 SCENE 库 + 状态引用（`.ailight-theme.json`），见 `docs/specs/theme-format.md`。
 - **决策记录**：架构决策追加到 `docs/decisions/ADR-*` 或 `docs/specs/architecture.md` 的 KAD-*，**只追加不改写历史**。
 

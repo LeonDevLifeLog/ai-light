@@ -4,10 +4,12 @@ AI-Light 是一款面向 macOS、Windows 和 Linux 的智能体状态灯客户�
 
 应用本地运行，不需要云端中转。接入工具只需调用一个回环地址 HTTP API；灯效策略由可分享的 JSON 主题定义。
 
+日常安装、连接、状态识别和主题管理请见 [AI-Light 用户手册](./docs/user-guide.md)。
+
 ## 核心能力
 
 - **统一状态模型**：标准五态 `IDLE / WORKING / WAITING / SUCCESS / ERROR`，同时支持自定义状态。
-- **多来源仲裁**：多个智能体同时上报时，按优先级和最近活跃时间确定当前展示状态。
+- **多来源仲裁**：多个智能体同时上报时，由最近活动的工具接管当前展示状态。
 - **本地 Hook API**：仅监听 `127.0.0.1`，支持可选 Bearer Token、OpenAPI 3.1 规范和 Swagger UI 调试。
 - **可编程主题**：使用 `.ailight-theme.json` 定义状态、灯光曲线、颜色、亮度、相位与提示音。
 - **可靠设备写入**：所有场景通过单写入队列串行下发，避免并发写入造成状态错乱。
@@ -83,6 +85,8 @@ curl http://127.0.0.1:25679/hook \
 - [JSON Schema Draft 2020-12](./docs/specs/theme.schema.json)
 - [六套内置主题](./docs/specs/themes/README.md)
 
+应用内可直接切换、创建和导入主题。只有用户创建或导入的主题可以删除；内置主题不可删除。删除当前用户主题时，应用会自动切换回 Default 经典主题。
+
 ## 技术架构
 
 | 层级 | 位置 | 职责 |
@@ -133,6 +137,7 @@ cargo check
 
 | 主题 | 文档 |
 |---|---|
+| 用户手册 | [docs/user-guide.md](./docs/user-guide.md) |
 | Hook API 指南 | [docs/specs/hook-api.md](./docs/specs/hook-api.md) |
 | OpenAPI 3.1 | 运行应用后访问 `/openapi.json`（由 Rust DTO 与 Handler 注解生成） |
 | 主题格式指南 | [docs/specs/theme-format.md](./docs/specs/theme-format.md) |

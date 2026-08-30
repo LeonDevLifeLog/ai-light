@@ -88,7 +88,6 @@ fn show_main_window(app: &AppHandle) {
 /// 托盘切朝向：走 update_config 统一路径（持久化 + 勾选同步 + emit config-changed）
 fn set_orientation(app: &AppHandle, orientation: &str) {
     let patch = crate::commands::ConfigPatch {
-        arbitration_mode: None,
         token: None,
         autostart: None,
         badge_orientation: Some(orientation.to_string()),

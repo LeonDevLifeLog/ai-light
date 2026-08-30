@@ -7,7 +7,7 @@
           "curve": "TRIANGLE",
           "low": "#003366",
           "high": "#4A9EFF",
-          "brightness": 60,
+          "brightness": 70,
           "period_ms": 1200,
           "phase_deg": 0
         },
@@ -15,17 +15,17 @@
           "curve": "TRIANGLE",
           "low": "#003366",
           "high": "#4A9EFF",
-          "brightness": 60,
+          "brightness": 70,
           "period_ms": 1200,
-          "phase_deg": 0
+          "phase_deg": 120
         },
         {
           "curve": "TRIANGLE",
           "low": "#003366",
           "high": "#4A9EFF",
-          "brightness": 60,
+          "brightness": 70,
           "period_ms": 1200,
-          "phase_deg": 0
+          "phase_deg": 240
         }
       ],
       "buzzer": null
@@ -36,7 +36,7 @@
           "curve": "TRIANGLE",
           "low": "#3D2B00",
           "high": "#FFB400",
-          "brightness": 50,
+          "brightness": 60,
           "period_ms": 1800,
           "phase_deg": 0
         },
@@ -44,7 +44,7 @@
           "curve": "TRIANGLE",
           "low": "#3D2B00",
           "high": "#FFB400",
-          "brightness": 50,
+          "brightness": 60,
           "period_ms": 1800,
           "phase_deg": 0
         },
@@ -52,7 +52,7 @@
           "curve": "TRIANGLE",
           "low": "#3D2B00",
           "high": "#FFB400",
-          "brightness": 50,
+          "brightness": 60,
           "period_ms": 1800,
           "phase_deg": 0
         }
@@ -61,9 +61,9 @@
     },
     "glow-green": {
       "leds": [
-        { "curve": "CONSTANT", "high": "#00E676", "brightness": 70 },
-        { "curve": "CONSTANT", "high": "#00E676", "brightness": 70 },
-        { "curve": "CONSTANT", "high": "#00E676", "brightness": 70 }
+        { "curve": "CONSTANT", "high": "#00E676", "brightness": 80 },
+        { "curve": "CONSTANT", "high": "#00E676", "brightness": 80 },
+        { "curve": "CONSTANT", "high": "#00E676", "brightness": 80 }
       ],
       "buzzer": null
     },
@@ -73,7 +73,7 @@
           "curve": "SQUARE",
           "low": "#000000",
           "high": "#FF3B30",
-          "brightness": 80,
+          "brightness": 90,
           "period_ms": 400,
           "duty_percent": 50,
           "repeat": 8,
@@ -83,7 +83,7 @@
           "curve": "SQUARE",
           "low": "#000000",
           "high": "#FF3B30",
-          "brightness": 80,
+          "brightness": 90,
           "period_ms": 400,
           "duty_percent": 50,
           "repeat": 8,
@@ -93,7 +93,7 @@
           "curve": "SQUARE",
           "low": "#000000",
           "high": "#FF3B30",
-          "brightness": 80,
+          "brightness": 90,
           "period_ms": 400,
           "duty_percent": 50,
           "repeat": 8,
@@ -110,7 +110,7 @@
   "states": {
     "WORKING": { "scene": "breath-blue", "transition_ms": 300 },
     "WAITING": { "scene": "breath-amber", "transition_ms": 300 },
-    "SUCCESS": { "scene": "glow-green", "transition_ms": 500, "hold_ms": 5000 },
+    "SUCCESS": { "scene": "glow-green", "transition_ms": 500, "hold_ms": 0 },
     "ERROR": { "scene": "alert-red", "transition_ms": 0, "hold_ms": 0 }
   }
 }
