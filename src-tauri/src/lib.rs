@@ -230,6 +230,15 @@ pub fn run() {
                         Ok(()) => tracing::info!("已自动连接设备 {}", dev.name),
                         Err(e) => {
                             tracing::warn!("自动连接失败: {e}，进入退避重连");
+                            let _ = auto_handle.emit(
+                                "device-connection-changed",
+                                serde_json::json!({
+                                    "connected": false,
+                                    "reconnecting": true,
+                                    "address": dev.address.clone(),
+                                    "name": dev.name.clone(),
+                                }),
+                            );
                             commands::spawn_reconnect(
                                 auto_handle,
                                 dev.address,

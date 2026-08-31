@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.29 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.29，2026-08-30） |
+| 文档版本 | V1.30 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.30，2026-08-31） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -126,10 +126,13 @@
 按钮进入禁用 loading 态 + 显示 Progress 条 + 「正在查找附近的灯牌…」
   ↓
 结果列表分 3 类：
-  ├ AgentCore 灯牌（ACLight-* 开头）：[连接] 按钮
+  ├ 已记住的 AgentCore 灯牌：[重新连接] 按钮（仅真实连接时显示禁用的 [已连接]）
+  ├ 新发现的 AgentCore 灯牌（ACLight-* 开头）：[连接] 按钮
   ├ 同名其它 AgentCore：与上一类同
   └ 非灯牌蓝牙设备：灰显 + 「不是灯牌，无法连接」
 ```
+
+扫描项不得仅凭地址与设备快照相同判定为已连接；必须同时满足 `device.connected == true` 且地址相同。已记住但离线的设备标记「已记住」，保留可点击的 [重新连接]，避免历史地址造成不可恢复的禁用态。
 
 - 扫描反馈至少保持 400ms，防止本地 mock / 缓存结果过快返回而让用户无法感知点击已生效。
 - 页头与空态的重试动作统一命名为「重新查找设备」。
@@ -150,6 +153,7 @@ UI 反馈：设备卡状态 tag 立即更新；失败显示 Toast（原因 + 重
 
 ### 4.3 断开
 
+- Devices 页顶部「我的设备」以 `config.rememberedDevice` 为存在条件：只要未执行忘记，已记住设备在已连接、连接中、自动重连、重连失败或普通离线时均保留卡片。离线卡展示 [重新连接] / [忘记设备]，电量、固件、硬件等实时字段显示 `—`。
 - [断开连接]：取消当前连接代次的自动重连 → BLE 主动断开 → 清理设备快照；保留记忆设备，下次启动仍会自动连接。
 - [忘记设备]：应用内确认 Dialog → 先主动断开并取消重连 → 清除并持久化记忆设备；断开失败时不清除记忆。
 - 自动重连中显示 [停止重连] 与 [忘记设备]；旧退避任务通过连接代次校验退出，不得在用户操作后重新连回。
@@ -763,6 +767,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.30 | 2026-08-31 | 设备页恢复路径闭环：顶部改为由 `rememberedDevice` 驱动的常驻「我的设备」卡，覆盖已连接/连接中/自动重连/离线并始终提供重连或忘记入口；附近列表仅以 `connected && address 相同` 判定已连接，历史设备显示「已记住」+「重新连接」；设备全量快照补齐 `reconnecting`，避免启动期错过 event 后状态失真。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件，既有 payload 与快照字段已同步）；§4.1 AppError.code 未新增且均在 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（未改协议）；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001~0006、KAD 引用有效。 |
 | V1.29 | 2026-08-30 | Settings 外部运行环境增加高级用户主动检查/精确版本升级：仅点击后访问 npm registry，只选择桌面端兼容版本，升级后重解析并执行 doctor，不引入自动更新。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 新增 `ADAPTER_UPDATE_FAILED` 已同步 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（未触碰）；§6~§8 主题字段与 theme-format 一致（未触碰）；ADR-0001~0006、KAD 引用有效。 |
 | V1.28 | 2026-08-30 | 工具链核心不变量收敛：§5.2 将 `adapter_incompatible` 接入「确认并升级」恢复链；§5.2.1 增加 `store_invalid` 只读保护与显式恢复；附录 Tab 顺序同步当前 Integrations 结构。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 新增 `TOOLCHAIN_STORE_INVALID` 已同步 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（未触碰）；§6~§8 主题字段与 theme-format 一致（未触碰）；ADR-0001~0006、KAD 引用有效。 |
 | V1.27 | 2026-08-30 | 工具链发现落地（ADR-0006）：§5.2 连接流程加入运行环境检查与 Adapter 缺失确认态；新增 §5.2.1 运行环境卡（摘要/详情/恢复卡/手动选择路径）。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 均在 ipc-contract §4（新增 `NODE_*` / `TOOLCHAIN_*` / `EXECUTABLE_TIMEOUT` 已同步收录）；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（未触碰蓝牙章节）；§6~§8 主题字段与 theme-format 字段表一致（未触碰）；ADR-0001~0006、KAD 引用有效。 |

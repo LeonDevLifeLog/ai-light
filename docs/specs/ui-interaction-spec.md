@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.28 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.28，2026-08-30） |
+| 文档版本 | V1.29 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.29，2026-08-31） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -154,6 +154,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `device-connection-changed` | `Dashboard.DeviceCard` | `connected` / `address` / `name` | full |
 | `device-connection-changed` | `Sidebar.statusDot` | `connected` | patch |
 | `device-connection-changed` | `Devices.ScanResultList` | 对应卡片的 `state` 字段 | patch |
+| `config-changed` / 初始化 config | `Devices.ManagedDeviceCard` | `rememberedDevice` 身份与是否展示 | full |
 | `device-connection-changed` | `ThemeEditor.previewSceneButton` | `disabled = !connected` | patch |
 | `device-connection-changed` | `Preview.devicePreviewAction` | `disabled = !connected` | patch |
 
@@ -391,12 +392,13 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 | 状态 | DeviceCard 视觉 | Tag | 可点击操作 |
 |---|---|---|---|
-| `Disconnected` | 占位卡 + 虚线边框 | "未连接"（灰） | [去连接]（跳转 /devices） |
+| `Disconnected`（无记忆） | 占位卡 + 虚线边框 | "未连接"（灰） | [去连接]（跳转 /devices） |
+| `Disconnected`（已记住） | Devices 页常驻完整身份卡，实时字段为 `—` | "未连接"（灰） | [重新连接] / [忘记设备] |
 | `Connecting` | spinner + "连接中..." | "连接中"（warn） | 禁用 |
 | `Connected` | 完整字段 | "已连接"（accent） | [断开连接] / [忘记设备] |
-| `Reconnecting` | spinner + "重连中...（3/5）" | "重连中"（warn） | 禁用 |
+| `Reconnecting` | 常驻身份卡 + spinner | "重连中"（warn） | [停止重连] / [忘记设备] |
 
-> ✅ 实现状态：`Connected ↔ Disconnected` 双向已实现；`Reconnecting` 支持停止重连或忘记设备；连接代次使旧重连任务在主动操作后失效。
+> ✅ 实现状态：`Connected ↔ Disconnected` 双向已实现；记忆状态与连接状态独立，已记住设备在离线时仍保留恢复卡；`Reconnecting` 支持停止重连或忘记设备；连接代次使旧重连任务在主动操作后失效。
 
 ### 5.3 业务状态（来自仲裁，[ADR-0001](../decisions/ADR-0001)）
 
@@ -534,7 +536,7 @@ Dashboard 顶部大卡：3 灯红绿灯徽章 + 状态名（大号 32px）+ 副�
 ### 6.3 `DeviceCard`
 
 **6.3.1 用途**
-Dashboard 与 Devices 页共用：展示当前 / 扫描到的设备。三列元数据：电量 / 信号 / 同步时间。
+Dashboard 与 Devices 页共用：Dashboard 展示当前连接摘要；Devices 页分别展示由 `rememberedDevice` 驱动的「我的设备」卡与当前扫描结果。记忆状态不等于连接状态。
 
 **6.3.2 对外契约**
 
@@ -543,6 +545,7 @@ Dashboard 与 Devices 页共用：展示当前 / 扫描到的设备。三列元�
 | Props | `device` | `AppState.device`（见 [ipc-contract.md §2.1](./ipc-contract.md)） |
 | Props | `mode` | `'dashboard' \| 'scan-result' \| 'detail'` |
 | Props | `connected` | boolean |
+| Props | `rememberedDevice` | Devices 页的持久身份；非 null 时卡片常驻 |
 | Emit | `onClickConnect(address)` | 仅 `mode = 'scan-result'` |
 | 订阅 | `device-connection-changed` | `connected` / `address` / `name` |
 | 订阅 | `device-power-changed` | `batteryPercent` / `powerSource` / `chargeState` |
@@ -552,10 +555,11 @@ Dashboard 与 Devices 页共用：展示当前 / 扫描到的设备。三列元�
 
 | 态 | 触发条件 | 视觉 | 可交互 |
 |---|---|---|---|
-| `disconnected` | `!connected` | 占位卡 + 虚线边框 + "未连接" tag | hover → [去连接] |
+| `disconnected` | `!connected && !rememberedDevice` | 占位卡 + 虚线边框 + "未连接" tag | hover → [去连接] |
+| `rememberedOffline` | `rememberedDevice && !connected && !reconnecting` | 常驻身份卡 + "未连接" tag，实时字段 `—` | [重新连接] / [忘记设备] |
 | `connecting` | `state == 'Connecting'` | spinner + "连接中..." | 禁用 |
 | `connected` | `connected == true` | 完整字段 + "已连接" tag（accent） | [断开连接] / [忘记设备] |
-| `reconnecting` | `state == 'Reconnecting'` | spinner + "重连中...(N/M)" | 禁用 |
+| `reconnecting` | `state == 'Reconnecting'` | 常驻身份卡 + "重连中..." | [停止重连] / [忘记设备] |
 | `charging` | `chargeState == 'CHARGING'` | 电池格 + ⚡ 充电图标 | 同 `connected` |
 | `full` | `chargeState == 'FULL'` | 电池格 100% + ✓ | 同 `connected` |
 | `lowBattery` | `batteryPercent < 20` | 电池格 warning 色 + Toast 警告 | 同 `connected` |
@@ -569,6 +573,7 @@ Dashboard 与 Devices 页共用：展示当前 / 扫描到的设备。三列元�
 | `device-power-changed` | `batteryPercent` / `powerSource` / `chargeState` | patch |
 | `device-fault` | 故障指示 + Alert 追加 | append |
 | `update_config` | (none) | — |
+| 初始化 config / `config-changed` | `rememberedDevice` | full |
 
 **6.3.5 边界条件**
 - 无电池版：`batteryPercent = null` → 电量格显示 "无电池"
@@ -842,6 +847,9 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 - 扫描进行态至少展示 400ms；页头与空态重试按钮统一为「重新查找设备」
 - 蓝牙权限被拒 → 顶部红色 Alert + [重试] 按钮
 - 扫描中点击 [重新查找] → 取消当前扫描 + 重新发起
+- 「我的设备」位于扫描结果之前且独立于扫描；`rememberedDevice != null` 时始终展示。
+- 扫描列表只有 `snapshot.device.connected && snapshot.device.address == result.address` 时显示禁用的「已连接」；仅地址相同不得禁用。
+- 扫描到 `rememberedDevice.address` 且实际离线时显示「已记住」与可点击的「重新连接」。
 
 ---
 
@@ -1875,6 +1883,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.29 | 2026-08-31 | §3.2/§5.2/§6.3/§7.2 分离设备记忆状态与真实连接状态：Devices 页增加由 `rememberedDevice` 驱动的常驻 ManagedDeviceCard，离线仍可重连/忘记；扫描项仅在 `connected && address 相同` 时显示已连接，历史设备离线时显示已记住/重新连接；全量快照补齐 `reconnecting` 以支持事件丢失后的自愈。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（无新增事件，既有字段已同步）；§4.1 错误码均存在于 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001~0006、KAD 引用有效。 |
 | V1.28 | 2026-08-30 | §4.1 新增 `ADAPTER_UPDATE_FAILED`；§6.7 增加 Settings `AdapterUpdateControl` 契约：用户触发 registry 查询、兼容精确版本升级、完成后重解析与 doctor，无后台自动更新。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（无新增事件）；§4.1 错误码均存在于 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001~0006、KAD 引用有效。 |
 | V1.27 | 2026-08-30 | 工具链核心不变量收敛：§4.1 增加 `TOOLCHAIN_STORE_INVALID` 显式恢复；§6.5 将 `adapter_incompatible` 纳入确认升级；§6.7 增加 `store_invalid` 只读保护态。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（无新增事件）；§4.1 错误码均存在于 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001~0006、KAD 引用有效。 |
 | V1.26 | 2026-08-30 | 工具链发现落地（ADR-0006）：新增 §6.7 `RuntimeEnvironmentCard` 组件契约（摘要/恢复卡/手动选择路径/详情列表）；§6.5 IntegrationCard 增加安装确认态（confirmPending）与工具链 Invokes；§4.1 失败路径矩阵新增 `NODE_NOT_FOUND` / `NODE_INCOMPATIBLE` / `NPM_NOT_FOUND`（工具链语义）/ `TOOLCHAIN_OVERRIDE_INVALID` / `TOOLCHAIN_AMBIGUOUS` / `TOOLCHAIN_PERMISSION_DENIED` / `EXECUTABLE_TIMEOUT` 行。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（无新增事件）；§4.1 全部错误码均存在于 ipc-contract §4（与 ADR-0006 新码同步）；§4.2 蓝牙 result code 与 V0.4 §3.6 一致（未触碰蓝牙章节）；§6~§8 主题字段与 theme-format 字段表一致（未触碰）；ADR-0001~0006、KAD-03/04/06/08/09/10/11/13 引用有效。 |

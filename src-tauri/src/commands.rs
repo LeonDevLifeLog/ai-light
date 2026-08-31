@@ -720,6 +720,7 @@ pub(crate) async fn attach_device(
     {
         let mut dev = s.device.write().map_err(|_| "device 锁".to_string())?;
         dev.connected = true;
+        dev.reconnecting = false;
         dev.address = Some(address.clone());
         dev.name = Some(name.clone());
         dev.fw_version = Some(format!(
@@ -839,6 +840,7 @@ fn spawn_device_event_loop(
                     let s = shared(&app);
                     if let Ok(mut dev) = s.device.write() {
                         dev.connected = false;
+                        dev.reconnecting = true;
                         dev.power_source = None;
                         dev.power_flags = None;
                         dev.charge_state = None;
@@ -885,6 +887,9 @@ pub(crate) fn spawn_reconnect(
     }
     if attempt > MAX_RECONNECT_ATTEMPTS {
         tracing::warn!("设备 {name} 重连达到上限，停止自动重连");
+        if let Ok(mut dev) = shared(&app).device.write() {
+            dev.reconnecting = false;
+        }
         let _ = app.emit(
             "device-connection-changed",
             serde_json::json!({
@@ -896,6 +901,12 @@ pub(crate) fn spawn_reconnect(
             }),
         );
         return;
+    }
+    if let Ok(mut dev) = shared(&app).device.write() {
+        dev.connected = false;
+        dev.reconnecting = true;
+        dev.address = Some(address.clone());
+        dev.name = Some(name.clone());
     }
     tauri::async_runtime::spawn(async move {
         let delay = std::time::Duration::from_secs(ble::reconnect_delay_secs(attempt));

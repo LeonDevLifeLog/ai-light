@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.0 |
-| 文档状态 | 生效（开工依据） |
+| 文档版本 | V1.1 |
+| 文档状态 | 生效；设备快照已补齐重连状态（2026-08-31） |
 | 适用范围 | Rust Core ↔ 前端（React）的接口面；以及 config.json 存储格式 |
 | 架构依据 | KAD-03（Rust 唯一事实源 + events 推送）、ADR-0001/0002、hook-api V1.0、theme-format V1.0 |
 | 生效日期 | 2026-08-19 |
@@ -31,7 +31,7 @@
 {
   "service": { "version": "0.1.0", "port": 25679, "tokenEnabled": false },
   "device": {
-    "connected": false,
+    "connected": false, "reconnecting": false,
     "address": null, "name": null,
     "fwVersion": null, "hardwareVariant": null,
     "batteryPercent": null, "powerSource": null, "chargeState": null
@@ -45,7 +45,7 @@
 }
 ```
 
-> `device` 字段按能力位可缺省（无电池版无 battery 字段）；未连接时相关字段为 null。
+> `device` 字段按能力位可缺省（无电池版无 battery 字段）；未连接时相关字段为 null。`reconnecting` 属于客户端连接生命周期快照，用于前端错过瞬时 event 后通过 `get_app_state` 自愈。
 
 ### 2.2 主题域
 
