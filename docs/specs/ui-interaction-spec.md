@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.29 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.29，2026-08-31） |
+| 文档版本 | V1.30 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.30，2026-08-31） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -850,6 +850,7 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 - 「我的设备」位于扫描结果之前且独立于扫描；`rememberedDevice != null` 时始终展示。
 - 扫描列表只有 `snapshot.device.connected && snapshot.device.address == result.address` 时显示禁用的「已连接」；仅地址相同不得禁用。
 - 扫描到 `rememberedDevice.address` 且实际离线时显示「已记住」与可点击的「重新连接」。
+- ScanResultList 固定按「记住关系降序 → `recognized` 降序 → RSSI 降序 → address 升序」排列；未知 RSSI 低于任意已知 RSSI。
 
 ---
 
@@ -1883,6 +1884,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.30 | 2026-08-31 | §7.2 增加附近设备稳定排序契约：已记住设备优先、已识别状态灯其次、同类按 RSSI 从强到弱，地址兜底；设备页提示与空态统一使用「状态灯」，移除 `AgentCore-Light` 字样。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 错误码未变；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR-0001~0006、KAD 引用有效。 |
 | V1.29 | 2026-08-31 | §3.2/§5.2/§6.3/§7.2 分离设备记忆状态与真实连接状态：Devices 页增加由 `rememberedDevice` 驱动的常驻 ManagedDeviceCard，离线仍可重连/忘记；扫描项仅在 `connected && address 相同` 时显示已连接，历史设备离线时显示已记住/重新连接；全量快照补齐 `reconnecting` 以支持事件丢失后的自愈。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（无新增事件，既有字段已同步）；§4.1 错误码均存在于 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001~0006、KAD 引用有效。 |
 | V1.28 | 2026-08-30 | §4.1 新增 `ADAPTER_UPDATE_FAILED`；§6.7 增加 Settings `AdapterUpdateControl` 契约：用户触发 registry 查询、兼容精确版本升级、完成后重解析与 doctor，无后台自动更新。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（无新增事件）；§4.1 错误码均存在于 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001~0006、KAD 引用有效。 |
 | V1.27 | 2026-08-30 | 工具链核心不变量收敛：§4.1 增加 `TOOLCHAIN_STORE_INVALID` 显式恢复；§6.5 将 `adapter_incompatible` 纳入确认升级；§6.7 增加 `store_invalid` 只读保护态。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（无新增事件）；§4.1 错误码均存在于 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001~0006、KAD 引用有效。 |

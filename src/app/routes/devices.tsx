@@ -12,7 +12,7 @@ import {
   Unplug,
   WifiOff,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppState } from "@/app/app-context";
 import {
   ActionButton,
@@ -43,6 +43,34 @@ function signalLabel(rssi: number | null) {
     return "信号良好";
   }
   return "信号较弱";
+}
+
+function sortNearbyDevices(
+  devices: ScannedDevice[],
+  rememberedAddress?: string
+) {
+  return [...devices].sort((left, right) => {
+    const rememberedDifference =
+      Number(right.address === rememberedAddress) -
+      Number(left.address === rememberedAddress);
+    if (rememberedDifference !== 0) {
+      return rememberedDifference;
+    }
+
+    const recognizedDifference =
+      Number(right.recognized) - Number(left.recognized);
+    if (recognizedDifference !== 0) {
+      return recognizedDifference;
+    }
+
+    const signalDifference =
+      (right.rssi ?? Number.NEGATIVE_INFINITY) -
+      (left.rssi ?? Number.NEGATIVE_INFINITY);
+    if (signalDifference !== 0) {
+      return signalDifference;
+    }
+    return left.address.localeCompare(right.address);
+  });
 }
 
 function connectionStatus(
@@ -326,6 +354,10 @@ export function DevicesPage() {
   };
 
   const rememberedDevice = config?.rememberedDevice;
+  const sortedDevices = useMemo(
+    () => sortNearbyDevices(devices, rememberedDevice?.address),
+    [devices, rememberedDevice?.address]
+  );
   const managedDevice =
     rememberedDevice ??
     (snapshot?.device.address
@@ -359,7 +391,7 @@ export function DevicesPage() {
             </span>
           </ActionButton>
         }
-        description="连接你附近的 AgentCore-Light 灯牌"
+        description="查找并连接附近的状态灯"
         title="设备"
       />
 
@@ -417,12 +449,12 @@ export function DevicesPage() {
               }
               description="请确认灯牌已上电、处于广播范围内，并允许 AI-Light 使用蓝牙。"
               icon={<WifiOff />}
-              title="未发现 AgentCore-Light 设备"
+              title="未发现附近的状态灯"
             />
           </Card>
         ) : (
           <div className="device-list">
-            {devices.map((device) => (
+            {sortedDevices.map((device) => (
               <ScanDeviceRow
                 connecting={connecting === device.address}
                 device={device}
