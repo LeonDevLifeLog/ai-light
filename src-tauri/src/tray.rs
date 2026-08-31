@@ -2,7 +2,7 @@
 //!
 //! - 菜单由 Rust 侧构建（Tauri v2 惯例），动态文字/勾选经 handle 直接更新
 //! - 事件源：业务状态轮询（lib.rs）、theme-changed / update_config / 设备连接断开（commands.rs）
-//! - 图标：当前复用应用图标占位（mac 以模板图单色显示）；正式托盘图标待替换（替换 `src-tauri/icons/icon.*` 后重建即可）
+//! - 图标：独立单色模板图，macOS 自动适配浅色 / 深色菜单栏
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, Submenu};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
@@ -45,8 +45,7 @@ pub fn init(app: &AppHandle) -> tauri::Result<TrayState> {
     )?;
 
     let tray = TrayIconBuilder::with_id("main")
-        // 占位图标：复用应用图标；mac 模板图渲染为单色（P1 不变色，ui-design §5.1.1）
-        .icon(app.default_window_icon().expect("应用图标必须存在").clone())
+        .icon(tauri::include_image!("./icons/tray-icon.png"))
         .icon_as_template(true)
         .tooltip("AI-Light")
         .menu(&menu)
