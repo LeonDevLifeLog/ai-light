@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Cpu,
   Microchip,
+  PlugZap,
   Radio,
   RefreshCw,
   Signal,
@@ -11,7 +12,7 @@ import {
   Unplug,
   WifiOff,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppState } from "@/app/app-context";
 import {
   ActionButton,
@@ -22,8 +23,14 @@ import {
   PageHeader,
   StatusTag,
 } from "@/components/app-ui";
-import { api, asAppError, type ScannedDevice } from "@/lib/ailight";
-import { runAsync } from "@/lib/utils";
+import {
+  api,
+  asAppError,
+  type DeviceState,
+  type RememberedDevice,
+  type ScannedDevice,
+} from "@/lib/ailight";
+import { cn, runAsync } from "@/lib/utils";
 
 function signalLabel(rssi: number | null) {
   if (rssi == null) {
@@ -38,8 +45,227 @@ function signalLabel(rssi: number | null) {
   return "信号较弱";
 }
 
+function sortNearbyDevices(
+  devices: ScannedDevice[],
+  rememberedAddress?: string
+) {
+  return [...devices].sort((left, right) => {
+    const rememberedDifference =
+      Number(right.address === rememberedAddress) -
+      Number(left.address === rememberedAddress);
+    if (rememberedDifference !== 0) {
+      return rememberedDifference;
+    }
+
+    const recognizedDifference =
+      Number(right.recognized) - Number(left.recognized);
+    if (recognizedDifference !== 0) {
+      return recognizedDifference;
+    }
+
+    const signalDifference =
+      (right.rssi ?? Number.NEGATIVE_INFINITY) -
+      (left.rssi ?? Number.NEGATIVE_INFINITY);
+    if (signalDifference !== 0) {
+      return signalDifference;
+    }
+    return left.address.localeCompare(right.address);
+  });
+}
+
+function connectionStatus(
+  connected: boolean,
+  connecting: boolean,
+  reconnecting: boolean
+) {
+  if (connected) {
+    return { label: "连接正常", tone: "success" as const };
+  }
+  if (connecting) {
+    return { label: "正在连接", tone: "warning" as const };
+  }
+  if (reconnecting) {
+    return { label: "正在重连", tone: "warning" as const };
+  }
+  return { label: "未连接", tone: "neutral" as const };
+}
+
+function batteryLabel(device: DeviceState, connected: boolean) {
+  if (!connected) {
+    return "—";
+  }
+  return device.batteryPercent == null ? "无电池" : `${device.batteryPercent}%`;
+}
+
+function ManagedDeviceCard({
+  connected,
+  connecting,
+  device,
+  deviceAction,
+  managedDevice,
+  onConnect,
+  onDisconnect,
+  onForget,
+  reconnecting,
+}: {
+  connected: boolean;
+  connecting: boolean;
+  device: DeviceState;
+  deviceAction: "disconnect" | "forget" | null;
+  managedDevice: RememberedDevice;
+  onConnect: () => void;
+  onDisconnect: () => void;
+  onForget: () => void;
+  reconnecting: boolean;
+}) {
+  const status = connectionStatus(connected, connecting, reconnecting);
+  const detail = (value: string | number | null) =>
+    connected ? (value ?? "—") : "—";
+
+  return (
+    <section aria-labelledby="my-device-title">
+      <h2 className="section-title" id="my-device-title">
+        我的设备
+      </h2>
+      <Card className="connected-device">
+        <div className="connected-device__identity">
+          <div className={cn("device-orb", connected && "is-connected")}>
+            {connected ? (
+              <Radio aria-hidden="true" />
+            ) : (
+              <Bluetooth aria-hidden="true" />
+            )}
+          </div>
+          <div className="connected-device__name">
+            <strong>{managedDevice.name || "AgentCore-Light"}</strong>
+            <span className="mono">{managedDevice.address}</span>
+          </div>
+          <StatusTag tone={status.tone}>
+            {connected ? <CheckCircle2 aria-hidden="true" size={13} /> : null}
+            {status.label}
+          </StatusTag>
+        </div>
+        <div className="connected-device__details">
+          <dl className="device-stats">
+            <div>
+              <Battery
+                aria-hidden="true"
+                className="device-stat__icon"
+                size={16}
+              />
+              <div className="device-stat__copy">
+                <dt>电量</dt>
+                <dd>{batteryLabel(device, connected)}</dd>
+              </div>
+            </div>
+            <div>
+              <Cpu aria-hidden="true" className="device-stat__icon" size={16} />
+              <div className="device-stat__copy">
+                <dt>固件版本</dt>
+                <dd>{detail(device.fwVersion)}</dd>
+              </div>
+            </div>
+            <div>
+              <Microchip
+                aria-hidden="true"
+                className="device-stat__icon"
+                size={16}
+              />
+              <div className="device-stat__copy">
+                <dt>硬件型号</dt>
+                <dd>{detail(device.hardwareVariant)}</dd>
+              </div>
+            </div>
+          </dl>
+          <div className="device-actions">
+            {connected || reconnecting ? (
+              <ActionButton
+                busy={deviceAction === "disconnect"}
+                disabled={deviceAction !== null || connecting}
+                onClick={onDisconnect}
+              >
+                <Unplug aria-hidden="true" size={16} />
+                {reconnecting ? "停止重连" : "断开连接"}
+              </ActionButton>
+            ) : (
+              <ActionButton
+                busy={connecting}
+                disabled={deviceAction !== null}
+                onClick={onConnect}
+                tone="primary"
+              >
+                <PlugZap aria-hidden="true" size={16} />
+                重新连接
+              </ActionButton>
+            )}
+            <ActionButton
+              disabled={deviceAction !== null || connecting}
+              onClick={onForget}
+              tone="ghost"
+            >
+              <Trash2 aria-hidden="true" size={16} />
+              忘记设备
+            </ActionButton>
+          </div>
+        </div>
+      </Card>
+    </section>
+  );
+}
+
+function ScanDeviceRow({
+  connecting,
+  device,
+  isConnected,
+  isRemembered,
+  onConnect,
+}: {
+  connecting: boolean;
+  device: ScannedDevice;
+  isConnected: boolean;
+  isRemembered: boolean;
+  onConnect: () => void;
+}) {
+  let actionLabel = "连接";
+  if (isConnected) {
+    actionLabel = "已连接";
+  } else if (isRemembered) {
+    actionLabel = "重新连接";
+  }
+
+  return (
+    <Card className="device-row">
+      <div className="device-orb">
+        <Bluetooth aria-hidden="true" />
+      </div>
+      <div className="device-row__copy">
+        <strong>{device.name || "未命名蓝牙设备"}</strong>
+        <span className="mono">{device.address}</span>
+      </div>
+      <span className="signal-copy">
+        <Signal aria-hidden="true" size={15} /> {signalLabel(device.rssi)}
+      </span>
+      {device.recognized ? (
+        <StatusTag tone={isRemembered ? "warning" : "success"}>
+          {isRemembered ? "已记住" : "已识别"}
+        </StatusTag>
+      ) : (
+        <StatusTag>其他设备</StatusTag>
+      )}
+      <ActionButton
+        busy={connecting}
+        disabled={!device.recognized || isConnected}
+        onClick={onConnect}
+        tone="primary"
+      >
+        {actionLabel}
+      </ActionButton>
+    </Card>
+  );
+}
+
 export function DevicesPage() {
-  const { snapshot, fault, notify, refresh } = useAppState();
+  const { config, snapshot, fault, notify, refresh } = useAppState();
   const [devices, setDevices] = useState<ScannedDevice[]>([]);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -71,7 +297,7 @@ export function DevicesPage() {
     runAsync(scan());
   }, [scan]);
 
-  const connect = async (device: ScannedDevice) => {
+  const connect = async (device: Pick<ScannedDevice, "address" | "name">) => {
     setConnecting(device.address);
     try {
       await api.connectDevice(device.address);
@@ -127,118 +353,26 @@ export function DevicesPage() {
     }
   };
 
-  let connectionSection: ReactNode = null;
-  if (snapshot?.device.connected) {
-    connectionSection = (
-      <section aria-labelledby="connected-title">
-        <h2 className="section-title" id="connected-title">
-          已连接
-        </h2>
-        <Card className="connected-device">
-          <div className="connected-device__identity">
-            <div className="device-orb is-connected">
-              <Radio aria-hidden="true" />
-            </div>
-            <div className="connected-device__name">
-              <strong>{snapshot.device.name ?? "AgentCore-Light"}</strong>
-              <span className="mono">{snapshot.device.address}</span>
-            </div>
-            <StatusTag tone="success">
-              <CheckCircle2 aria-hidden="true" size={13} />
-              连接正常
-            </StatusTag>
-          </div>
-          <div className="connected-device__details">
-            <dl className="device-stats">
-              <div>
-                <Battery
-                  aria-hidden="true"
-                  className="device-stat__icon"
-                  size={16}
-                />
-                <div className="device-stat__copy">
-                  <dt>电量</dt>
-                  <dd>
-                    {snapshot.device.batteryPercent == null
-                      ? "无电池"
-                      : `${snapshot.device.batteryPercent}%`}
-                  </dd>
-                </div>
-              </div>
-              <div>
-                <Cpu
-                  aria-hidden="true"
-                  className="device-stat__icon"
-                  size={16}
-                />
-                <div className="device-stat__copy">
-                  <dt>固件版本</dt>
-                  <dd>{snapshot.device.fwVersion ?? "—"}</dd>
-                </div>
-              </div>
-              <div>
-                <Microchip
-                  aria-hidden="true"
-                  className="device-stat__icon"
-                  size={16}
-                />
-                <div className="device-stat__copy">
-                  <dt>硬件型号</dt>
-                  <dd>{snapshot.device.hardwareVariant ?? "—"}</dd>
-                </div>
-              </div>
-            </dl>
-            <div className="device-actions">
-              <ActionButton
-                busy={deviceAction === "disconnect"}
-                disabled={deviceAction !== null}
-                onClick={() => runAsync(disconnect())}
-              >
-                <Unplug aria-hidden="true" size={16} />
-                断开连接
-              </ActionButton>
-              <ActionButton
-                disabled={deviceAction !== null}
-                onClick={() => setConfirmForget(true)}
-                tone="ghost"
-              >
-                <Trash2 aria-hidden="true" size={16} />
-                忘记设备
-              </ActionButton>
-            </div>
-          </div>
-        </Card>
-      </section>
-    );
-  } else if (snapshot?.device.reconnecting) {
-    connectionSection = (
-      <section aria-labelledby="reconnecting-title">
-        <h2 className="section-title" id="reconnecting-title">
-          设备状态
-        </h2>
-        <Card className="scan-status" role="status">
-          <span className="scan-pip" />
-          <span>设备已断开，正在自动重连…（最多尝试 5 次）</span>
-          <div className="device-actions">
-            <ActionButton
-              busy={deviceAction === "disconnect"}
-              disabled={deviceAction !== null}
-              onClick={() => runAsync(disconnect())}
-            >
-              停止重连
-            </ActionButton>
-            <ActionButton
-              disabled={deviceAction !== null}
-              onClick={() => setConfirmForget(true)}
-              tone="danger"
-            >
-              忘记设备
-            </ActionButton>
-          </div>
-        </Card>
-      </section>
-    );
-  }
+  const rememberedDevice = config?.rememberedDevice;
+  const sortedDevices = useMemo(
+    () => sortNearbyDevices(devices, rememberedDevice?.address),
+    [devices, rememberedDevice?.address]
+  );
+  const managedDevice =
+    rememberedDevice ??
+    (snapshot?.device.address
+      ? {
+          address: snapshot.device.address,
+          name: snapshot.device.name ?? "AgentCore-Light",
+        }
+      : null);
+  const managedDeviceIsConnected = Boolean(
+    managedDevice &&
+      snapshot?.device.connected &&
+      snapshot.device.address === managedDevice.address
+  );
+  const managedDeviceIsConnecting =
+    managedDevice != null && connecting === managedDevice.address;
 
   return (
     <div className="page-stack">
@@ -257,7 +391,7 @@ export function DevicesPage() {
             </span>
           </ActionButton>
         }
-        description="连接你附近的 AgentCore-Light 灯牌"
+        description="查找并连接附近的状态灯"
         title="设备"
       />
 
@@ -287,7 +421,19 @@ export function DevicesPage() {
         </InlineAlert>
       ) : null}
 
-      {connectionSection}
+      {managedDevice && snapshot ? (
+        <ManagedDeviceCard
+          connected={managedDeviceIsConnected}
+          connecting={managedDeviceIsConnecting}
+          device={snapshot.device}
+          deviceAction={deviceAction}
+          managedDevice={managedDevice}
+          onConnect={() => runAsync(connect(managedDevice))}
+          onDisconnect={() => runAsync(disconnect())}
+          onForget={() => setConfirmForget(true)}
+          reconnecting={snapshot.device.reconnecting}
+        />
+      ) : null}
 
       <section aria-labelledby="nearby-title">
         <h2 className="section-title" id="nearby-title">
@@ -303,43 +449,23 @@ export function DevicesPage() {
               }
               description="请确认灯牌已上电、处于广播范围内，并允许 AI-Light 使用蓝牙。"
               icon={<WifiOff />}
-              title="未发现 AgentCore-Light 设备"
+              title="未发现附近的状态灯"
             />
           </Card>
         ) : (
           <div className="device-list">
-            {devices.map((device) => (
-              <Card className="device-row" key={device.address}>
-                <div className="device-orb">
-                  <Bluetooth aria-hidden="true" />
-                </div>
-                <div className="device-row__copy">
-                  <strong>{device.name || "未命名蓝牙设备"}</strong>
-                  <span className="mono">{device.address}</span>
-                </div>
-                <span className="signal-copy">
-                  <Signal aria-hidden="true" size={15} />{" "}
-                  {signalLabel(device.rssi)}
-                </span>
-                {device.recognized ? (
-                  <StatusTag tone="success">已识别</StatusTag>
-                ) : (
-                  <StatusTag>其他设备</StatusTag>
+            {sortedDevices.map((device) => (
+              <ScanDeviceRow
+                connecting={connecting === device.address}
+                device={device}
+                isConnected={Boolean(
+                  snapshot?.device.connected &&
+                    snapshot.device.address === device.address
                 )}
-                <ActionButton
-                  busy={connecting === device.address}
-                  disabled={
-                    !device.recognized ||
-                    snapshot?.device.address === device.address
-                  }
-                  onClick={() => runAsync(connect(device))}
-                  tone="primary"
-                >
-                  {snapshot?.device.address === device.address
-                    ? "已连接"
-                    : "连接"}
-                </ActionButton>
-              </Card>
+                isRemembered={rememberedDevice?.address === device.address}
+                key={device.address}
+                onConnect={() => runAsync(connect(device))}
+              />
             ))}
           </div>
         )}

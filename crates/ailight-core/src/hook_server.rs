@@ -39,6 +39,9 @@ pub struct DeviceSnapshot {
     /// 当前是否已经连接到状态灯。
     #[schema(example = true)]
     pub connected: bool,
+    /// 断连后是否正在执行客户端自动重连。
+    #[schema(example = false)]
+    pub reconnecting: bool,
     /// 设备的系统蓝牙地址；未连接时为 null。
     #[schema(example = "AA:BB:CC:DD:EE:FF")]
     pub address: Option<String>,
@@ -643,6 +646,7 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(json["service"]["version"], "test");
         assert_eq!(json["business"]["state"], "IDLE");
+        assert_eq!(json["device"]["reconnecting"], false);
 
         let resp = app
             .oneshot(
