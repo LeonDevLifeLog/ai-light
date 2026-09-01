@@ -32,6 +32,11 @@ pnpm build
 cargo check --locked --manifest-path src-tauri/Cargo.toml
 ```
 
+macOS 打包任务还会自动检查产物 `Info.plist` 中的
+`NSBluetoothAlwaysUsageDescription` 与
+`NSBluetoothPeripheralUsageDescription`，防止 CoreBluetooth 在运行时被 TCC
+直接终止。
+
 4. 合并并推送版本变更。
 
 ## 标签发布
