@@ -66,8 +66,8 @@ export function DashboardPage() {
         >
           <div className="section-kicker">设备</div>
           <DeviceSummary
-            battery={snapshot.device.batteryPercent}
             connected={snapshot.device.connected}
+            device={snapshot.device}
             name={snapshot.device.name}
             reconnecting={snapshot.device.reconnecting}
           />

@@ -18,7 +18,9 @@ export interface ServiceState {
 
 export interface DeviceState {
   address: string | null;
+  batteryMv: number | null;
   batteryPercent: number | null;
+  capabilityBits: number | null;
   chargeState: number | null;
   connected: boolean;
   fwVersion: string | null;
@@ -206,6 +208,8 @@ const mockSnapshot: AppSnapshot = {
     name: null,
     fwVersion: null,
     hardwareVariant: null,
+    capabilityBits: null,
+    batteryMv: null,
     batteryPercent: null,
     powerFlags: null,
     powerSource: null,

@@ -16,7 +16,8 @@ import {
   useEffect,
   useRef,
 } from "react";
-import type { BusinessStateName } from "@/lib/ailight";
+import type { BusinessStateName, DeviceState } from "@/lib/ailight";
+import { batteryStatus, batteryStatusLabel } from "@/lib/battery-status";
 import { cn } from "@/lib/utils";
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
@@ -173,12 +174,12 @@ export function EmptyState({
 export function DeviceSummary({
   connected,
   name,
-  battery,
+  device,
   reconnecting,
 }: {
   connected: boolean;
   name?: string | null;
-  battery?: number | null;
+  device: DeviceState;
   reconnecting?: boolean;
 }) {
   let title = "尚未连接设备";
@@ -203,9 +204,10 @@ export function DeviceSummary({
         <strong>{title}</strong>
         <span>{subtitle}</span>
       </div>
-      {connected && battery != null ? (
+      {connected ? (
         <span className="battery-value">
-          <Battery aria-hidden="true" size={16} /> {battery}%
+          <Battery aria-hidden="true" size={16} />
+          {batteryStatusLabel(batteryStatus(device))}
         </span>
       ) : null}
       <ChevronRight aria-hidden="true" className="muted-icon" size={18} />

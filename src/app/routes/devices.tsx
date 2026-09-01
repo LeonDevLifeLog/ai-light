@@ -30,6 +30,7 @@ import {
   type RememberedDevice,
   type ScannedDevice,
 } from "@/lib/ailight";
+import { batteryStatus, batteryStatusLabel } from "@/lib/battery-status";
 import { cn, runAsync } from "@/lib/utils";
 
 function signalLabel(rssi: number | null) {
@@ -94,7 +95,7 @@ function batteryLabel(device: DeviceState, connected: boolean) {
   if (!connected) {
     return "—";
   }
-  return device.batteryPercent == null ? "无电池" : `${device.batteryPercent}%`;
+  return batteryStatusLabel(batteryStatus(device));
 }
 
 function ManagedDeviceCard({

@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.30 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.30，2026-08-31） |
+| 文档版本 | V1.31 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.31，2026-09-01） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -169,14 +169,14 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 | Source Event | 目标组件 | 同步字段 | 同步方式 |
 |---|---|---|---|
-| `device-power-changed` | `DeviceCard.batteryBlock` | `batteryPercent` / `powerSource` / `chargeState` | patch |
+| `device-power-changed` | `DeviceCard.batteryBlock` | `capabilityBits` / `batteryMv` / `batteryPercent` / `powerFlags` / `powerSource` / `chargeState` | patch |
 | `device-power-changed` | `DeviceCard.lowBatteryBadge` | `batteryPercent < 20` → 显示 | toggle |
 | `device-power-changed` | `DeviceCard.chargingIcon` | `chargeState == CHARGING` | toggle |
 | `device-power-changed` | 全局 Toast | `batteryPercent < 10` → "电量过低警告" | emit |
 
 **Payload**：
 ```typescript
-{ batteryPercent: number|null, powerSource: string|null, chargeState: string|null, powerFlags: number }
+{ capabilityBits: number|null, batteryMv: number|null, batteryPercent: number|null, powerSource: number|null, chargeState: number|null, powerFlags: number|null }
 ```
 
 > ✅ 实现状态：握手 GET_POWER_STATUS 与运行期 POWER_CHANGED 均已 emit（无电池能力设备不发）。
@@ -548,7 +548,7 @@ Dashboard 与 Devices 页共用：Dashboard 展示当前连接摘要；Devices �
 | Props | `rememberedDevice` | Devices 页的持久身份；非 null 时卡片常驻 |
 | Emit | `onClickConnect(address)` | 仅 `mode = 'scan-result'` |
 | 订阅 | `device-connection-changed` | `connected` / `address` / `name` |
-| 订阅 | `device-power-changed` | `batteryPercent` / `powerSource` / `chargeState` |
+| 订阅 | `device-power-changed` | `capabilityBits` / `batteryMv` / `batteryPercent` / `powerFlags` / `powerSource` / `chargeState` |
 | 订阅 | `device-fault` | `source` / `code` / `context` |
 
 **6.3.3 视觉态全集**
@@ -570,14 +570,15 @@ Dashboard 与 Devices 页共用：Dashboard 展示当前连接摘要；Devices �
 | Source Event | 字段 | 同步方式 |
 |---|---|---|
 | `device-connection-changed` | `connected` / `address` / `name` | full |
-| `device-power-changed` | `batteryPercent` / `powerSource` / `chargeState` | patch |
+| `device-power-changed` | `capabilityBits` / `batteryMv` / `batteryPercent` / `powerFlags` / `powerSource` / `chargeState` | patch |
 | `device-fault` | 故障指示 + Alert 追加 | append |
 | `update_config` | (none) | — |
 | 初始化 config / `config-changed` | `rememberedDevice` | full |
 
 **6.3.5 边界条件**
-- 无电池版：`batteryPercent = null` → 电量格显示 "无电池"
-- `batteryPercent == 0xFF`（未标定） → 显示 `--`
+- `powerFlags.Bit0 = 0`，或无运行时快照且 `capabilityBits.Bit4 = 0` → 电量格显示 "无电池"
+- `powerFlags.Bit0 = 1 && batteryPercent = null` → 显示 "电量未标定"；`batteryMv` 可用时追加显示原始 mV
+- 有电池能力但尚无运行时电源快照 → 显示 "电池状态未知"
 - `rssi` 不可用 → 信号条显示 0 格 + "信号未知"
 - `sinceTs > 30s` 未更新 → 同步时间显示 "30+ 秒前"（warning 色）
 
@@ -1884,6 +1885,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.31 | 2026-09-01 | §3.3/§6.3 修复电池存在性、运行时在位与百分比测量值的语义混淆；Dashboard 与 Devices 共用四态派生模型，事件和快照补齐 `capabilityBits` / `batteryMv`。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（`device-power-changed` payload 已同步）；§4.1 错误码未变；§4.2 result code 未变且与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR-0001~0006、KAD 引用有效。 |
 | V1.30 | 2026-08-31 | §7.2 增加附近设备稳定排序契约：已记住设备优先、已识别状态灯其次、同类按 RSSI 从强到弱，地址兜底；设备页提示与空态统一使用「状态灯」，移除 `AgentCore-Light` 字样。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 错误码未变；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR-0001~0006、KAD 引用有效。 |
 | V1.29 | 2026-08-31 | §3.2/§5.2/§6.3/§7.2 分离设备记忆状态与真实连接状态：Devices 页增加由 `rememberedDevice` 驱动的常驻 ManagedDeviceCard，离线仍可重连/忘记；扫描项仅在 `connected && address 相同` 时显示已连接，历史设备离线时显示已记住/重新连接；全量快照补齐 `reconnecting` 以支持事件丢失后的自愈。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（无新增事件，既有字段已同步）；§4.1 错误码均存在于 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001~0006、KAD 引用有效。 |
 | V1.28 | 2026-08-30 | §4.1 新增 `ADAPTER_UPDATE_FAILED`；§6.7 增加 Settings `AdapterUpdateControl` 契约：用户触发 registry 查询、兼容精确版本升级、完成后重解析与 doctor，无后台自动更新。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（无新增事件）；§4.1 错误码均存在于 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001~0006、KAD 引用有效。 |
