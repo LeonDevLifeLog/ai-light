@@ -112,3 +112,11 @@ jobs:
           releaseDraft: true
           prerelease: ${{ contains(needs.validate.outputs.tag, '-') }}
           args: ${{ matrix.args }}
+      - name: Validate macOS privacy usage descriptions
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          plist_path=$(find src-tauri/target -path '*/release/bundle/macos/AI-Light.app/Contents/Info.plist' -print -quit)
+          test -n "$plist_path"
+          test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSBluetoothAlwaysUsageDescription' "$plist_path")"
+          test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSBluetoothPeripheralUsageDescription' "$plist_path")"
