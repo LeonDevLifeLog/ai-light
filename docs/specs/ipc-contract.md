@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.1 |
-| 文档状态 | 生效；设备快照已补齐重连状态（2026-08-31） |
+| 文档版本 | V1.2 |
+| 文档状态 | 生效；设备快照已区分电池能力、在位状态与测量值（2026-09-01） |
 | 适用范围 | Rust Core ↔ 前端（React）的接口面；以及 config.json 存储格式 |
 | 架构依据 | KAD-03（Rust 唯一事实源 + events 推送）、ADR-0001/0002、hook-api V1.0、theme-format V1.0 |
 | 生效日期 | 2026-08-19 |
@@ -34,7 +34,9 @@
     "connected": false, "reconnecting": false,
     "address": null, "name": null,
     "fwVersion": null, "hardwareVariant": null,
-    "batteryPercent": null, "powerSource": null, "chargeState": null
+    "capabilityBits": null, "powerFlags": null,
+    "batteryMv": null, "batteryPercent": null,
+    "powerSource": null, "chargeState": null
   },
   "business": {
     "state": "IDLE", "source": null, "session": null,
@@ -197,7 +199,7 @@
 |---|---|---|---|
 | `business-state-changed` | 仲裁结果变化（含 hold 回落） | `{ state, source, session, sinceTs, theme }`（`reset_outputs` 复位时仅携带 `state`，其余字段保持前端现值） | ✅ 已 emit |
 | `device-connection-changed` | 连接/断开（含断连宽限开始） | `{ connected, address, name, reason?, reconnecting? }`（`reason`：`link_lost` / `reconnect_failed` / `manual_disconnect` / `forgotten`） | ✅ 连接、断连、主动断开、忘记、重连放弃均已 emit |
-| `device-power-changed` | POWER_CHANGED / 握手后首次查询 | `{ batteryPercent, powerSource, chargeState, powerFlags }` | ✅ 握手 + 主动事件均已 emit |
+| `device-power-changed` | POWER_CHANGED / 握手后首次查询 | `{ capabilityBits, batteryMv, batteryPercent, powerSource, chargeState, powerFlags }` | ✅ 握手 + 主动事件均已 emit |
 | `device-fault` | FAULT_EVENT | `{ source, code, context }` | ✅ 已 emit |
 | `theme-changed` | 主题切换生效 | `{ name }` | ✅ 已 emit |
 | `config-changed` | 配置更新成功（设置页 / 托盘徽章朝向） | 更新后完整 Config | ✅ 已 emit |
@@ -238,3 +240,9 @@
 - **配置项**：Hook Server 固定优先 25679、占用时自动退避；`portPreference` 仅为旧配置兼容字段，设置页不再开放修改。其余配置项均已生效。
 
 *本文随实现推进修订；修改须同步更新 UI 设计与 Rust 实现双方。*
+
+## 9. 变更日志
+
+| 版本 | 日期 | 变更 |
+|---|---|---|
+| V1.2 | 2026-09-01 | 设备快照与 `device-power-changed` 补齐 `capabilityBits`、`batteryMv`；`batteryPercent = null` 仅表示百分比不可用，电池存在性由 `capabilityBits.Bit4` 与 `powerFlags.Bit0` 判断。 |

@@ -728,10 +728,12 @@ pub(crate) async fn attach_device(
             handshake.device_info.fw.0, handshake.device_info.fw.1, handshake.device_info.fw.2
         ));
         dev.hardware_variant = Some(handshake.device_info.hardware_variant);
+        dev.capability_bits = Some(handshake.capabilities.capability_bits);
         if let Some(p) = &handshake.power {
             dev.power_source = Some(p.power_source);
             dev.power_flags = Some(p.power_flags);
             dev.charge_state = Some(p.charge_state);
+            dev.battery_mv = (p.battery_mv != 0xFFFF).then_some(p.battery_mv);
             dev.battery_percent = (p.battery_percent != 0xFF).then_some(p.battery_percent);
         }
     }
@@ -749,6 +751,8 @@ pub(crate) async fn attach_device(
         let _ = app.emit(
             "device-power-changed",
             serde_json::json!({
+                "capabilityBits": handshake.capabilities.capability_bits,
+                "batteryMv": (p.battery_mv != 0xFFFF).then_some(p.battery_mv),
                 "batteryPercent": (p.battery_percent != 0xFF).then_some(p.battery_percent),
                 "powerSource": p.power_source,
                 "chargeState": p.charge_state,
@@ -801,16 +805,22 @@ fn spawn_device_event_loop(
             match ev {
                 ble::BleEvent::PowerChanged(p) => {
                     let s = shared(&app);
-                    if let Ok(mut dev) = s.device.write() {
+                    let capability_bits = if let Ok(mut dev) = s.device.write() {
                         dev.power_source = Some(p.power_source);
                         dev.power_flags = Some(p.power_flags);
                         dev.charge_state = Some(p.charge_state);
+                        dev.battery_mv = (p.battery_mv != 0xFFFF).then_some(p.battery_mv);
                         dev.battery_percent =
                             (p.battery_percent != 0xFF).then_some(p.battery_percent);
-                    }
+                        dev.capability_bits
+                    } else {
+                        None
+                    };
                     let _ = app.emit(
                         "device-power-changed",
                         serde_json::json!({
+                            "capabilityBits": capability_bits,
+                            "batteryMv": (p.battery_mv != 0xFFFF).then_some(p.battery_mv),
                             "batteryPercent": (p.battery_percent != 0xFF).then_some(p.battery_percent),
                             "powerSource": p.power_source,
                             "chargeState": p.charge_state,
@@ -844,6 +854,7 @@ fn spawn_device_event_loop(
                         dev.power_source = None;
                         dev.power_flags = None;
                         dev.charge_state = None;
+                        dev.battery_mv = None;
                         dev.battery_percent = None;
                     }
                     let state = app.state::<AppState>();

@@ -54,7 +54,13 @@ pub struct DeviceSnapshot {
     /// 硬件变体编号；设备未提供时为 null。
     #[schema(example = 1)]
     pub hardware_variant: Option<u8>,
-    /// 剩余电量百分比，范围 0~100；无电池能力时为 null。
+    /// 设备能力位；设备未提供时为 null。
+    #[schema(example = 63)]
+    pub capability_bits: Option<u32>,
+    /// 电池电压（mV）；设备未提供或协议值为 0xFFFF 时为 null。
+    #[schema(example = 3993)]
+    pub battery_mv: Option<u16>,
+    /// 剩余电量百分比，范围 0~100；未标定或无电池能力时为 null。
     #[schema(example = 75, minimum = 0, maximum = 100)]
     pub battery_percent: Option<u8>,
     /// 电源来源协议枚举值；设备未提供时为 null。

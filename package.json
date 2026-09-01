@@ -1,6 +1,6 @@
 {
   "name": "ai-light",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "packageManager": "pnpm@10.15.1",
   "description": "",
@@ -10,6 +10,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "test": "node --test tests/battery-status.test.ts",
     "check": "ultracite check",
     "fix": "ultracite fix",
     "prepare": "husky",
