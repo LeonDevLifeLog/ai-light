@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.34 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.34，2026-09-04） |
+| 文档版本 | V1.35 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.35，2026-09-04） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -731,8 +731,7 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 - 端口切换：需重启服务 → Toast "服务重启中..." → 成功后 Toast "端口已切换"
 - 自启动：✅ 已实装（tauri-plugin-autostart 2.5.1，KAD-09）；失败路径 `AUTOSTART_FAILED` → Toast + 控件回滚到原值；OS 登录项为唯一事实源，config 为启动校准缓存
 - 仲裁固定为最近活动优先，不提供设置控件；最后上报的工具接管灯效（ADR-0005 / KAD-13）
-- 服务端口放在「高级服务信息」原生 disclosure 中，默认收起
-- 接口文档与服务端口同处「高级服务信息」；按钮根据 `service.port` 打开 `http://127.0.0.1:{port}/docs/`，调用中进入 loading 并禁用，状态未就绪时 disabled，打开失败 Toast，成功不额外反馈
+- API 接口文档作为系统组直接子项展示；按钮根据 `service.port` 打开 `http://127.0.0.1:{port}/docs/`，调用中进入 loading 并禁用，状态未就绪时 disabled，打开失败 Toast，成功不额外反馈
 
 **6.6.6 无障碍**
 - 行名 = 可见 `<strong>`；控件自带 `aria-label`（如"开机自启"）
@@ -947,21 +946,17 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 ┌─────────────────────────┐
 │  标题                    │
 ├─────────────────────────┤
-│ SettingGroup: 服务       │ 连接安全 + 高级服务信息（折叠）
-├─────────────────────────┤
 │ SettingGroup: 显示       │ themeMode + badgeOrientation + 当前主题
 ├─────────────────────────┤
-│ SettingGroup: 系统       │ autostart（✅ 可切换）
+│ SettingGroup: 系统       │ autostart + 外部运行环境 + API 接口文档
 └─────────────────────────┘
 ```
 
 **联动**：每 SettingGroup 内的 SettingRow 互不联动；Group 间独立。
 
-**7.6.1 服务组**：连接安全 = 状态标签（「仅限本机 / 已启用身份验证」）；默认收起的「高级服务信息」包含服务端口与接口文档入口。接口文档按钮使用系统默认浏览器打开实际监听端口下的 `/docs/` Swagger UI，不使用可能因启动退避而失真的 `portPreference`。
+**7.6.1 显示组**：外观模式 = 三张 ModeOption 卡片（亮色 / 暗色 / 跟随系统，图标 + 一句说明），切换经 `update_config(themeMode)` 持久化，`html[data-theme]` 即时更新；"跟随系统"下 `data-theme` 随 `prefers-color-scheme` 变化。灯组朝向（SegControl 横排/纵向）；当前主题 = 主题预览入口（Link → /themes）：3 个灯色圆点（取当前主题 WORKING/SUCCESS/ERROR 场景实际 `leds.high`/`low` 色）+ 主题名 + 可选「提示音」标记 + ChevronRight。预览随 `config.activeTheme` 变化刷新；主题读取失败回退为纯名称。
 
-**7.6.2 显示组**：外观模式 = 三张 ModeOption 卡片（亮色 / 暗色 / 跟随系统，图标 + 一句说明），切换经 `update_config(themeMode)` 持久化，`html[data-theme]` 即时更新；"跟随系统"下 `data-theme` 随 `prefers-color-scheme` 变化。灯组朝向（SegControl 横排/纵向）；当前主题 = 主题预览入口（Link → /themes）：3 个灯色圆点（取当前主题 WORKING/SUCCESS/ERROR 场景实际 `leds.high`/`low` 色）+ 主题名 + 可选「提示音」标记 + ChevronRight。预览随 `config.activeTheme` 变化刷新；主题读取失败回退为纯名称。
-
-**7.6.3 系统组**：开机自启 Switch（`aria-checked` + 开启态视觉 = 品牌绿底 + 滑块右移 16px）。
+**7.6.2 系统组**：依次展示开机自启、外部运行环境、API 接口文档。开机自启使用 Switch（`aria-checked` + 开启态视觉 = 品牌绿底 + 滑块右移 16px）；外部运行环境摘要后紧随详情 disclosure；API 接口文档为直接可见的 SettingRow，按钮使用系统默认浏览器打开实际监听端口下的 `/docs/` Swagger UI，不使用可能因启动退避而失真的 `portPreference`。
 
 ---
 
@@ -1887,6 +1882,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.35 | 2026-09-04 | §6.6/§7.6 移除设置页“连接安全”与“服务”分组，将 API 接口文档迁入“系统”并直接展示；系统项顺序统一为开机自启、外部运行环境、API 接口文档。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变且均存在于 ipc-contract §4；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增主题字段且与 theme-format 一致；ADR-0001~0006、KAD-01~14 引用有效。 |
 | V1.34 | 2026-09-04 | §6.5 新增 WorkBuddy IntegrationCard，沿用既有连接、确认安装、断开及无障碍契约；配置路径为 `~/.workbuddy/settings.json`。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~14 引用有效。 |
 | V1.33 | 2026-09-04 | §6.3 补充 Dashboard DeviceCard 长名称边界：名称最多两行并提供全文提示，连接状态与电量拆为独立元信息行，电量和导航箭头保持可见。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD 引用有效。 |
 | V1.32 | 2026-09-04 | §4.1/§6.7 将 Node/npm 兼容性收敛为真实执行能力：`mixedInstallation` 仅诊断，不再阻塞自动选择或进入 recovery。对齐报告（变更后自动）：§3 Source Events 未变且与 ipc-contract §5 一致；§4.1 未新增错误码，`NPM_NOT_FOUND` 仍存在于 ipc-contract §4；§4.2 蓝牙 result code 未变；§6~§8 未新增主题字段；ADR-0006 追加决策可解析，KAD 引用未变。 |

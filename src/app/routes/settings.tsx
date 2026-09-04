@@ -6,7 +6,6 @@ import {
   Moon,
   Palette,
   RefreshCw,
-  ShieldCheck,
   Sun,
   SunMoon,
   Volume2,
@@ -344,43 +343,6 @@ export function SettingsPage() {
         description="管理智能体状态上报、灯效规则与外观偏好"
         title="设置"
       />
-      <section aria-labelledby="service-settings">
-        <h2 className="section-title" id="service-settings">
-          服务
-        </h2>
-        <Card className="settings-card">
-          <SettingRow
-            description="工具只能从这台电脑连接；当前无需额外密钥"
-            icon={<ShieldCheck />}
-            title="连接安全"
-          >
-            <StatusTag
-              tone={snapshot?.service.tokenEnabled ? "warning" : "success"}
-            >
-              {snapshot?.service.tokenEnabled ? "已启用身份验证" : "仅限本机"}
-            </StatusTag>
-          </SettingRow>
-          <details className="settings-advanced">
-            <summary>高级服务信息</summary>
-            <SettingRow
-              description="在浏览器中查看 Hook API，可调试接口并生成自定义调用"
-              icon={<BookOpen />}
-              title="接口文档"
-            >
-              <ActionButton
-                busy={openingDocs}
-                disabled={!snapshot}
-                onClick={() => runAsync(openApiDocs())}
-              >
-                {openingDocs ? "正在打开…" : "打开 API 文档"}
-                {openingDocs ? null : (
-                  <ExternalLink aria-hidden="true" size={15} />
-                )}
-              </ActionButton>
-            </SettingRow>
-          </details>
-        </Card>
-      </section>
       <section aria-labelledby="appearance-settings">
         <h2 className="section-title" id="appearance-settings">
           显示
@@ -494,6 +456,25 @@ export function SettingsPage() {
         </h2>
         <Card className="settings-card">
           <SettingRow
+            description="登录系统后自动启动 AI-Light"
+            icon={<Monitor />}
+            title="开机自启"
+          >
+            <button
+              aria-checked={config.autostart}
+              aria-label="开机自启"
+              className="switch"
+              disabled={saving === "autostart"}
+              onClick={() =>
+                runAsync(update("autostart", { autostart: !config.autostart }))
+              }
+              role="switch"
+              type="button"
+            >
+              <span />
+            </button>
+          </SettingRow>
+          <SettingRow
             description="接入工具依赖的 Node.js / npm / Adapter 运行环境"
             icon={<Monitor />}
             title="外部运行环境"
@@ -550,23 +531,20 @@ export function SettingsPage() {
             )}
           </details>
           <SettingRow
-            description="登录系统后自动启动 AI-Light"
-            icon={<Monitor />}
-            title="开机自启"
+            description="在浏览器中查看本机 Hook API，用于自定义接入与调试"
+            icon={<BookOpen />}
+            title="API 接口文档"
           >
-            <button
-              aria-checked={config.autostart}
-              aria-label="开机自启"
-              className="switch"
-              disabled={saving === "autostart"}
-              onClick={() =>
-                runAsync(update("autostart", { autostart: !config.autostart }))
-              }
-              role="switch"
-              type="button"
+            <ActionButton
+              busy={openingDocs}
+              disabled={!snapshot}
+              onClick={() => runAsync(openApiDocs())}
             >
-              <span />
-            </button>
+              {openingDocs ? "正在打开…" : "打开文档"}
+              {openingDocs ? null : (
+                <ExternalLink aria-hidden="true" size={15} />
+              )}
+            </ActionButton>
           </SettingRow>
         </Card>
       </section>
