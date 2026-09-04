@@ -1310,7 +1310,8 @@ input[type="range"] {
   min-height: 74px;
   padding: 13px 16px;
 }
-.setting-row + .setting-row {
+.setting-row + .setting-row,
+.settings-advanced + .setting-row {
   border-top: 1px solid var(--border-soft);
 }
 .setting-row__icon {
