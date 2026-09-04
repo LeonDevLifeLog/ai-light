@@ -88,3 +88,40 @@ test("maps Codex lifecycle events and ignores unknown events", () => {
   );
   assert.deepEqual(translate("codex", { hook_event_name: "PostToolUse" }), []);
 });
+
+test("maps WorkBuddy supported lifecycle events", () => {
+  assert.equal(
+    translate("workbuddy", { hook_event_name: "SessionStart" })[0]?.state,
+    "IDLE"
+  );
+  assert.equal(
+    translate("workbuddy", { hook_event_name: "UserPromptSubmit" })[0]?.state,
+    "WORKING"
+  );
+  assert.equal(
+    translate("workbuddy", {
+      hook_event_name: "PreToolUse",
+      tool_name: "AskUserQuestion",
+    })[0]?.state,
+    "WAITING"
+  );
+  assert.equal(
+    translate("workbuddy", { hook_event_name: "Stop" })[0]?.state,
+    "SUCCESS"
+  );
+  assert.equal(
+    translate("workbuddy", { hook_event_name: "SessionEnd" })[0]?.state,
+    "IDLE"
+  );
+  assert.deepEqual(
+    translate("workbuddy", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Read",
+    }),
+    []
+  );
+  assert.deepEqual(
+    translate("workbuddy", { hook_event_name: "PostToolUse" }),
+    []
+  );
+});

@@ -50,13 +50,24 @@ const EVENTS: Record<ToolId, Array<{ event: string; matcher?: string }>> = {
     { event: "Stop" },
     { event: "SessionEnd" },
   ],
+  workbuddy: [
+    { event: "SessionStart", matcher: "startup" },
+    { event: "UserPromptSubmit" },
+    { event: "PreToolUse", matcher: "AskUserQuestion|ExitPlanMode" },
+    { event: "Stop" },
+    { event: "SessionEnd", matcher: "other" },
+  ],
 };
 
 export function configPath(tool: ToolId, env = process.env) {
   const userHome = env.AILIGHT_TEST_USER_HOME || homedir();
-  return tool === "claude-code"
-    ? join(userHome, ".claude", "settings.json")
-    : join(userHome, ".codex", "hooks.json");
+  if (tool === "claude-code") {
+    return join(userHome, ".claude", "settings.json");
+  }
+  if (tool === "workbuddy") {
+    return join(userHome, ".workbuddy", "settings.json");
+  }
+  return join(userHome, ".codex", "hooks.json");
 }
 
 function isManaged(handler: HookHandler) {
@@ -114,20 +125,20 @@ function withManaged(config: ToolConfig, tool: ToolId, cliScript: string) {
   for (const item of EVENTS[tool]) {
     const invocation = [cliScript, "hook", tool, ...MANAGED_ARGS];
     const handler: HookHandler =
-      tool === "codex"
+      tool === "claude-code"
         ? {
+            args: invocation,
+            command: process.execPath,
+            timeout: 2,
+            type: "command",
+          }
+        : {
             command: [process.execPath, ...invocation]
               .map(quotePosix)
               .join(" "),
             commandWindows: [process.execPath, ...invocation]
               .map(quoteWindows)
               .join(" "),
-            timeout: 2,
-            type: "command",
-          }
-        : {
-            args: invocation,
-            command: process.execPath,
             timeout: 2,
             type: "command",
           };

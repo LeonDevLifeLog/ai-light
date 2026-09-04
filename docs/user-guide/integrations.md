@@ -1,6 +1,6 @@
 # 接入 AI 编程工具
 
-AI Light 当前面向最终用户提供 Claude Code 和 Codex 的一键接入。连接成功后，工具的工作、等待、完成和失败状态会自动同步到 AI Light。
+AI Light 当前面向最终用户提供 Claude Code、Codex 和 WorkBuddy 的一键接入。连接成功后，工具支持的工作、等待、完成和失败状态会自动同步到 AI Light。
 
 ## 开始之前
 
@@ -28,6 +28,16 @@ AI Light 当前面向最终用户提供 Claude Code 和 Codex 的一键接入。
 5. 新建一次 Codex 任务，检查 AI Light 状态是否变化。
 
 实际可用能力取决于本机 Codex 版本及其 Hook 支持情况。云端运行、没有经过本机 Hook 的任务不会自动同步。
+
+## 连接 WorkBuddy
+
+1. 打开“接入”页面。
+2. 找到 WorkBuddy 卡片。
+3. 选择“连接”。
+4. 等待卡片显示“已连接”。
+5. 新建一次 WorkBuddy 任务，检查 AI Light 状态是否变化。
+
+AI Light 只修改 `~/.workbuddy/settings.json`。WorkBuddy 当前提供的 Hook 可以同步工作、等待提问、本轮完成和会话结束，但没有可靠的失败事件，因此不会根据输出内容猜测“出错了”。
 
 ## 连接操作会修改什么
 

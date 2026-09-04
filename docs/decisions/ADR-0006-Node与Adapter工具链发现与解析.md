@@ -51,3 +51,9 @@
 2. 查询结果只暴露当前版本与兼容范围内的最高已发布版本。升级必须由用户点击带精确目标版本的按钮触发，后端再次确认该版本已发布且兼容，禁止使用 `latest`。
 3. npm 安装完成不等于流程成功：ToolchainService 必须重新解析 Node/npm/Adapter，并通过同一 ResolvedToolchain 执行 `doctor --json`，再向 UI 返回新状态。
 4. V1 不提供自动检查或自动升级开关。Adapter 缺失/不兼容仍由 Integrations 的必需安装恢复链处理，避免把高阶维护入口混入普通连接流程。
+
+## 追加决策：Node/npm 以可执行能力为准（2026-09-04）
+
+1. Node/npm 是 Adapter 的运行与安装机制，不以安装目录拓扑作为强兼容性边界。Node 能通过版本门槛，且选定 Node 能成功执行 npm 的 `--version` 与 `prefix --global`，即可自动选用。
+2. `mixedInstallation` 仅保留为内部诊断信息，不改变 ToolchainStatus，不生成恢复卡错误，不要求用户手动 override。该决策取代上文决策 5 中“混合安装族不自动选择”的部分。
+3. Adapter 仍必须通过真实 CLI 执行、`ok=true`、包名、semver 与 Hook 协议兼容性验证；绝对路径、超时、输出上限与环境清理等安全边界保持不变。

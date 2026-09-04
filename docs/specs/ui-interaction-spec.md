@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.31 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.31，2026-09-01） |
+| 文档版本 | V1.34 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.34，2026-09-04） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -270,7 +270,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `DEVICE_DISCONNECT_FAILED` | 主动断开失败 | Toast "无法断开设备：`<reason>`" | 检查设备后重试 |
 | `AUTOSTART_FAILED` | OS 登录项切换失败 | Toast "开机自启设置失败：`<reason>`"；Switch 回滚 | 检查系统权限后重试 |
 | `NODE_NOT_FOUND` / `NODE_INCOMPATIBLE` | 工具链解析未发现 Node 或版本低于 20 | Integrations 运行环境恢复卡内联展示（非仅 Toast） | 安装 Node 20+ / [选择 Node] / [重新检测] |
-| `NPM_NOT_FOUND` | 已发现 Node 但无关联 npm | 运行环境恢复卡内联展示 mixedInstallation 说明 | [选择 npm] / 修复 Node 安装 |
+| `NPM_NOT_FOUND` | 已发现 Node，但无 npm 候选能通过真实命令验证 | 运行环境恢复卡内联展示失败候选及原因 | [选择 npm] / 修复 npm 安装 |
 | `TOOLCHAIN_OVERRIDE_INVALID` | 手动路径不存在或验证失败 | 字段级错误 Toast + 恢复卡保持 `invalid_override` 态 | 重新选择 / [恢复自动检测] |
 | `TOOLCHAIN_AMBIGUOUS` / `TOOLCHAIN_PERMISSION_DENIED` | 多组候选无法决策 / 权限不足 | 运行环境恢复卡内联展示 | 用户选择一组工具 / 调整权限 |
 | `TOOLCHAIN_STORE_INVALID` | `toolchain.json` 损坏、非法或 schema 不兼容 | danger tag「配置需要恢复」+ 原文件只读保护 | [恢复自动检测] 后明确重建 |
@@ -576,6 +576,7 @@ Dashboard 与 Devices 页共用：Dashboard 展示当前连接摘要；Devices �
 | 初始化 config / `config-changed` | `rememberedDevice` | full |
 
 **6.3.5 边界条件**
+- Dashboard 摘要的设备名最多显示两行，超出后省略并提供全文提示；连接状态与电量位于独立元信息行，电量和导航箭头保持可见且不参与名称宽度竞争
 - `powerFlags.Bit0 = 0`，或无运行时快照且 `capabilityBits.Bit4 = 0` → 电量格显示 "无电池"
 - `powerFlags.Bit0 = 1 && batteryPercent = null` → 显示 "电量未标定"；`batteryMv` 可用时追加显示原始 mV
 - 有电池能力但尚无运行时电源快照 → 显示 "电池状态未知"
@@ -651,7 +652,7 @@ Dashboard 主题卡 + Themes 页主题网格卡：3 灯条色块缩略 + 主题�
 ### 6.5 `IntegrationCard`
 
 **6.5.1 用途**
-Integrations 页的官方 Adapter 卡（Claude Code / Codex）。
+Integrations 页的官方 Adapter 卡（Claude Code / Codex / WorkBuddy）。
 
 **6.5.2 对外契约**
 
@@ -779,6 +780,7 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 - 文件选择取消不改变现有配置（返回当前状态）
 - `mode === "manual"`（存在 override）时提供 [恢复自动检测]
 - `state === "store_invalid"` 时，无论 mode 均提供 [恢复自动检测]；明确操作前不得覆盖原文件或执行接入写操作
+- Node/npm 是 Adapter 的执行机制：选定 Node 能成功运行 npm 的版本查询和全局 prefix 查询即视为可用；`mixedInstallation` 只作诊断，不进入 recovery 态
 
 **6.7.6 无障碍**
 - 卡片状态变化通过 `aria-live="polite"` 区域宣告（页面级隐藏文本）
@@ -1885,6 +1887,9 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.34 | 2026-09-04 | §6.5 新增 WorkBuddy IntegrationCard，沿用既有连接、确认安装、断开及无障碍契约；配置路径为 `~/.workbuddy/settings.json`。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~14 引用有效。 |
+| V1.33 | 2026-09-04 | §6.3 补充 Dashboard DeviceCard 长名称边界：名称最多两行并提供全文提示，连接状态与电量拆为独立元信息行，电量和导航箭头保持可见。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD 引用有效。 |
+| V1.32 | 2026-09-04 | §4.1/§6.7 将 Node/npm 兼容性收敛为真实执行能力：`mixedInstallation` 仅诊断，不再阻塞自动选择或进入 recovery。对齐报告（变更后自动）：§3 Source Events 未变且与 ipc-contract §5 一致；§4.1 未新增错误码，`NPM_NOT_FOUND` 仍存在于 ipc-contract §4；§4.2 蓝牙 result code 未变；§6~§8 未新增主题字段；ADR-0006 追加决策可解析，KAD 引用未变。 |
 | V1.31 | 2026-09-01 | §3.3/§6.3 修复电池存在性、运行时在位与百分比测量值的语义混淆；Dashboard 与 Devices 共用四态派生模型，事件和快照补齐 `capabilityBits` / `batteryMv`。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（`device-power-changed` payload 已同步）；§4.1 错误码未变；§4.2 result code 未变且与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR-0001~0006、KAD 引用有效。 |
 | V1.30 | 2026-08-31 | §7.2 增加附近设备稳定排序契约：已记住设备优先、已识别状态灯其次、同类按 RSSI 从强到弱，地址兜底；设备页提示与空态统一使用「状态灯」，移除 `AgentCore-Light` 字样。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 错误码未变；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR-0001~0006、KAD 引用有效。 |
 | V1.29 | 2026-08-31 | §3.2/§5.2/§6.3/§7.2 分离设备记忆状态与真实连接状态：Devices 页增加由 `rememberedDevice` 驱动的常驻 ManagedDeviceCard，离线仍可重连/忘记；扫描项仅在 `connected && address 相同` 时显示已连接，历史设备离线时显示已记住/重新连接；全量快照补齐 `reconnecting` 以支持事件丢失后的自愈。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（无新增事件，既有字段已同步）；§4.1 错误码均存在于 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001~0006、KAD 引用有效。 |

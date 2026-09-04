@@ -99,9 +99,9 @@
 |---|---|---|---|---|
 | `get_config()` | — | Config（§3） | — | P1 |
 | `update_config(patch)` | patch: Partial\<Config> | 更新后完整 Config | `BAD_REQUEST` / `AUTOSTART_FAILED` | P1 |
-| `get_integration_status(tool)` | `claude-code \| codex` | Adapter 托管状态 | `BAD_REQUEST` / `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` | P1 |
-| `install_integration(tool)` | `claude-code \| codex` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` / `EXECUTABLE_TIMEOUT` | P1 |
-| `uninstall_integration(tool)` | `claude-code \| codex` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` / `TOOLCHAIN_*` | P1 |
+| `get_integration_status(tool)` | `claude-code \| codex \| workbuddy` | Adapter 托管状态 | `BAD_REQUEST` / `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` | P1 |
+| `install_integration(tool)` | `claude-code \| codex \| workbuddy` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` / `EXECUTABLE_TIMEOUT` | P1 |
+| `uninstall_integration(tool)` | `claude-code \| codex \| workbuddy` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` / `TOOLCHAIN_*` | P1 |
 
 **`update_config` 允许字段**：`token` / `autostart` / `badgeOrientation` / `themeMode`。`portPreference` 为遗留兼容字段，不再接受用户 patch；Hook Server 固定优先 25679 并自动退避，实际地址通过 `~/.ailight/runtime.json` 提供给 Adapter（KAD-11）。`autostart` 采用"先 OS 后 config"：OS 登录项操作成功才写缓存，失败返回 `AUTOSTART_FAILED` 且 config 不变（KAD-09）。`rememberedDevice` 由连接流程管理，不接受用户 patch。仲裁固定为最近活动优先，不属于配置（ADR-0005 / KAD-13）。
 
@@ -176,7 +176,7 @@
 | `DEVICE_NOT_CONNECTED` | 设备未连接 | preview_scene 前置检查 |
 | `DEVICE_DISCONNECT_FAILED` | 主动断开失败 | disconnect_device / forget_device；忘记操作不会清除记忆 |
 | `AUTOSTART_FAILED` | 开机自启 OS 登录项操作失败 | update_config(autostart) 时 enable/disable 抛错（权限、路径失效、平台异常等） |
-| `ADAPTER_NOT_FOUND` | Adapter CLI 不可执行 | 查询或管理 Claude Code/Codex 接入 |
+| `ADAPTER_NOT_FOUND` | Adapter CLI 不可执行 | 查询或管理 Claude Code/Codex/WorkBuddy 接入 |
 | `ADAPTER_COMMAND_FAILED` | Adapter 管理命令失败 | 检测、安装或卸载 Hook |
 | `ADAPTER_INSTALL_FAILED` | npm 全局安装失败 | 首次连接工具 |
 | `ADAPTER_UPDATE_FAILED` | Adapter 主动检查或精确版本升级失败 | Settings 高级运行环境中的检查/升级（恢复：保留现状并重试） |

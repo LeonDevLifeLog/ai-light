@@ -401,13 +401,13 @@ export const api = {
     isTauri()
       ? call<AppConfig>("update_config", { patch })
       : { ...mockConfig, ...patch },
-  getIntegrationStatus: async (tool: "claude-code" | "codex") =>
+  getIntegrationStatus: async (tool: "claude-code" | "codex" | "workbuddy") =>
     isTauri()
       ? call<IntegrationStatus>("get_integration_status", { tool })
       : { connected: false, managedCount: 0, path: "" },
-  installIntegration: (tool: "claude-code" | "codex") =>
+  installIntegration: (tool: "claude-code" | "codex" | "workbuddy") =>
     call<{ changed: boolean; path: string }>("install_integration", { tool }),
-  uninstallIntegration: (tool: "claude-code" | "codex") =>
+  uninstallIntegration: (tool: "claude-code" | "codex" | "workbuddy") =>
     call<{ changed: boolean; path: string }>("uninstall_integration", { tool }),
   getToolchainStatus: async (force = false) =>
     isTauri()

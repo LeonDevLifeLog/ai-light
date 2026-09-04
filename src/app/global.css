@@ -609,11 +609,28 @@ pre,
   flex-direction: column;
   min-width: 0;
 }
+.device-summary__copy strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.device-summary__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  margin-top: 4px;
+}
 .device-summary__copy span,
 .theme-summary span {
-  margin-top: 2px;
   font-size: 12px;
   color: var(--text-secondary);
+}
+.device-summary__meta > span:first-child {
+  flex: 1 1 auto;
 }
 .battery-value,
 .signal-copy {
@@ -622,6 +639,9 @@ pre,
   align-items: center;
   font-size: 12px;
   color: var(--text-secondary);
+}
+.device-summary__meta .battery-value {
+  flex: none;
 }
 .muted-icon {
   flex: none;

@@ -13,7 +13,7 @@ const packageVersion = (
 ).version;
 
 function isTool(value: string | undefined): value is ToolId {
-  return value === "claude-code" || value === "codex";
+  return value === "claude-code" || value === "codex" || value === "workbuddy";
 }
 
 async function stdinJson() {

@@ -1,7 +1,7 @@
 {
   "name": "@ai-light/adapter",
-  "version": "0.1.2",
-  "description": "Claude Code and Codex adapter for AI-Light",
+  "version": "0.1.3",
+  "description": "Claude Code, Codex, and WorkBuddy adapter for AI-Light",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/LeonDevLifeLog/ai-light.git",

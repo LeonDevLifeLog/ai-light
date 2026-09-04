@@ -201,15 +201,17 @@ export function DeviceSummary({
         )}
       </div>
       <div className="device-summary__copy">
-        <strong>{title}</strong>
-        <span>{subtitle}</span>
+        <strong title={title}>{title}</strong>
+        <div className="device-summary__meta">
+          <span>{subtitle}</span>
+          {connected ? (
+            <span className="battery-value">
+              <Battery aria-hidden="true" size={16} />
+              {batteryStatusLabel(batteryStatus(device))}
+            </span>
+          ) : null}
+        </div>
       </div>
-      {connected ? (
-        <span className="battery-value">
-          <Battery aria-hidden="true" size={16} />
-          {batteryStatusLabel(batteryStatus(device))}
-        </span>
-      ) : null}
       <ChevronRight aria-hidden="true" className="muted-icon" size={18} />
     </div>
   );
