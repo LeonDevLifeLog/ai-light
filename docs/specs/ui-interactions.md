@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.33 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.33，2026-09-04） |
+| 文档版本 | V1.34 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.34，2026-09-04） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -103,6 +103,7 @@
 ### 3.3 设备卡
 
 - 显示：图标 + 名称（用户起的别名，如「客厅的灯牌」）+ 副标题（位置描述）
+- Dashboard 摘要在默认窗口宽度下使用多行信息层级：设备名最多两行，连接状态与电量位于独立元信息行；超长名称省略并通过悬停提示展示全文，电量与导航箭头不得被名称挤出卡片。
 - 三列元数据：电量（百分比 + 图标）/ 信号（4 格彩条）/ 同步时间（相对时间，如「5 秒前」）
 - 状态 tag：`已连接`（绿）/ `未连接`（灰）/ 故障时显示设备故障 Alert
 
@@ -770,6 +771,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.34 | 2026-09-04 | §3.3 优化 Dashboard 设备摘要的窄卡布局：设备名称最多两行，连接状态与电量拆为独立元信息行，超长名称提供全文提示，固定保留电量与导航箭头空间。对齐报告（变更后自动，5 项语义硬检查通过）：Source Events 与 ipc-contract §5 一致；AppError.code 未变；蓝牙 result code 未变且与 V0.4 §3.6 一致；未新增主题字段；ADR-0001~0006、KAD 引用有效。 |
 | V1.33 | 2026-09-04 | §5.2.1 将 Node/npm 兼容性收敛为真实执行能力：安装目录不同仅诊断，不阻塞接入。对齐报告（变更后自动）：§3 Source Events 未变且与 ipc-contract §5 一致；§4.1 未新增错误码，`NPM_NOT_FOUND` 仍存在于 ipc-contract §4；§4.2 蓝牙 result code 未变；§6~§8 未新增主题字段；ADR-0006 追加决策可解析，KAD 引用未变。 |
 | V1.32 | 2026-09-01 | 修复电池存在性与百分比未知被 `null` 混淆：Dashboard 与 Devices 共用四态派生模型；快照和事件补齐 `capabilityBits` / `batteryMv`，有电池但百分比未标定时显示明确文字及可用电压。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（`device-power-changed` payload 已同步）；§4.1 AppError.code 未变；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001~0006、KAD 引用有效。 |
 | V1.31 | 2026-08-31 | 附近设备按用户意图与匹配度排序：已记住设备优先，其次已识别状态灯，再按 RSSI 从强到弱；设备页说明与空态移除 `AgentCore-Light` 产品字样，统一改为「状态灯」。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 均存在于 ipc-contract §5（无新增事件）；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 主题字段未变且与 theme-format 一致；ADR-0001~0006、KAD 引用有效。 |
