@@ -213,7 +213,7 @@ Windows `.cmd` 不能作为 `Command::new` 在所有上下文中的可移植假�
 
 只有无法定位 `npm-cli.js` 时才使用平台 launcher，并通过专门的 Windows runner 处理 `.cmd`。runner 接收参数数组，不接受拼接后的 shell 字符串。
 
-Node/npm 同族判定优先依据 npm CLI 所在 Node 安装树，其次通过 npm 输出与 prefix 关联。跨安装族组合降权，并在诊断中标记 `mixedInstallation=true`；除非用户显式覆盖，否则不自动选择混合工具链。
+Node/npm 同族判定仅用于诊断 `mixedInstallation=true`，不作为自动选择的阻断条件。兼容性以真实执行为准：选定 Node 能成功运行 npm CLI 的 `--version` 与 `prefix --global` 即可选用（ADR-0006 2026-09-04 追加决策）。
 
 ### 6.5 Adapter 发现与稳定执行入口
 
@@ -587,4 +587,3 @@ repair.integration
 - 写入 Hook 的命令不依赖第三方工具进程的 PATH。
 - 所有失败状态都有可执行的恢复路径和脱敏诊断。
 - Windows 主要安装方式与三平台回归矩阵通过，真实 Hook 到灯效完成闭环。
-

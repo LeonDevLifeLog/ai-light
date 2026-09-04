@@ -1195,19 +1195,6 @@ fn pick_npm(
         let overridden = candidate.source == sources::OVERRIDE;
         match validate_npm_candidate(node, &candidate.path) {
             Ok(mut npm) => {
-                if npm.mixed_installation && !overridden {
-                    // 不自动选择混合安装族（设计方案 §6.4）
-                    issues.push(issue(
-                        "NPM_MIXED_INSTALLATION",
-                        format!(
-                            "npm 候选 {} 与选定 Node 不属于同一安装树（mixedInstallation）",
-                            sanitize_home(&candidate.path.display().to_string(), home)
-                        ),
-                        Some(ToolKind::Npm),
-                        Some("选择同安装族的 npm，或手动覆盖"),
-                    ));
-                    continue;
-                }
                 npm.source = candidate.source.to_string();
                 let path_text = sanitize_home(&candidate.path.display().to_string(), home);
                 let version_text = npm.version.to_string();
@@ -1595,6 +1582,55 @@ mod tests {
             .issues
             .iter()
             .any(|issue| issue.code == "TOOLCHAIN_OVERRIDE_INVALID"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// npm 的可用性由真实执行结果决定；目录树不同只保留为诊断信息，不阻塞自动选择。
+    #[cfg(unix)]
+    #[test]
+    fn mixed_installation_npm_is_accepted_when_commands_succeed() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!(
+            "ailight-mixed-npm-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let node_dir = dir.join("node-tree/bin");
+        let npm_dir = dir.join("other-tree");
+        std::fs::create_dir_all(&node_dir).unwrap();
+        std::fs::create_dir_all(&npm_dir).unwrap();
+        let node_path = node_dir.join("node");
+        let npm_path = npm_dir.join("npm-cli.js");
+        std::fs::write(
+            &node_path,
+            b"#!/bin/sh\nif [ \"$2\" = \"--version\" ]; then echo 11.0.0; else echo /tmp/npm-prefix; fi\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&node_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::write(&npm_path, b"// test npm cli\n").unwrap();
+
+        let node = ValidatedNode {
+            path: node_path,
+            version: semver::Version::new(22, 0, 0),
+            source: sources::PROCESS_PATH.to_string(),
+        };
+        let mut doc = ToolchainDocument::new();
+        doc.selected.npm = Some(SelectedTool {
+            path: npm_path.display().to_string(),
+            version: "11.0.0".to_string(),
+            source: sources::PREVIOUS_SELECTED.to_string(),
+        });
+        let mut issues = Vec::new();
+
+        let pick = pick_npm(&doc, &node, &mut issues, None);
+
+        assert_eq!(pick.state, states::READY);
+        assert!(pick.resolved.unwrap().mixed_installation);
+        assert!(issues.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
