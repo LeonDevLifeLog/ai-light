@@ -1,7 +1,7 @@
 //! 候选验证原语（设计方案 §6.3 / §6.4 / §6.5 / §10）
 //!
 //! 所有子进程调用使用 executable + args 数组，不拼接 shell 字符串（§3.4）；
-//! 超时 3 秒、stdout/stderr 各 64 KiB 上限、不加载候选目录中的任何 DLL/脚本/配置。
+//! 超时 15 秒、stdout/stderr 各 64 KiB 上限、不加载候选目录中的任何 DLL/脚本/配置。
 
 use std::io::Read;
 use std::process::{Command, Stdio};
@@ -14,7 +14,7 @@ use std::os::windows::process::CommandExt;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// 版本探测超时（设计方案 §6.3）
-pub const VERSION_TIMEOUT: Duration = Duration::from_secs(3);
+pub const VERSION_TIMEOUT: Duration = Duration::from_secs(15);
 /// 安装/升级上限（npm 网络操作，远长于版本探测）
 pub const INSTALL_TIMEOUT: Duration = Duration::from_secs(600);
 /// 单流输出上限（设计方案 §6.3：64 KiB）
@@ -164,6 +164,11 @@ pub fn node_meets_gate(version: &semver::Version) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn version_detection_timeout_is_fifteen_seconds() {
+        assert_eq!(VERSION_TIMEOUT, Duration::from_secs(15));
+    }
 
     #[test]
     fn parses_version_output_with_prefix_and_noise() {
