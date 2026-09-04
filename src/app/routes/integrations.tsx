@@ -21,7 +21,7 @@ import {
 } from "@/lib/ailight";
 import { runAsync } from "@/lib/utils";
 
-type ToolId = "claude-code" | "codex";
+type ToolId = "claude-code" | "codex" | "workbuddy";
 
 interface Integration {
   accent: string;
@@ -45,6 +45,13 @@ const integrations: Integration[] = [
     id: "codex",
     name: "Codex",
     source: "X",
+  },
+  {
+    accent: "violet",
+    description: "同步工作、等待提问、本轮完成和会话结束状态。",
+    id: "workbuddy",
+    name: "WorkBuddy",
+    source: "W",
   },
 ];
 

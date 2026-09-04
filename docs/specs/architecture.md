@@ -216,6 +216,15 @@
 - **后果**：KAD-12 被本决策取代；状态优先级仅保留为主题视觉强度语义。
 - **验证**：见 ADR-0005 与 arbiter 跨来源低强度状态覆盖回归测试。
 
+### KAD-14 WorkBuddy 复用兼容协议并隔离配置命名空间
+
+> **【摘要】** WorkBuddy 从 CodeBuddy fork 且保留 Claude Code 兼容 Hook 协议，但使用独立的 `.workbuddy` 用户配置目录。
+
+- **决策**：Adapter `0.1.3` 增加 `workbuddy` source，只管理 `~/.workbuddy/settings.json`；复用 command hook 转换与投递机制，不读取或修改 `.codebuddy`。支持 WorkBuddy 的 Desktop 将 Adapter 兼容下限设为 `0.1.3`，不得把旧版误判为可用。
+- **事件边界**：仅注入 WorkBuddy 文档明确支持的 `SessionStart`、`UserPromptSubmit`、`PreToolUse`、`Stop`、`SessionEnd`；没有可靠失败事件时不基于文本推断 `ERROR`。
+- **后果**：WorkBuddy 与 CodeBuddy 可并存且配置互不影响；当前可表达 `IDLE / WORKING / WAITING / SUCCESS`，暂不能表达可靠失败态。
+- **验证**：配置路径、幂等合并、用户 Hook 保留、安全卸载和事件翻译自动测试；真实客户端闭环仍需实机验收。
+
 ---
 
 ## 4. 不确定性清单（open questions）

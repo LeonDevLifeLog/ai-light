@@ -67,7 +67,7 @@ fn shared(app: &AppHandle) -> std::sync::Arc<SharedState> {
 // ---- Adapter CLI 集成（统一走 ToolchainService / ProcessRunner，设计方案 §4） ----
 
 fn valid_integration_tool(tool: &str) -> bool {
-    matches!(tool, "claude-code" | "codex")
+    matches!(tool, "claude-code" | "codex" | "workbuddy")
 }
 
 /// ToolchainError → AppError（设计方案 §7 错误码表）

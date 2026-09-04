@@ -1,4 +1,4 @@
-export type ToolId = "claude-code" | "codex";
+export type ToolId = "claude-code" | "codex" | "workbuddy";
 
 export interface NormalizedEvent {
   meta: Record<string, unknown>;
@@ -103,6 +103,21 @@ function mapState(
 ): NormalizedEvent["state"] | undefined {
   if (tool === "claude-code") {
     return mapClaudeState(hookEvent, notificationType, toolName, payload);
+  }
+  if (tool === "workbuddy") {
+    if (hookEvent === "SessionStart" || hookEvent === "SessionEnd") {
+      return "IDLE";
+    }
+    if (hookEvent === "UserPromptSubmit") {
+      return "WORKING";
+    }
+    if (
+      hookEvent === "PreToolUse" &&
+      (toolName === "AskUserQuestion" || toolName === "ExitPlanMode")
+    ) {
+      return "WAITING";
+    }
+    return hookEvent === "Stop" ? "SUCCESS" : undefined;
   }
   if (hookEvent === "UserPromptSubmit") {
     return "WORKING";

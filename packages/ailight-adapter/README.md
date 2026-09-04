@@ -1,6 +1,6 @@
 # @ai-light/adapter
 
-Node.js adapter for connecting Claude Code and Codex hooks to the AI-Light desktop application.
+Node.js adapter for connecting Claude Code, Codex, and WorkBuddy hooks to the AI-Light desktop application.
 
 ## Requirements
 
@@ -22,6 +22,7 @@ ailight-adapter version --json
 ailight-adapter doctor --json
 ailight-adapter detect claude-code
 ailight-adapter detect codex
+ailight-adapter detect workbuddy
 ```
 
 Run hook installation through the AI-Light Integrations page so the desktop application can report errors and preserve existing tool configuration.

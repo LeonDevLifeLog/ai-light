@@ -6,7 +6,7 @@ AI-Light 将 Claude Code、Codex 等 AI 编程工具的运行状态转换为 Age
 
 1. 启动 AI-Light。主窗口关闭后应用仍驻留在系统托盘，可从托盘重新打开或退出。
 2. 进入「设备」，点击扫描并连接 AgentCore-Light。连接成功后，应用会自动读取设备信息并恢复状态灯输出。
-3. 进入「接入」，为 Claude Code 或 Codex 点击「连接」。AI-Light 会安装或检测 Adapter，并把自己的 Hook 安全合并到对应工具配置中。
+3. 进入「接入」，为 Claude Code、Codex 或 WorkBuddy 点击「连接」。AI-Light 会安装或检测 Adapter，并把自己的 Hook 安全合并到对应工具配置中。
 4. 回到「状态」，确认设备、当前业务状态和主题均已就绪。
 
 Codex 首次执行 Hook 时，仍可能要求按 Codex 自身的安全机制确认信任。点击「断开」只会移除 AI-Light 管理的 Hook，不会删除工具的其他配置。

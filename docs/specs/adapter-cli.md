@@ -2,9 +2,9 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.0 |
-| 文档状态 | 设计确认，待实现 |
-| 适用范围 | Claude Code、Codex |
+| 文档版本 | V1.1 |
+| 文档状态 | Claude Code / Codex 已实现；WorkBuddy 自 Adapter 0.1.3 起支持，待实机验收 |
+| 适用范围 | Claude Code、Codex、WorkBuddy |
 | CLI 技术栈 | Node.js 20+ / TypeScript / ESM |
 | npm 包 | `@ai-light/adapter` |
 | CLI 命令 | `ailight-adapter` |
@@ -17,7 +17,7 @@
 
 ## 1. 背景与目标
 
-AI-Light 已提供本地 Hook Server、标准五态、状态仲裁、主题编译与 BLE 下发能力，但 Claude Code、Codex 的原始 Hook JSON 与 AI-Light `POST /hook` 请求模型不同，不能仅靠把 Hook URL 指向 AI-Light 完成可靠接入。
+AI-Light 已提供本地 Hook Server、标准五态、状态仲裁、主题编译与 BLE 下发能力，但 Claude Code、Codex、WorkBuddy 的原始 Hook JSON 与 AI-Light `POST /hook` 请求模型不同，不能仅靠把 Hook URL 指向 AI-Light 完成可靠接入。
 
 Adapter CLI 是工具协议与 AI-Light 稳定协议之间的防腐层：
 
@@ -36,7 +36,7 @@ Adapter CLI 是工具协议与 AI-Light 稳定协议之间的防腐层：
 
 ### 1.1 目标
 
-1. 先完成 Claude Code 与 Codex 的真实接入闭环。
+1. 完成 Claude Code、Codex 与 WorkBuddy 的真实接入闭环。
 2. 对最终用户隐藏 JSON、HTTP 地址、端口和 Hook 细节。
 3. Adapter 可独立构建、测试、发布和升级，不要求同步发布桌面端。
 4. 桌面端、CLI 和未来 Skill 复用同一套安装、诊断和修复能力。
@@ -47,7 +47,7 @@ Adapter CLI 是工具协议与 AI-Light 稳定协议之间的防腐层：
 
 V1 不包含：
 
-- WorkBuddy、Qoder、Cursor 或其他工具的正式适配。
+- Qoder、Cursor 或其他工具的正式适配。
 - Claude Desktop 纯聊天模式。
 - Codex 云端任务的远程状态同步。
 - Adapter 常驻 daemon。
@@ -79,7 +79,7 @@ AI-Light UI ─────┐
 
 ### 2.3 失败开放
 
-灯效是辅助能力。AI-Light 未启动、runtime 文件缺失、请求超时、未知事件或 Adapter 内部错误均不得中断 Claude Code/Codex。Hook 处理命令在这些情况下 SHOULD 记录脱敏诊断并以退出码 `0` 结束。
+灯效是辅助能力。AI-Light 未启动、runtime 文件缺失、请求超时、未知事件或 Adapter 内部错误均不得中断 Claude Code/Codex/WorkBuddy。Hook 处理命令在这些情况下 SHOULD 记录脱敏诊断并以退出码 `0` 结束。
 
 ### 2.4 用户无端口心智
 
@@ -96,7 +96,7 @@ AI-Light UI ─────┐
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ Claude Code / Codex                                          │
+│ Claude Code / Codex / WorkBuddy                              │
 │ lifecycle hook → 启动 ailight-adapter → stdin 原始 JSON      │
 └────────────────────────────┬─────────────────────────────────┘
                              ▼
@@ -106,12 +106,14 @@ AI-Light UI ─────┐
 │ CLI Router                                                   │
 │ ├─ hook claude-code                                          │
 │ ├─ hook codex                                                │
+│ ├─ hook workbuddy                                            │
 │ ├─ install / uninstall / repair                              │
 │ └─ doctor / version / translate                              │
 │                                                              │
 │ Adapter Registry                                             │
 │ ├─ ClaudeCodeAdapter                                         │
-│ └─ CodexAdapter                                              │
+│ ├─ CodexAdapter                                              │
+│ └─ WorkBuddyAdapter                                          │
 │                                                              │
 │ Runtime Client                                               │
 │ ├─ 读取 ~/.ailight/runtime.json                              │
@@ -393,7 +395,7 @@ CLI 内部使用：
 
 ```ts
 export interface NormalizedEvent {
-  source: "claude-code" | "codex" | string;
+  source: "claude-code" | "codex" | "workbuddy" | string;
   state: "IDLE" | "WORKING" | "WAITING" | "SUCCESS" | "ERROR" | string;
   session?: string;
   timestamp: number;
@@ -684,6 +686,22 @@ Codex V1 优先使用 lifecycle command hooks。当前官方配置支持 `hooks.
 
 Codex 若仅提供权限请求而没有稳定的“等待一般输入”事件，则 `WAITING` 只覆盖权限等待。Adapter 不应通过读取对话文本或猜测回复内容推断等待状态。
 
+### 11.5 WorkBuddy Adapter
+
+WorkBuddy 从 CodeBuddy fork 并保留 Claude Code 兼容 Hook 结构，但配置命名空间固定为 `~/.workbuddy/settings.json`；Adapter 不读取或修改 `.codebuddy`。
+
+WorkBuddy 支持从 Adapter `0.1.3` 开始；提供 WorkBuddy 卡片的 Desktop MUST 将兼容下限设为 `0.1.3`，避免旧 Adapter 在连接阶段返回 `TOOL_NOT_SUPPORTED`。
+
+| WorkBuddy 事件 | matcher/条件 | AI-Light 状态 |
+|---|---|---|
+| `SessionStart` | `startup` | `IDLE` |
+| `UserPromptSubmit` | — | `WORKING` |
+| `PreToolUse` | `AskUserQuestion\|ExitPlanMode` | `WAITING` |
+| `Stop` | — | `SUCCESS` |
+| `SessionEnd` | `other` | `IDLE` |
+
+WorkBuddy 文档未定义可靠失败事件，Adapter MUST NOT 读取工具输出或退出码推断 `ERROR`。安装、检测、备份、幂等合并和卸载规则与 §9 一致。
+
 ---
 
 ## 12. 桌面端集成体验
@@ -695,6 +713,7 @@ Codex 若仅提供权限请求而没有稳定的“等待一般输入”事件�
 ```text
 Claude Code  [连接]
 Codex        [连接]
+WorkBuddy    [连接]
 ```
 
 点击连接：
@@ -943,7 +962,7 @@ CLI 读取 runtime 中 Desktop 支持的协议区间，与自身区间求交集�
 
 ### 18.5 实机黄金闭环
 
-必须使用真实 Claude Code/Codex、真实 AI-Light Desktop 和 AgentCore-Light：
+必须使用真实 Claude Code/Codex/WorkBuddy、真实 AI-Light Desktop 和 AgentCore-Light：
 
 ```text
 工具 Hook → Adapter CLI → Hook Server → Arbiter
@@ -1033,7 +1052,7 @@ Codex：
 
 ## 21. 已知限制与待实测事项
 
-1. Claude Code/Codex 配置 schema 会演进，安装模板必须由官方文档和目标版本 fixture 驱动。
+1. Claude Code/Codex/WorkBuddy 配置 schema 会演进，安装模板必须由官方文档和目标版本 fixture 驱动。
 2. npm global 安装受 Node 版本管理器、PATH 和企业权限影响，Desktop 必须提供诊断与降级指引。
 3. Codex 的普通“等待用户输入”可能缺少独立事件，V1 不做文本启发式。
 4. Claude `Stop` 表示回合结束，不等于用户完整任务最终完成。
@@ -1071,3 +1090,4 @@ Codex：
 | D-CLI-10 | macOS | 非 App Sandbox 分发；App Store 不在 V1 |
 | D-CLI-11 | 升级 | Desktop 编排一键/可选自动升级；Hook 不自更新 |
 | D-CLI-12 | Skills | 后续自动化入口，不是运行时依赖 |
+| D-CLI-13 | WorkBuddy | 复用兼容 Hook 协议，独立管理 `~/.workbuddy/settings.json` |

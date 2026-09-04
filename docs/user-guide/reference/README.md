@@ -6,4 +6,4 @@
 - [高级接入参考](./hook-api.md)
 - [主题文件参考](./theme-files.md)
 
-如果只是连接设备、接入 Claude Code 或 Codex、切换主题，不需要阅读高级参考。
+如果只是连接设备、接入 Claude Code、Codex 或 WorkBuddy、切换主题，不需要阅读高级参考。

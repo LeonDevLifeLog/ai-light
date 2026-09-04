@@ -15,7 +15,7 @@ pub const ADAPTER_PACKAGE: &str = "@ai-light/adapter";
 /// Desktop 兼容的 Adapter 版本范围（设计方案 §17.3：Desktop 兼容范围 + 明确版本，
 /// 不得无条件安装 latest）。Adapter Hook Protocol V1 → 0.x 系列。
 /// npm 目标表达式（node-semver 空格分隔语法）
-pub const ADAPTER_COMPAT_RANGE: &str = ">=0.1.0 <0.2.0";
+pub const ADAPTER_COMPAT_RANGE: &str = ">=0.1.3 <0.2.0";
 
 /// Rust semver crate 形式的兼容范围（逗号分隔；node-semver 与 Rust 语法差异的适配）
 pub fn adapter_compat_req() -> VersionReq {
@@ -319,6 +319,13 @@ pub fn build_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn workbuddy_requires_adapter_0_1_3_or_newer() {
+        let requirement = adapter_compat_req();
+        assert!(!requirement.matches(&semver::Version::new(0, 1, 2)));
+        assert!(requirement.matches(&semver::Version::new(0, 1, 3)));
+    }
 
     #[test]
     fn document_round_trips_and_defaults_version() {

@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.33 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.33，2026-09-04） |
+| 文档版本 | V1.34 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.34，2026-09-04） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -652,7 +652,7 @@ Dashboard 主题卡 + Themes 页主题网格卡：3 灯条色块缩略 + 主题�
 ### 6.5 `IntegrationCard`
 
 **6.5.1 用途**
-Integrations 页的官方 Adapter 卡（Claude Code / Codex）。
+Integrations 页的官方 Adapter 卡（Claude Code / Codex / WorkBuddy）。
 
 **6.5.2 对外契约**
 
@@ -1887,6 +1887,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.34 | 2026-09-04 | §6.5 新增 WorkBuddy IntegrationCard，沿用既有连接、确认安装、断开及无障碍契约；配置路径为 `~/.workbuddy/settings.json`。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~14 引用有效。 |
 | V1.33 | 2026-09-04 | §6.3 补充 Dashboard DeviceCard 长名称边界：名称最多两行并提供全文提示，连接状态与电量拆为独立元信息行，电量和导航箭头保持可见。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD 引用有效。 |
 | V1.32 | 2026-09-04 | §4.1/§6.7 将 Node/npm 兼容性收敛为真实执行能力：`mixedInstallation` 仅诊断，不再阻塞自动选择或进入 recovery。对齐报告（变更后自动）：§3 Source Events 未变且与 ipc-contract §5 一致；§4.1 未新增错误码，`NPM_NOT_FOUND` 仍存在于 ipc-contract §4；§4.2 蓝牙 result code 未变；§6~§8 未新增主题字段；ADR-0006 追加决策可解析，KAD 引用未变。 |
 | V1.31 | 2026-09-01 | §3.3/§6.3 修复电池存在性、运行时在位与百分比测量值的语义混淆；Dashboard 与 Devices 共用四态派生模型，事件和快照补齐 `capabilityBits` / `batteryMv`。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致（`device-power-changed` payload 已同步）；§4.1 错误码未变；§4.2 result code 未变且与蓝牙 V0.4 §3.6 一致；§6~§8 主题字段未变；ADR-0001~0006、KAD 引用有效。 |
