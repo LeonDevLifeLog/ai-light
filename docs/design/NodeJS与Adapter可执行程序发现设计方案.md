@@ -190,7 +190,7 @@ npm 候选允许 `npm.cmd`、`npm.exe`；`npm.ps1` 不作为 Desktop 首选，�
 
 约束：
 
-- 超时 3 秒；stdout/stderr 各限制 64 KiB。
+- 超时 15 秒；stdout/stderr 各限制 64 KiB。
 - 退出码必须为 0，输出必须匹配 `v<semver>`。
 - major 必须 `>=20`。
 - 记录 canonical path、版本、文件元数据和来源。

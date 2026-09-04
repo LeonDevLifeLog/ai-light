@@ -648,7 +648,7 @@ fn validate_node_candidate(path: &Path) -> Result<semver::Version, String> {
         validate::run_captured(&mut cmd, validate::VERSION_TIMEOUT, validate::OUTPUT_CAP)
             .map_err(|error| format!("无法启动: {error}"))?;
     if captured.timed_out {
-        return Err("验证超时（3 秒）".to_string());
+        return Err("验证超时（15 秒）".to_string());
     }
     if !captured.success() {
         return Err(format!("退出码 {:?}", captured.exit_code));
@@ -707,7 +707,7 @@ fn validate_npm_candidate(node: &ValidatedNode, candidate: &Path) -> Result<Vali
         }
     };
     if version_captured.timed_out {
-        return Err("验证超时（3 秒）".to_string());
+        return Err("验证超时（15 秒）".to_string());
     }
     if !version_captured.success() {
         return Err(format!(
@@ -786,7 +786,7 @@ fn validate_adapter_script(
         validate::run_captured(&mut cmd, validate::VERSION_TIMEOUT, validate::OUTPUT_CAP)
             .map_err(|error| format!("无法启动: {error}"))?;
     if captured.timed_out {
-        return Err("验证超时（3 秒）".to_string());
+        return Err("验证超时（15 秒）".to_string());
     }
     if !captured.success() {
         return Err(format!("退出码 {:?}", captured.exit_code));
