@@ -58,12 +58,6 @@ function sortNearbyDevices(
       return rememberedDifference;
     }
 
-    const recognizedDifference =
-      Number(right.recognized) - Number(left.recognized);
-    if (recognizedDifference !== 0) {
-      return recognizedDifference;
-    }
-
     const signalDifference =
       (right.rssi ?? Number.NEGATIVE_INFINITY) -
       (left.rssi ?? Number.NEGATIVE_INFINITY);
@@ -285,7 +279,7 @@ export function DevicesPage() {
         api.scanDevices(),
         new Promise((resolve) => window.setTimeout(resolve, 400)),
       ]);
-      setDevices(found);
+      setDevices(found.filter((device) => device.recognized === true));
     } catch (error) {
       setScanError(asAppError(error).message);
     } finally {
