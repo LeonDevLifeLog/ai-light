@@ -1015,6 +1015,81 @@ pre {
   outline: none;
   box-shadow: var(--focus);
 }
+.adapter-intro {
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+}
+.adapter-intro__heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.adapter-intro__heading h3 {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.adapter-intro__package {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 8px;
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 4px;
+  border-radius: var(--radius-md);
+}
+.adapter-intro__package:hover {
+  text-decoration-color: currentColor;
+  background: var(--accent-soft);
+}
+.adapter-intro__package:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.adapter-intro__flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 12px 0;
+  list-style: none;
+}
+.adapter-intro__flow li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.adapter-intro__flow span {
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--foreground);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+}
+.adapter-intro__requirement strong {
+  font-weight: 500;
+  color: var(--foreground);
+}
+.adapter-intro__error {
+  margin-top: 8px;
+  color: var(--danger-text);
+  overflow-wrap: anywhere;
+}
 .toolchain-recovery {
   display: flex;
   flex-wrap: wrap;
