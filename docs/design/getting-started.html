@@ -1,0 +1,1698 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="AI-Light 快速上手指南：连接状态灯、接入 AI 编程工具并认识灯效状态。"
+    >
+    <title>AI-Light · 快速上手</title>
+    <style>
+    :root {
+      --bg: #0b1120;
+      --bg-soft: #10192b;
+      --surface: #162238;
+      --surface-2: #1b2a42;
+      --surface-hover: #22334d;
+      --text: #f8fafc;
+      --text-2: #b8c4d4;
+      --text-3: #8291a6;
+      --border: rgba(148, 163, 184, 0.2);
+      --border-strong: rgba(148, 163, 184, 0.34);
+      --green: #4ade80;
+      --green-strong: #22c55e;
+      --green-soft: rgba(34, 197, 94, 0.12);
+      --amber: #fbbf24;
+      --red: #f87171;
+      --blue: #60a5fa;
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+      --focus: 0 0 0 3px rgba(74, 222, 128, 0.36);
+      color-scheme: dark;
+    }
+
+    :root[data-theme="light"] {
+      --bg: #f6f8fb;
+      --bg-soft: #edf2f7;
+      --surface: #ffffff;
+      --surface-2: #f8fafc;
+      --surface-hover: #eef3f7;
+      --text: #0f172a;
+      --text-2: #475569;
+      --text-3: #64748b;
+      --border: rgba(100, 116, 139, 0.2);
+      --border-strong: rgba(100, 116, 139, 0.34);
+      --green: #16a34a;
+      --green-strong: #15803d;
+      --green-soft: rgba(22, 163, 74, 0.1);
+      --amber: #b45309;
+      --red: #dc2626;
+      --blue: #2563eb;
+      --shadow: 0 18px 50px rgba(15, 23, 42, 0.1);
+      --focus: 0 0 0 3px rgba(22, 163, 74, 0.28);
+      color-scheme: light;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--bg);
+    }
+
+    body {
+      min-width: 320px;
+      margin: 0;
+      font-family:
+        Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      font-size: 16px;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.6;
+      color: var(--text);
+      background:
+        radial-gradient(
+          circle at 82% 3%,
+          rgba(34, 197, 94, 0.1),
+          transparent 24rem
+        ),
+        var(--bg);
+    }
+
+    button,
+    a {
+      font: inherit;
+    }
+
+    button:not(:disabled),
+    a,
+    summary {
+      cursor: pointer;
+    }
+
+    button:focus-visible,
+    a:focus-visible,
+    summary:focus-visible {
+      outline: none;
+      box-shadow: var(--focus);
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      line-height: 1.2;
+      letter-spacing: -0.025em;
+    }
+
+    code,
+    pre,
+    .mono {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    .skip-link {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 100;
+      padding: 10px 14px;
+      color: #052e16;
+      background: var(--green);
+      border-radius: 8px;
+      transform: translateY(-150%);
+    }
+
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: color-mix(in srgb, var(--bg) 84%, transparent);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(18px);
+    }
+
+    .topbar__inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: min(1160px, calc(100% - 40px));
+      min-height: 68px;
+      margin: 0 auto;
+    }
+
+    .brand {
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+      font-size: 17px;
+      font-weight: 750;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .brand__mark {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      color: #052e16;
+      background: linear-gradient(135deg, #86efac, #22c55e);
+      border-radius: 10px;
+      box-shadow: 0 0 22px rgba(34, 197, 94, 0.3);
+    }
+
+    .icon-button {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      color: var(--text-2);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    .icon-button:hover {
+      color: var(--text);
+      background: var(--surface-hover);
+    }
+
+    .hero {
+      width: min(1160px, calc(100% - 40px));
+      padding: 76px 0 56px;
+      margin: 0 auto;
+    }
+
+    .hero__grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(390px, 0.92fr);
+      gap: 70px;
+      align-items: center;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 6px 10px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--green);
+      background: var(--green-soft);
+      border: 1px solid rgba(34, 197, 94, 0.22);
+      border-radius: 999px;
+    }
+
+    .eyebrow__dot {
+      width: 7px;
+      height: 7px;
+      background: currentColor;
+      border-radius: 99px;
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    .hero h1 {
+      max-width: 700px;
+      margin-bottom: 20px;
+      font-size: clamp(42px, 6vw, 72px);
+      font-weight: 760;
+    }
+
+    .hero h1 span {
+      color: var(--green);
+    }
+
+    .hero__lead {
+      max-width: 640px;
+      margin-bottom: 30px;
+      font-size: 18px;
+      color: var(--text-2);
+    }
+
+    .hero__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .button {
+      display: inline-flex;
+      gap: 9px;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      padding: 0 18px;
+      font-weight: 700;
+      color: #052e16;
+      text-decoration: none;
+      background: var(--green);
+      border: 1px solid transparent;
+      border-radius: 10px;
+      transition:
+        transform 160ms ease,
+        background 160ms ease;
+    }
+
+    .button:hover {
+      background: #86efac;
+      transform: translateY(-1px);
+    }
+
+    .button--secondary {
+      color: var(--text);
+      background: var(--surface);
+      border-color: var(--border-strong);
+    }
+
+    .button--secondary:hover {
+      background: var(--surface-hover);
+    }
+
+    .hero-device {
+      position: relative;
+      min-height: 382px;
+    }
+
+    .hero-device::before {
+      position: absolute;
+      inset: 8% 2%;
+      content: "";
+      background: rgba(34, 197, 94, 0.12);
+      border-radius: 50%;
+      filter: blur(72px);
+    }
+
+    .device-window {
+      position: relative;
+      z-index: 1;
+      padding: 18px;
+      overflow: hidden;
+      background: linear-gradient(145deg, var(--surface-2), var(--surface));
+      border: 1px solid var(--border-strong);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      transform: rotate(1.5deg);
+    }
+
+    .device-window__bar {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      padding-bottom: 15px;
+      font-size: 12px;
+      color: var(--text-3);
+    }
+
+    .window-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--border-strong);
+      border-radius: 50%;
+    }
+
+    .device-window__title {
+      margin-left: auto;
+    }
+
+    .status-screen {
+      padding: 34px 28px 28px;
+      background:
+        linear-gradient(rgba(34, 197, 94, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(34, 197, 94, 0.035) 1px, transparent 1px),
+        color-mix(in srgb, var(--bg) 72%, transparent);
+      background-size: 24px 24px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+    }
+
+    .traffic-light {
+      display: flex;
+      gap: 16px;
+      width: max-content;
+      padding: 15px;
+      margin: 0 auto 28px;
+      background: #070b12;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.8);
+    }
+
+    .light {
+      width: 54px;
+      height: 54px;
+      background: #1f2937;
+      border: 1px solid #334155;
+      border-radius: 50%;
+      box-shadow: inset 0 2px 7px rgba(0, 0, 0, 0.8);
+    }
+
+    .light--working {
+      background: radial-gradient(
+        circle at 35% 30%,
+        #bbf7d0,
+        #22c55e 42%,
+        #14532d
+      );
+      box-shadow:
+        0 0 24px rgba(34, 197, 94, 0.75),
+        inset 0 2px 7px rgba(255, 255, 255, 0.28);
+      animation: breathe 2s ease-in-out infinite;
+    }
+
+    .status-screen__source {
+      font-size: 12px;
+      color: var(--text-3);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .status-screen h2 {
+      margin: 7px 0 8px;
+      font-size: 32px;
+      color: var(--green);
+    }
+
+    .status-screen p {
+      margin-bottom: 0;
+      color: var(--text-2);
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      width: min(920px, calc(100% - 40px));
+      margin: 0 auto 82px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+    }
+
+    .flow__item {
+      position: relative;
+      padding: 18px 12px;
+      color: var(--text-2);
+      text-align: center;
+    }
+
+    .flow__item:not(:last-child)::after {
+      position: absolute;
+      top: 50%;
+      right: -9px;
+      z-index: 2;
+      width: 18px;
+      height: 18px;
+      color: var(--text-3);
+      content: "→";
+      transform: translateY(-50%);
+    }
+
+    .flow__item strong {
+      display: block;
+      color: var(--text);
+    }
+
+    .guide-layout {
+      display: grid;
+      grid-template-columns: 248px minmax(0, 1fr);
+      gap: 48px;
+      width: min(1160px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .guide-nav {
+      position: sticky;
+      top: 94px;
+      align-self: start;
+    }
+
+    .guide-nav__label {
+      margin: 0 0 12px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-3);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .guide-nav ol {
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+
+    .guide-nav a {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 10px;
+      align-items: center;
+      min-height: 48px;
+      padding: 7px 10px;
+      color: var(--text-2);
+      text-decoration: none;
+      border-left: 2px solid var(--border);
+    }
+
+    .guide-nav a:hover,
+    .guide-nav a[aria-current="step"] {
+      color: var(--text);
+      background: var(--green-soft);
+      border-left-color: var(--green);
+    }
+
+    .guide-nav__number {
+      display: grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      font-size: 12px;
+      font-weight: 750;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+    }
+
+    .guide-nav a[aria-current="step"] .guide-nav__number {
+      color: #052e16;
+      background: var(--green);
+      border-color: var(--green);
+    }
+
+    .progress {
+      height: 4px;
+      margin-top: 18px;
+      overflow: hidden;
+      background: var(--surface-2);
+      border-radius: 99px;
+    }
+
+    .progress__bar {
+      width: 14.28%;
+      height: 100%;
+      background: var(--green);
+      border-radius: inherit;
+      transition: width 220ms ease;
+    }
+
+    .guide-content {
+      min-width: 0;
+    }
+
+    .step {
+      padding: 0 0 88px;
+      scroll-margin-top: 100px;
+    }
+
+    .step__head {
+      display: grid;
+      grid-template-columns: 50px 1fr;
+      gap: 16px;
+      align-items: start;
+      margin-bottom: 26px;
+    }
+
+    .step__number {
+      display: grid;
+      place-items: center;
+      width: 50px;
+      height: 50px;
+      font-size: 18px;
+      font-weight: 800;
+      color: #052e16;
+      background: var(--green);
+      border-radius: 15px;
+      box-shadow: 0 0 24px rgba(34, 197, 94, 0.18);
+    }
+
+    .step h2 {
+      margin: 0 0 7px;
+      font-size: clamp(26px, 4vw, 36px);
+    }
+
+    .step__intro {
+      max-width: 720px;
+      margin: 0;
+      color: var(--text-2);
+    }
+
+    .card {
+      padding: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.025);
+    }
+
+    .card h3 {
+      margin-bottom: 8px;
+      font-size: 18px;
+    }
+
+    .card p:last-child {
+      margin-bottom: 0;
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card-grid--three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .checklist {
+      display: grid;
+      gap: 16px;
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+
+    .checklist li {
+      display: grid;
+      grid-template-columns: 30px 1fr;
+      gap: 12px;
+    }
+
+    .checkmark {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      color: var(--green);
+      background: var(--green-soft);
+      border: 1px solid rgba(34, 197, 94, 0.24);
+      border-radius: 8px;
+    }
+
+    .checklist strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .checklist span:last-child {
+      color: var(--text-2);
+    }
+
+    .screen {
+      display: grid;
+      grid-template-columns: 116px 1fr;
+      min-height: 330px;
+      overflow: hidden;
+      background: var(--bg-soft);
+      border: 1px solid var(--border-strong);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .screen__sidebar {
+      padding: 18px 10px;
+      background: color-mix(in srgb, var(--surface) 60%, var(--bg));
+      border-right: 1px solid var(--border);
+    }
+
+    .screen__brand {
+      margin-bottom: 22px;
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .screen__nav {
+      display: grid;
+      gap: 5px;
+    }
+
+    .screen__nav :where(span) {
+      padding: 8px;
+      font-size: 11px;
+      color: var(--text-3);
+      border-radius: 7px;
+    }
+
+    .screen__nav .active {
+      color: var(--green);
+      background: var(--green-soft);
+    }
+
+    .screen__main {
+      padding: 26px;
+    }
+
+    .screen__main > p {
+      font-size: 12px;
+      color: var(--text-3);
+    }
+
+    .mock-device {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      padding: 16px;
+      margin-top: 18px;
+      background: var(--surface);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      border-radius: 12px;
+    }
+
+    .mock-device__icon {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      color: var(--green);
+      background: var(--green-soft);
+      border-radius: 10px;
+    }
+
+    .mock-device__text {
+      min-width: 0;
+    }
+
+    .mock-device__text :where(strong, span) {
+      display: block;
+    }
+
+    .mock-device__text :where(span) {
+      font-size: 12px;
+      color: var(--text-3);
+    }
+
+    .tag {
+      padding: 4px 8px;
+      margin-left: auto;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--green);
+      background: var(--green-soft);
+      border-radius: 999px;
+    }
+
+    .callout {
+      display: flex;
+      gap: 12px;
+      padding: 16px;
+      margin-top: 16px;
+      color: var(--text-2);
+      background: color-mix(in srgb, var(--blue) 8%, var(--surface));
+      border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
+      border-radius: 12px;
+    }
+
+    .callout strong {
+      display: block;
+      color: var(--text);
+    }
+
+    .tool-card {
+      position: relative;
+      padding-top: 54px;
+    }
+
+    .tool-card__icon {
+      position: absolute;
+      top: 18px;
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text);
+      background: var(--surface-hover);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .tool-card small {
+      color: var(--text-3);
+    }
+
+    .inline-path {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      align-items: center;
+      margin-top: 18px;
+      font-size: 13px;
+      color: var(--text-3);
+    }
+
+    .inline-path span:not(:last-child)::after {
+      margin-left: 7px;
+      color: var(--green);
+      content: "→";
+    }
+
+    .state-demo {
+      display: grid;
+      grid-template-columns: 210px 1fr;
+      gap: 22px;
+    }
+
+    .state-tabs {
+      display: grid;
+      gap: 8px;
+    }
+
+    .state-tab {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      min-height: 48px;
+      padding: 0 13px;
+      color: var(--text-2);
+      text-align: left;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    .state-tab:hover,
+    .state-tab[aria-selected="true"] {
+      color: var(--text);
+      background: var(--surface-hover);
+      border-color: var(--border-strong);
+    }
+
+    .state-tab[aria-selected="true"] {
+      box-shadow: inset 3px 0 var(--state-color, var(--green));
+    }
+
+    .state-tab__dot {
+      width: 10px;
+      height: 10px;
+      background: var(--state-color, var(--green));
+      border-radius: 50%;
+      box-shadow: 0 0 9px
+        color-mix(in srgb, var(--state-color, var(--green)) 60%, transparent);
+    }
+
+    .state-stage {
+      display: grid;
+      place-items: center;
+      min-height: 310px;
+      padding: 28px;
+      text-align: center;
+      background: color-mix(in srgb, var(--bg) 75%, transparent);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+    }
+
+    .state-stage .traffic-light {
+      margin-bottom: 22px;
+    }
+
+    .state-stage h3 {
+      margin-bottom: 7px;
+      font-size: 24px;
+      color: var(--state-color, var(--green));
+    }
+
+    .state-stage p {
+      max-width: 430px;
+      margin-bottom: 0;
+      color: var(--text-2);
+    }
+
+    details {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    details + details {
+      margin-top: 10px;
+    }
+
+    summary {
+      min-height: 54px;
+      padding: 14px 44px 14px 18px;
+      font-weight: 650;
+      list-style: none;
+    }
+
+    summary::-webkit-details-marker {
+      display: none;
+    }
+
+    summary::after {
+      float: right;
+      margin-right: -28px;
+      color: var(--text-3);
+      content: "+";
+    }
+
+    details[open] summary::after {
+      content: "−";
+    }
+
+    details p {
+      padding: 0 18px 18px;
+      margin: 0;
+      color: var(--text-2);
+    }
+
+    .finish {
+      padding: 42px;
+      text-align: center;
+      background:
+        radial-gradient(
+          circle at 50% 120%,
+          rgba(34, 197, 94, 0.22),
+          transparent 55%
+        ),
+        var(--surface);
+      border: 1px solid rgba(34, 197, 94, 0.26);
+      border-radius: 18px;
+    }
+
+    .finish__icon {
+      display: grid;
+      place-items: center;
+      width: 54px;
+      height: 54px;
+      margin: 0 auto 18px;
+      font-size: 26px;
+      font-weight: 800;
+      color: #052e16;
+      background: var(--green);
+      border-radius: 50%;
+      box-shadow: 0 0 28px rgba(34, 197, 94, 0.3);
+    }
+
+    .finish h2 {
+      margin-bottom: 10px;
+    }
+
+    .finish p {
+      max-width: 620px;
+      margin: 0 auto 24px;
+      color: var(--text-2);
+    }
+
+    footer {
+      padding: 38px 20px;
+      color: var(--text-3);
+      text-align: center;
+      border-top: 1px solid var(--border);
+    }
+
+    @keyframes breathe {
+      0%,
+      100% {
+        opacity: 0.55;
+        transform: scale(0.94);
+      }
+      50% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes blink {
+      0%,
+      49% {
+        opacity: 1;
+      }
+      50%,
+      100% {
+        opacity: 0.22;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .hero__grid {
+        grid-template-columns: 1fr;
+        gap: 44px;
+      }
+
+      .hero-device {
+        width: min(560px, 100%);
+        min-height: auto;
+      }
+
+      .guide-layout {
+        grid-template-columns: 1fr;
+        gap: 30px;
+      }
+
+      .guide-nav {
+        position: static;
+        overflow-x: auto;
+      }
+
+      .guide-nav__label,
+      .progress {
+        display: none;
+      }
+
+      .guide-nav ol {
+        display: flex;
+        width: max-content;
+      }
+
+      .guide-nav a {
+        min-width: 138px;
+        border-bottom: 2px solid var(--border);
+        border-left: 0;
+      }
+
+      .guide-nav a:hover,
+      .guide-nav a[aria-current="step"] {
+        border-bottom-color: var(--green);
+        border-left: 0;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .topbar__inner,
+      .hero,
+      .guide-layout,
+      .flow {
+        width: min(100% - 28px, 1160px);
+      }
+
+      .hero {
+        padding-top: 52px;
+      }
+
+      .hero h1 {
+        font-size: clamp(38px, 13vw, 54px);
+      }
+
+      .hero__lead {
+        font-size: 16px;
+      }
+
+      .flow {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .flow__item:nth-child(2)::after {
+        display: none;
+      }
+
+      .guide-layout {
+        gap: 22px;
+      }
+
+      .step {
+        padding-bottom: 66px;
+      }
+
+      .step__head {
+        grid-template-columns: 42px 1fr;
+        gap: 12px;
+      }
+
+      .step__number {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+      }
+
+      .card-grid,
+      .card-grid--three,
+      .state-demo {
+        grid-template-columns: 1fr;
+      }
+
+      .screen {
+        grid-template-columns: 82px 1fr;
+      }
+
+      .screen__main {
+        padding: 18px 14px;
+      }
+
+      .mock-device {
+        align-items: flex-start;
+      }
+
+      .mock-device__icon {
+        display: none;
+      }
+
+      .traffic-light {
+        gap: 10px;
+      }
+
+      .light {
+        width: 44px;
+        height: 44px;
+      }
+
+      .state-tabs {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .finish {
+        padding: 32px 20px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#guide">跳到快速上手步骤</a>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <a class="brand" href="#top" aria-label="AI-Light 快速上手首页">
+          <span class="brand__mark" aria-hidden="true">A</span>
+          <span>AI-Light</span>
+        </a>
+        <button
+          class="icon-button"
+          id="theme-toggle"
+          type="button"
+          aria-label="切换到亮色模式"
+          title="切换外观"
+        >
+          <svg
+            aria-hidden="true"
+            width="19"
+            height="19"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <circle cx="12" cy="12" r="4"></circle>
+            <path
+              d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"
+            ></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero__grid">
+          <div>
+            <span class="eyebrow"
+              ><span class="eyebrow__dot"></span>约 5 分钟完成首次连接</span
+            >
+            <h1 id="hero-title">让 AI 的状态，<span>一眼可见。</span></h1>
+            <p class="hero__lead">
+              AI-Light 把 Claude Code、Codex 和 WorkBuddy
+              的运行状态，实时变成桌面灯效与提示音。跟着这份指南完成连接，不需要了解蓝牙协议或编写配置。
+            </p>
+            <div class="hero__actions">
+              <a class="button" href="#step-1"
+                >开始设置 <span aria-hidden="true">→</span></a
+              >
+              <a class="button button--secondary" href="#states"
+                >先看看灯效含义</a
+              >
+            </div>
+          </div>
+          <div class="hero-device" aria-label="AI-Light 工作中状态预览">
+            <div class="device-window">
+              <div class="device-window__bar">
+                <span class="window-dot"></span><span class="window-dot"></span
+                ><span class="window-dot"></span>
+                <span class="device-window__title">状态总览</span>
+              </div>
+              <div class="status-screen">
+                <div class="traffic-light" aria-hidden="true">
+                  <span class="light"></span><span class="light"></span
+                  ><span class="light light--working"></span>
+                </div>
+                <span class="status-screen__source">Codex · 刚刚更新</span>
+                <h2>工作中</h2>
+                <p>AI 正在思考和执行，你可以先处理别的事。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="flow" aria-label="AI-Light 工作流程">
+        <div class="flow__item">
+          <strong>AI 客户端</strong><span>产生状态</span>
+        </div>
+        <div class="flow__item">
+          <strong>接入组件</strong><span>本机上报</span>
+        </div>
+        <div class="flow__item">
+          <strong>AI-Light</strong><span>映射主题</span>
+        </div>
+        <div class="flow__item">
+          <strong>状态灯</strong><span>灯效提醒</span>
+        </div>
+      </div>
+
+      <div class="guide-layout" id="guide">
+        <nav class="guide-nav" aria-label="快速上手步骤">
+          <p class="guide-nav__label">快速上手</p>
+          <ol>
+            <li>
+              <a href="#step-1" aria-current="step"
+                ><span class="guide-nav__number">1</span
+                ><span>准备工作</span></a
+              >
+            </li>
+            <li>
+              <a href="#step-2"
+                ><span class="guide-nav__number">2</span
+                ><span>连接设备</span></a
+              >
+            </li>
+            <li>
+              <a href="#step-3"
+                ><span class="guide-nav__number">3</span
+                ><span>接入工具</span></a
+              >
+            </li>
+            <li>
+              <a href="#states"
+                ><span class="guide-nav__number">4</span
+                ><span>认识状态</span></a
+              >
+            </li>
+            <li>
+              <a href="#step-5"
+                ><span class="guide-nav__number">5</span
+                ><span>验证闭环</span></a
+              >
+            </li>
+            <li>
+              <a href="#step-6"
+                ><span class="guide-nav__number">6</span><span>个性化</span></a
+              >
+            </li>
+            <li>
+              <a href="#step-7"
+                ><span class="guide-nav__number">7</span
+                ><span>排查问题</span></a
+              >
+            </li>
+          </ol>
+          <div class="progress" aria-hidden="true">
+            <div class="progress__bar" id="progress-bar"></div>
+          </div>
+        </nav>
+
+        <div class="guide-content">
+          <section class="step" id="step-1" data-step="1">
+            <div class="step__head">
+              <span class="step__number">1</span>
+              <div>
+                <h2>准备工作</h2>
+                <p class="step__intro">
+                  开始前确认客户端、灯牌和系统蓝牙都已准备好。
+                </p>
+              </div>
+            </div>
+            <div class="card">
+              <ul class="checklist">
+                <li>
+                  <span class="checkmark">✓</span
+                  ><span
+                    ><strong>启动 AI-Light</strong
+                    ><span
+                      >安装并打开桌面客户端。关闭主窗口后，应用仍会驻留在系统托盘。</span
+                    ></span
+                  >
+                </li>
+                <li>
+                  <span class="checkmark">✓</span
+                  ><span
+                    ><strong>唤醒状态灯</strong
+                    ><span
+                      >确保灯牌已供电，并放在电脑附近。首次连接建议控制在 1
+                      米内。</span
+                    ></span
+                  >
+                </li>
+                <li>
+                  <span class="checkmark">✓</span
+                  ><span
+                    ><strong>打开系统蓝牙</strong
+                    ><span
+                      >macOS、Windows 或 Linux 均需允许 AI-Light 使用蓝牙。</span
+                    ></span
+                  >
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <section class="step" id="step-2" data-step="2">
+            <div class="step__head">
+              <span class="step__number">2</span>
+              <div>
+                <h2>连接状态灯</h2>
+                <p class="step__intro">
+                  AI-Light 只显示兼容的状态灯，避免误连附近的其他蓝牙设备。
+                </p>
+              </div>
+            </div>
+            <div class="screen" aria-label="设备页面操作示意">
+              <aside class="screen__sidebar">
+                <div class="screen__brand">AI-Light</div>
+                <div class="screen__nav">
+                  <span>状态</span><span class="active">设备</span
+                  ><span>接入</span><span>主题</span><span>试听</span
+                  ><span>设置</span>
+                </div>
+              </aside>
+              <div class="screen__main">
+                <h3>连接状态灯</h3>
+                <p>选择附近的兼容状态灯</p>
+                <div class="mock-device">
+                  <span class="mock-device__icon" aria-hidden="true">◉</span>
+                  <span class="mock-device__text"
+                    ><strong>ACLight-7B2E</strong
+                    ><span>信号良好 · 兼容设备</span></span
+                  >
+                  <span class="tag">连接</span>
+                </div>
+              </div>
+            </div>
+            <div class="callout">
+              <span aria-hidden="true">ⓘ</span
+              ><span
+                ><strong
+                  >没有看到设备？</strong
+                >确认灯牌已供电后点击「重新查找设备」。已记住但离线的设备会显示「重新连接」。</span
+              >
+            </div>
+          </section>
+
+          <section class="step" id="step-3" data-step="3">
+            <div class="step__head">
+              <span class="step__number">3</span>
+              <div>
+                <h2>接入一个 AI 工具</h2>
+                <p class="step__intro">
+                  前往「接入」，选择你正在使用的工具。AI-Light 会检测
+                  Node.js、npm 与接入组件。
+                </p>
+              </div>
+            </div>
+            <div class="card-grid card-grid--three">
+              <article class="card tool-card">
+                <span class="tool-card__icon">CC</span>
+                <h3>Claude Code</h3>
+                <p>点击「连接」，将 AI-Light Hook 安全合并到现有配置。</p>
+                <small>不会删除其他 Hook</small>
+              </article>
+              <article class="card tool-card">
+                <span class="tool-card__icon">CX</span>
+                <h3>Codex</h3>
+                <p>点击「连接」，首次执行 Hook 时按 Codex 提示确认信任。</p>
+                <small>优先使用生命周期 Hook</small>
+              </article>
+              <article class="card tool-card">
+                <span class="tool-card__icon">WB</span>
+                <h3>WorkBuddy</h3>
+                <p>点击「连接」，同步空闲、工作、等待与完成状态。</p>
+                <small>不推断无法可靠识别的错误</small>
+              </article>
+            </div>
+            <div class="inline-path" aria-label="接入步骤">
+              <span>打开「接入」</span><span>确认运行环境</span
+              ><span>点击「连接」</span><span>看到「已连接」</span>
+            </div>
+            <div class="callout">
+              <span aria-hidden="true">ⓘ</span
+              ><span
+                ><strong
+                  >首次连接可能需要安装接入组件</strong
+                >应用会明确展示包名与版本，并等待你确认；不会提权，也不会修改系统
+                PATH。</span
+              >
+            </div>
+          </section>
+
+          <section class="step" id="states" data-step="4">
+            <div class="step__head">
+              <span class="step__number">4</span>
+              <div>
+                <h2>认识五种状态</h2>
+                <p class="step__intro">
+                  选择状态查看 Default
+                  经典主题的基础含义。颜色不是唯一提示，应用始终同时显示状态文字。
+                </p>
+              </div>
+            </div>
+            <div class="card state-demo">
+              <div class="state-tabs" role="tablist" aria-label="状态灯演示">
+                <button
+                  type="button"
+                  class="state-tab"
+                  role="tab"
+                  aria-selected="false"
+                  data-state="idle"
+                  style="--state-color:#94a3b8"
+                >
+                  <span class="state-tab__dot"></span>空闲
+                </button>
+                <button
+                  type="button"
+                  class="state-tab"
+                  role="tab"
+                  aria-selected="true"
+                  data-state="working"
+                  style="--state-color:#60a5fa"
+                >
+                  <span class="state-tab__dot"></span>工作中
+                </button>
+                <button
+                  type="button"
+                  class="state-tab"
+                  role="tab"
+                  aria-selected="false"
+                  data-state="waiting"
+                  style="--state-color:#fbbf24"
+                >
+                  <span class="state-tab__dot"></span>等待中
+                </button>
+                <button
+                  type="button"
+                  class="state-tab"
+                  role="tab"
+                  aria-selected="false"
+                  data-state="success"
+                  style="--state-color:#4ade80"
+                >
+                  <span class="state-tab__dot"></span>已完成
+                </button>
+                <button
+                  type="button"
+                  class="state-tab"
+                  role="tab"
+                  aria-selected="false"
+                  data-state="error"
+                  style="--state-color:#f87171"
+                >
+                  <span class="state-tab__dot"></span>出错了
+                </button>
+              </div>
+              <div
+                class="state-stage"
+                id="state-stage"
+                style="--state-color:#60a5fa"
+                role="tabpanel"
+                aria-live="polite"
+              >
+                <div>
+                  <div class="traffic-light" aria-hidden="true">
+                    <span class="light"></span><span class="light"></span
+                    ><span class="light" id="demo-light"></span>
+                  </div>
+                  <h3 id="state-title">工作中 · WORKING</h3>
+                  <p id="state-copy">
+                    AI 正在处理任务。Default 经典主题使用三灯依次蓝色呼吸。
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="step" id="step-5" data-step="5">
+            <div class="step__head">
+              <span class="step__number">5</span>
+              <div>
+                <h2>完成首次验证</h2>
+                <p class="step__intro">
+                  先用应用内试听确认设备，再启动一次真实 AI 任务确认完整链路。
+                </p>
+              </div>
+            </div>
+            <div class="card-grid">
+              <article class="card">
+                <h3>① 先验证灯牌</h3>
+                <p>
+                  打开「试听」，依次点击「工作中」和「已完成」。灯牌应立即显示对应灯效。
+                </p>
+              </article>
+              <article class="card">
+                <h3>② 再验证工具</h3>
+                <p>
+                  在已接入的工具中发起一个简单任务，返回「状态」查看来源与灯效是否同步变化。
+                </p>
+              </article>
+            </div>
+            <div class="callout">
+              <span aria-hidden="true">✓</span
+              ><span
+                ><strong
+                  >看到灯效变化就完成了</strong
+                >多个工具同时运行时，最后上报状态的工具接管灯效，这是固定的「最近活动优先」规则。</span
+              >
+            </div>
+          </section>
+
+          <section class="step" id="step-6" data-step="6">
+            <div class="step__head">
+              <span class="step__number">6</span>
+              <div>
+                <h2>选择喜欢的灯效</h2>
+                <p class="step__intro">
+                  连接成功后再做个性化。切换主题不会更新固件，也不会改变工具接入。
+                </p>
+              </div>
+            </div>
+            <div class="card-grid card-grid--three">
+              <article class="card">
+                <h3>切换主题</h3>
+                <p>
+                  在「主题」中浏览六套内置主题，点击「使用此主题」立即生效。
+                </p>
+              </article>
+              <article class="card">
+                <h3>创建主题</h3>
+                <p>
+                  以现有主题为起点，为每个状态调整颜色、运动、亮度和提示音。
+                </p>
+              </article>
+              <article class="card">
+                <h3>导入与分享</h3>
+                <p>
+                  导入或导出
+                  <span class="mono">.ailight-theme.json</span>
+                  文件，与其他用户分享灯效。
+                </p>
+              </article>
+            </div>
+          </section>
+
+          <section class="step" id="step-7" data-step="7">
+            <div class="step__head">
+              <span class="step__number">7</span>
+              <div>
+                <h2>遇到问题时</h2>
+                <p class="step__intro">
+                  沿着「设备 → 接入 → 状态」逐层检查，通常能快速定位问题所在。
+                </p>
+              </div>
+            </div>
+            <details>
+              <summary>灯牌没有任何反应</summary>
+              <p>
+                先在「设备」确认状态为已连接，再去「试听」触发工作中。如果试听也没有反应，请重新连接设备；如果试听正常，则继续检查工具接入。
+              </p>
+            </details>
+            <details>
+              <summary>工具运行了，但灯效没有变化</summary>
+              <p>
+                在「接入」确认对应工具为已连接，并重新检测运行环境。Codex
+                首次执行 Hook 时，还需要按其安全提示确认信任。
+              </p>
+            </details>
+            <details>
+              <summary>成功状态为什么一直亮着</summary>
+              <p>
+                终态是否自动回到空闲由主题决定。Default
+                经典主题会保留成功与错误状态，直到收到下一次状态事件。
+              </p>
+            </details>
+            <details>
+              <summary>想快速测试 Hook API</summary>
+              <p>
+                普通使用不需要调用
+                API。开发调试时可从「设置」打开当前服务的接口文档，端口由
+                AI-Light 自动管理。
+              </p>
+            </details>
+          </section>
+
+          <section class="step" aria-labelledby="finish-title">
+            <div class="finish">
+              <div class="finish__icon" aria-hidden="true">✓</div>
+              <h2 id="finish-title">设置完成，可以开始工作了</h2>
+              <p>
+                让 AI-Light
+                留在系统托盘中。下一次工具开始工作、等待输入或完成任务时，你无需切换窗口也能立即看到。
+              </p>
+              <a class="button" href="#top">返回顶部</a>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer>AI-Light · 智能体状态灯客户端</footer>
+
+    <script>
+    "use strict";
+    const root = document.documentElement;
+    const themeButton = document.querySelector("#theme-toggle");
+    const storedTheme = localStorage.getItem("ailight-guide-theme");
+    if (storedTheme === "light" || storedTheme === "dark") {
+      root.dataset.theme = storedTheme;
+    }
+
+    function updateThemeLabel() {
+      const next = root.dataset.theme === "dark" ? "亮色" : "暗色";
+      themeButton.setAttribute("aria-label", `切换到${next}模式`);
+    }
+
+    themeButton.addEventListener("click", () => {
+      root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+      localStorage.setItem("ailight-guide-theme", root.dataset.theme);
+      updateThemeLabel();
+    });
+    updateThemeLabel();
+
+    const stateData = {
+      idle: {
+        title: "空闲 · IDLE",
+        copy: "当前没有需要展示的任务状态，灯牌保持熄灭。",
+        color: "#94a3b8",
+        effect: "off",
+      },
+      working: {
+        title: "工作中 · WORKING",
+        copy: "AI 正在处理任务。Default 经典主题使用三灯依次蓝色呼吸。",
+        color: "#60a5fa",
+        effect: "breathe",
+      },
+      waiting: {
+        title: "等待中 · WAITING",
+        copy: "工具正在等待你的输入或确认，显示琥珀色慢呼吸。",
+        color: "#fbbf24",
+        effect: "breathe",
+      },
+      success: {
+        title: "已完成 · SUCCESS",
+        copy: "最近一次任务顺利结束，显示绿色常亮。",
+        color: "#4ade80",
+        effect: "steady",
+      },
+      error: {
+        title: "出错了 · ERROR",
+        copy: "最近一次任务执行失败，显示红色闪烁并提示一声。",
+        color: "#f87171",
+        effect: "blink",
+      },
+    };
+
+    const stateTabs = [...document.querySelectorAll(".state-tab")];
+    const demoLight = document.querySelector("#demo-light");
+    const stateStage = document.querySelector("#state-stage");
+    const stateTitle = document.querySelector("#state-title");
+    const stateCopy = document.querySelector("#state-copy");
+
+    function setDemoState(key) {
+      const state = stateData[key];
+      for (const tab of stateTabs) {
+        tab.setAttribute("aria-selected", String(tab.dataset.state === key));
+      }
+      stateStage.style.setProperty("--state-color", state.color);
+      stateTitle.textContent = state.title;
+      stateCopy.textContent = state.copy;
+      demoLight.removeAttribute("style");
+      if (state.effect === "off") {
+        demoLight.style.background = "#1f2937";
+      } else {
+        demoLight.style.background = `radial-gradient(circle at 35% 30%, #ffffffcc, ${state.color} 42%, #0f172a)`;
+        demoLight.style.boxShadow = `0 0 24px ${state.color}99, inset 0 2px 7px rgba(255,255,255,.28)`;
+        if (state.effect === "breathe") {
+          demoLight.style.animation = "breathe 2s ease-in-out infinite";
+        } else if (state.effect === "blink") {
+          demoLight.style.animation = "blink 1s steps(1) infinite";
+        } else {
+          demoLight.style.animation = "none";
+        }
+      }
+    }
+
+    stateTabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => setDemoState(tab.dataset.state));
+      tab.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+          return;
+        }
+        event.preventDefault();
+        const offset = event.key === "ArrowDown" ? 1 : -1;
+        const next =
+          stateTabs[(index + offset + stateTabs.length) % stateTabs.length];
+        next.focus();
+        setDemoState(next.dataset.state);
+      });
+    });
+    setDemoState("working");
+
+    const steps = [...document.querySelectorAll("[data-step]")];
+    const navLinks = [...document.querySelectorAll(".guide-nav a")];
+    const progressBar = document.querySelector("#progress-bar");
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (!visible) {
+          return;
+        }
+        const index = Number(visible.target.dataset.step);
+        navLinks.forEach((link, navIndex) => {
+          if (navIndex + 1 === index) {
+            link.setAttribute("aria-current", "step");
+          } else {
+            link.removeAttribute("aria-current");
+          }
+        });
+        progressBar.style.width = `${(index / steps.length) * 100}%`;
+      },
+      { rootMargin: "-20% 0px -60%", threshold: [0, 0.2, 0.5] }
+    );
+    for (const step of steps) {
+      observer.observe(step);
+    }
+    </script>
+  </body>
+</html>
