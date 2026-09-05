@@ -132,18 +132,21 @@ jobs:
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          gh api "repos/$REPOSITORY/releases/tags/$RELEASE_TAG" > release.json
+          gh api "repos/$REPOSITORY/releases?per_page=100" > releases.json
           node - <<'NODE'
           const fs = require('node:fs');
-          const release = JSON.parse(fs.readFileSync('release.json', 'utf8'));
+          const releases = JSON.parse(fs.readFileSync('releases.json', 'utf8'));
+          const release = releases.find((item) => item.tag_name === process.env.RELEASE_TAG);
+          if (!release) throw new Error(`Draft release not found: ${process.env.RELEASE_TAG}`);
+          const releaseBase = `https://github.com/${process.env.REPOSITORY}/releases`;
           const assets = Object.fromEntries(release.assets.map((asset) => [asset.name, {
             size: asset.size,
             sha256: asset.digest?.replace(/^sha256:/, '') ?? null,
-            url: asset.browser_download_url,
+            url: `${releaseBase}/download/${release.tag_name}/${encodeURIComponent(asset.name)}`,
           }]));
           const metadata = {
             version: release.tag_name.replace(/^v/, ''),
-            releaseUrl: release.html_url,
+            releaseUrl: `${releaseBase}/tag/${release.tag_name}`,
             publishedAt: release.published_at,
             notes: release.body ?? '',
             assets,
