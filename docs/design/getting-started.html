@@ -1121,11 +1121,13 @@
         <div class="hero__grid">
           <div>
             <span class="eyebrow"
-              ><span class="eyebrow__dot"></span>约 5 分钟完成首次连接</span
+              ><span
+                class="eyebrow__dot"
+              ></span>完成设备、接入与真实任务验证</span
             >
             <h1 id="hero-title">让 AI 的状态，<span>一眼可见。</span></h1>
             <p class="hero__lead">
-              AI-Light 把 Claude Code、Codex 和 WorkBuddy
+              AI-Light 把 Claude Code、Codex、Qoder、TraeCode 和 WorkBuddy
               的运行状态，实时变成桌面灯效与提示音。跟着这份指南完成连接，不需要了解蓝牙协议或编写配置。
             </p>
             <div class="hero__actions">
@@ -1317,8 +1319,8 @@
               <div>
                 <h2>接入一个 AI 工具</h2>
                 <p class="step__intro">
-                  前往「接入」，选择你正在使用的工具。AI-Light 会检测
-                  Node.js、npm 与接入组件。
+                  前往「接入」，选择你正在使用的工具。AI-Light 会检测 Node.js
+                  20+、npm 与兼容的 AI-Light Adapter。
                 </p>
               </div>
             </div>
@@ -1332,8 +1334,20 @@
               <article class="card tool-card">
                 <span class="tool-card__icon">CX</span>
                 <h3>Codex</h3>
-                <p>点击「连接」，首次执行 Hook 时按 Codex 提示确认信任。</p>
-                <small>优先使用生命周期 Hook</small>
+                <p>写入配置后，在 Codex「设置 → Hooks」中审核并信任新 Hook。</p>
+                <small>云端任务不会经过本机 Hook</small>
+              </article>
+              <article class="card tool-card">
+                <span class="tool-card__icon">QD</span>
+                <h3>Qoder</h3>
+                <p>点击「连接」，配置写入后通常无需开启其他设置。</p>
+                <small>桌面端与 CLI 均需用真实任务验证</small>
+              </article>
+              <article class="card tool-card">
+                <span class="tool-card__icon">TC</span>
+                <h3>TraeCode</h3>
+                <p>写入配置后，在 TraeCode「设置 → Hooks」中开启全局 Hook。</p>
+                <small>无需开启「导入 CLAUDE 中的 Hooks 配置」</small>
               </article>
               <article class="card tool-card">
                 <span class="tool-card__icon">WB</span>
@@ -1344,15 +1358,15 @@
             </div>
             <div class="inline-path" aria-label="接入步骤">
               <span>打开「接入」</span><span>确认运行环境</span
-              ><span>点击「连接」</span><span>看到「已连接」</span>
+              ><span>点击「连接」</span><span>完成工具侧下一步</span>
             </div>
             <div class="callout">
               <span aria-hidden="true">ⓘ</span
               ><span
-                ><strong
-                  >首次连接可能需要安装接入组件</strong
-                >应用会明确展示包名与版本，并等待你确认；不会提权，也不会修改系统
-                PATH。</span
+                ><strong>「配置已写入」还不是完整验证</strong>它只表示 AI-Light
+                已完成配置写入。缺少或需要升级 Adapter
+                时，应用会先展示包名与版本并等待你确认；安装不会提权，也不会修改系统
+                PATH。最后仍需运行一次真实任务。</span
               >
             </div>
           </section>
@@ -1456,13 +1470,13 @@
               <article class="card">
                 <h3>① 先验证灯牌</h3>
                 <p>
-                  打开「试听」，依次点击「工作中」和「已完成」。灯牌应立即显示对应灯效。
+                  打开「试听」，点击「工作中」切换软件状态。灯牌应立即显示对应灯效；「试听当前灯效」只会重播当前效果，不改变软件状态。
                 </p>
               </article>
               <article class="card">
                 <h3>② 再验证工具</h3>
                 <p>
-                  在已接入的工具中发起一个简单任务，返回「状态」查看来源与灯效是否同步变化。
+                  在已接入的工具中发起一个低风险任务，返回「状态」确认来源与灯效同步变化；等待输入和任务结束时也应出现对应状态。
                 </p>
               </article>
             </div>
@@ -1516,21 +1530,24 @@
               <div>
                 <h2>遇到问题时</h2>
                 <p class="step__intro">
-                  沿着「设备 → 接入 → 状态」逐层检查，通常能快速定位问题所在。
+                  沿着「设备 → 试听 → 接入 →
+                  状态」逐层检查，通常能快速定位问题所在。
                 </p>
               </div>
             </div>
             <details>
               <summary>灯牌没有任何反应</summary>
               <p>
-                先在「设备」确认状态为已连接，再去「试听」触发工作中。如果试听也没有反应，请重新连接设备；如果试听正常，则继续检查工具接入。
+                先在「设备」确认状态为已连接，再去「试听」切换到工作中。如果试听也没有反应，请重新连接设备；意外断连时应用会自动尝试重连，也可以停止重连后手动操作。如果试听正常，则继续检查工具接入。
               </p>
             </details>
             <details>
               <summary>工具运行了，但灯效没有变化</summary>
               <p>
-                在「接入」确认对应工具为已连接，并重新检测运行环境。Codex
-                首次执行 Hook 时，还需要按其安全提示确认信任。
+                在「接入」确认对应工具显示「配置已写入」，并重新检测运行环境。Codex
+                需要信任新 Hook；TraeCode 需要开启全局
+                Hook。配置写入成功不等于目标工具已经执行
+                Hook，应以真实任务中的状态变化为准。
               </p>
             </details>
             <details>
