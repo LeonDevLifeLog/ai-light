@@ -1,6 +1,6 @@
 # 接入 AI 编程工具
 
-AI Light 当前面向最终用户提供 Claude Code、Codex 和 WorkBuddy 的一键接入。连接成功后，工具支持的工作、等待、完成和失败状态会自动同步到 AI Light。
+AI Light 当前面向最终用户提供 Claude Code、Codex、Qoder 和 WorkBuddy 的一键接入。连接成功后，工具支持的工作、等待、完成和失败状态会自动同步到 AI Light。
 
 ## 开始之前
 
@@ -36,6 +36,16 @@ AI Light 当前面向最终用户提供 Claude Code、Codex 和 WorkBuddy 的一
 5. 新建一次 Codex 任务，检查 AI Light 状态是否变化。
 
 实际可用能力取决于本机 Codex 版本及其 Hook 支持情况。云端运行、没有经过本机 Hook 的任务不会自动同步。
+
+## 连接 Qoder
+
+1. 打开“接入”页面。
+2. 找到 Qoder 卡片。
+3. 选择“连接”。
+4. 等待卡片显示“已连接”。
+5. 在 Qoder 桌面端或 Qoder CLI 新建一次低风险任务，检查 AI Light 状态是否变化。
+
+AI Light 只合并用户级配置中由自己管理的 Hook：国际版使用 `~/.qoder/settings.json`，国内版使用 `~/.qoder-cn/settings.json`；两个目录都存在时会同时接入，两个目录都不存在时默认创建国际版路径。Qoder 的“设置 → 钩子”显示配置只代表文件已写入；必须运行真实任务，才能确认 Runtime 已加载并成功执行。项目级 `.qoder/settings.json` 与 `.qoder/settings.local.json` 会继续由 Qoder 合并，AI Light 不修改它们。
 
 ## 连接 WorkBuddy
 

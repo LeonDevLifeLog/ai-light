@@ -27,7 +27,7 @@
 
 | 层 | 名称 | 职责 | 状态 | 关键依据 |
 |---|---|---|---|---|
-| L1 | **接入层** | 接收各智能体客户端 hook 事件 | ✅ CLI Adapter 已实现，实机闭环待验收 | `docs/specs/adapter-cli.md` + `docs/specs/hook-api.md`；第一期支持 Claude Code / Codex |
+| L1 | **接入层** | 接收各智能体客户端 hook 事件 | ✅ CLI Adapter 已实现，实机闭环待验收 | `docs/specs/adapter-cli.md` + `docs/specs/hook-api.md`；支持 Claude Code / Codex / Qoder / WorkBuddy |
 | L2 | **业务层** | 状态仲裁 → 业务状态 → 主题映射 → SCENE 编译 | ✅ 已明确（除 direct_scene 预留） | 5 态 + 最近活动优先（ADR-0005）；主题格式 V1.0（ADR-0002） |
 | L3 | **协议层** | V0.4 编解码、单 writer 队列、超时重试、幂等 | ✅ 已明确 | 协议 V0.4 §15 客户端实现指南 |
 | L4 | **设备层** | BLE 扫描/连接/握手/能力发现/断连重连 | ✅ 已实现（握手信息读取 / 断连重连已落地，2026-08-21）；实机验证待 U-01 | 协议 V0.4 §5 握手流程；PCDaemon ble_worker 验证过退避重连 |
@@ -49,10 +49,12 @@
 **第一期支持清单**（🟢 Adapter CLI 接入）：
 - Claude Code——CLI 安全合并 `~/.claude/settings.json` lifecycle command hooks
 - Codex——CLI 安全合并 `~/.codex/hooks.json` lifecycle command hooks；首次执行仍须按 Codex 自身安全机制确认信任
+- Qoder——CLI 按已存在发行版安全合并 `~/.qoder/settings.json` / `~/.qoder-cn/settings.json`，两者并存则同时管理；桌面端与 Qoder CLI 复用兼容 Hooks
+- WorkBuddy——CLI 安全合并 `~/.workbuddy/settings.json`；仅使用官方明确支持的事件
 
-**暂缓/不覆盖**：Qoder、Cursor（🟡 桥接方案存档）、WorkBuddy（🔴 无公开 hook）、Claude Desktop 纯聊天（🔴 不覆盖，内置 Claude Code 可接）。
+**暂缓/不覆盖**：Cursor（🟡 桥接方案存档）、Claude Desktop 纯聊天（🔴 不覆盖，内置 Claude Code 可接）。
 
-**待办**：发布 `@ai-light/adapter`、修复本机 Codex 安装、完成 Claude Code / Codex / AgentCore-Light 真机闭环验收。
+**待办**：发布含 Qoder 支持的 `@ai-light/adapter`、修复本机 Codex 安装、完成各工具与 AgentCore-Light 真机闭环验收。
 
 ### L2 业务层（✅ 已明确）
 

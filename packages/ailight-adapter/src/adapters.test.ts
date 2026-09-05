@@ -89,6 +89,38 @@ test("maps Codex lifecycle events and ignores unknown events", () => {
   assert.deepEqual(translate("codex", { hook_event_name: "PostToolUse" }), []);
 });
 
+test("maps Qoder lifecycle, attention, recovery, and failure events", () => {
+  const cases = [
+    ["SessionStart", "IDLE"],
+    ["UserPromptSubmit", "WORKING"],
+    ["PermissionRequest", "WAITING"],
+    ["PermissionDenied", "WORKING"],
+    ["Elicitation", "WAITING"],
+    ["ElicitationResult", "WORKING"],
+    ["PostToolUseFailure", "WORKING"],
+    ["Stop", "SUCCESS"],
+    ["StopFailure", "ERROR"],
+    ["SessionEnd", "IDLE"],
+  ] as const;
+  for (const [hookEvent, state] of cases) {
+    assert.equal(
+      translate("qoder", {
+        hook_event_name: hookEvent,
+        session_id: "qoder-1",
+      })[0]?.state,
+      state
+    );
+  }
+  assert.deepEqual(
+    translate("qoder", {
+      agent_id: "subagent-1",
+      hook_event_name: "PermissionRequest",
+    }),
+    []
+  );
+  assert.deepEqual(translate("qoder", { hook_event_name: "FileChanged" }), []);
+});
+
 test("maps WorkBuddy supported lifecycle events", () => {
   assert.equal(
     translate("workbuddy", { hook_event_name: "SessionStart" })[0]?.state,

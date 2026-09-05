@@ -1,4 +1,11 @@
-import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  readFile,
+  rename,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { ToolId } from "./adapters.js";
@@ -50,6 +57,18 @@ const EVENTS: Record<ToolId, Array<{ event: string; matcher?: string }>> = {
     { event: "Stop" },
     { event: "SessionEnd" },
   ],
+  qoder: [
+    { event: "SessionStart" },
+    { event: "UserPromptSubmit" },
+    { event: "PermissionRequest" },
+    { event: "PermissionDenied" },
+    { event: "Elicitation" },
+    { event: "ElicitationResult" },
+    { event: "PostToolUseFailure" },
+    { event: "Stop" },
+    { event: "StopFailure" },
+    { event: "SessionEnd" },
+  ],
   workbuddy: [
     { event: "SessionStart", matcher: "startup" },
     { event: "UserPromptSubmit" },
@@ -67,7 +86,41 @@ export function configPath(tool: ToolId, env = process.env) {
   if (tool === "workbuddy") {
     return join(userHome, ".workbuddy", "settings.json");
   }
+  if (tool === "qoder") {
+    return join(userHome, ".qoder", "settings.json");
+  }
   return join(userHome, ".codex", "hooks.json");
+}
+
+async function directoryExists(path: string) {
+  try {
+    return (await stat(path)).isDirectory();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+export async function configPaths(tool: ToolId, env = process.env) {
+  if (tool !== "qoder") {
+    return [configPath(tool, env)];
+  }
+  const userHome = env.AILIGHT_TEST_USER_HOME || homedir();
+  const defaultDirectory = join(userHome, ".qoder");
+  const directories = [defaultDirectory, join(userHome, ".qoder-cn")];
+  const existing = (
+    await Promise.all(
+      directories.map(async (directory) => ({
+        directory,
+        exists: await directoryExists(directory),
+      }))
+    )
+  ).filter((item) => item.exists);
+  const targets =
+    existing.length > 0 ? existing : [{ directory: defaultDirectory }];
+  return targets.map((item) => join(item.directory, "settings.json"));
 }
 
 function isManaged(handler: HookHandler) {
@@ -193,16 +246,22 @@ async function persist(path: string, config: ToolConfig, backup: boolean) {
 }
 
 export async function detect(tool: ToolId) {
-  const path = configPath(tool);
-  const config = await loadConfig(path);
-  const managedCount = Object.values(config.hooks ?? {})
-    .flat()
-    .flatMap((group) => group.hooks)
-    .filter(isManaged).length;
+  const paths = await configPaths(tool);
+  const configs = await Promise.all(paths.map(loadConfig));
+  const managedCount = configs.reduce(
+    (total, config) =>
+      total +
+      Object.values(config.hooks ?? {})
+        .flat()
+        .flatMap((group) => group.hooks)
+        .filter(isManaged).length,
+    0
+  );
   return {
-    connected: managedCount === EVENTS[tool].length,
+    connected: managedCount === EVENTS[tool].length * paths.length,
     managedCount,
-    path,
+    path: paths[0],
+    paths,
   };
 }
 
@@ -211,21 +270,33 @@ export async function install(
   cliScript: string,
   dryRun: boolean
 ) {
-  const path = configPath(tool);
-  const current = await loadConfig(path);
-  const next = withManaged(current, tool, cliScript);
+  const paths = await configPaths(tool);
+  const current = await Promise.all(paths.map(loadConfig));
+  const next = current.map((config) => withManaged(config, tool, cliScript));
   if (!dryRun) {
-    await persist(path, next, true);
+    for (const [index, path] of paths.entries()) {
+      await persist(path, next[index] as ToolConfig, true);
+    }
   }
-  return { changed: JSON.stringify(current) !== JSON.stringify(next), path };
+  return {
+    changed: JSON.stringify(current) !== JSON.stringify(next),
+    path: paths[0],
+    paths,
+  };
 }
 
 export async function uninstall(tool: ToolId, dryRun: boolean) {
-  const path = configPath(tool);
-  const current = await loadConfig(path);
-  const next = withoutManaged(current);
+  const paths = await configPaths(tool);
+  const current = await Promise.all(paths.map(loadConfig));
+  const next = current.map(withoutManaged);
   if (!dryRun) {
-    await persist(path, next, true);
+    for (const [index, path] of paths.entries()) {
+      await persist(path, next[index] as ToolConfig, true);
+    }
   }
-  return { changed: JSON.stringify(current) !== JSON.stringify(next), path };
+  return {
+    changed: JSON.stringify(current) !== JSON.stringify(next),
+    path: paths[0],
+    paths,
+  };
 }

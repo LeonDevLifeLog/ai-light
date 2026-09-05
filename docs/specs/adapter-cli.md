@@ -2,9 +2,9 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.1 |
-| 文档状态 | Claude Code / Codex 已实现；WorkBuddy 自 Adapter 0.1.3 起支持，待实机验收 |
-| 适用范围 | Claude Code、Codex、WorkBuddy |
+| 文档版本 | V1.2 |
+| 文档状态 | Claude Code / Codex / WorkBuddy 已实现；Qoder 自 Adapter 0.1.5 起支持，待实机验收 |
+| 适用范围 | Claude Code、Codex、Qoder、WorkBuddy |
 | CLI 技术栈 | Node.js 20+ / TypeScript / ESM |
 | npm 包 | `@ai-light/adapter` |
 | CLI 命令 | `ailight-adapter` |
@@ -17,7 +17,7 @@
 
 ## 1. 背景与目标
 
-AI-Light 已提供本地 Hook Server、标准五态、状态仲裁、主题编译与 BLE 下发能力，但 Claude Code、Codex、WorkBuddy 的原始 Hook JSON 与 AI-Light `POST /hook` 请求模型不同，不能仅靠把 Hook URL 指向 AI-Light 完成可靠接入。
+AI-Light 已提供本地 Hook Server、标准五态、状态仲裁、主题编译与 BLE 下发能力，但 Claude Code、Codex、Qoder、WorkBuddy 的原始 Hook JSON 与 AI-Light `POST /hook` 请求模型不同，不能仅靠把 Hook URL 指向 AI-Light 完成可靠接入。
 
 Adapter CLI 是工具协议与 AI-Light 稳定协议之间的防腐层：
 
@@ -36,7 +36,7 @@ Adapter CLI 是工具协议与 AI-Light 稳定协议之间的防腐层：
 
 ### 1.1 目标
 
-1. 完成 Claude Code、Codex 与 WorkBuddy 的真实接入闭环。
+1. 完成 Claude Code、Codex、Qoder 与 WorkBuddy 的真实接入闭环。
 2. 对最终用户隐藏 JSON、HTTP 地址、端口和 Hook 细节。
 3. Adapter 可独立构建、测试、发布和升级，不要求同步发布桌面端。
 4. 桌面端、CLI 和未来 Skill 复用同一套安装、诊断和修复能力。
@@ -47,7 +47,7 @@ Adapter CLI 是工具协议与 AI-Light 稳定协议之间的防腐层：
 
 V1 不包含：
 
-- Qoder、Cursor 或其他工具的正式适配。
+- Cursor 或其他工具的正式适配。
 - Claude Desktop 纯聊天模式。
 - Codex 云端任务的远程状态同步。
 - Adapter 常驻 daemon。
@@ -79,7 +79,7 @@ AI-Light UI ─────┐
 
 ### 2.3 失败开放
 
-灯效是辅助能力。AI-Light 未启动、runtime 文件缺失、请求超时、未知事件或 Adapter 内部错误均不得中断 Claude Code/Codex/WorkBuddy。Hook 处理命令在这些情况下 SHOULD 记录脱敏诊断并以退出码 `0` 结束。
+灯效是辅助能力。AI-Light 未启动、runtime 文件缺失、请求超时、未知事件或 Adapter 内部错误均不得中断 Claude Code/Codex/Qoder/WorkBuddy。Hook 处理命令在这些情况下 SHOULD 记录脱敏诊断并以退出码 `0` 结束。
 
 ### 2.4 用户无端口心智
 
@@ -96,7 +96,7 @@ AI-Light UI ─────┐
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ Claude Code / Codex / WorkBuddy                              │
+│ Claude Code / Codex / Qoder / WorkBuddy                     │
 │ lifecycle hook → 启动 ailight-adapter → stdin 原始 JSON      │
 └────────────────────────────┬─────────────────────────────────┘
                              ▼
@@ -113,6 +113,7 @@ AI-Light UI ─────┐
 │ Adapter Registry                                             │
 │ ├─ ClaudeCodeAdapter                                         │
 │ ├─ CodexAdapter                                              │
+│ ├─ QoderAdapter                                              │
 │ └─ WorkBuddyAdapter                                          │
 │                                                              │
 │ Runtime Client                                               │
@@ -430,6 +431,7 @@ export interface ToolAdapter {
 ```bash
 ailight-adapter hook claude-code
 ailight-adapter hook codex
+ailight-adapter hook qoder
 ```
 
 - stdin：一个工具原始 Hook JSON。
@@ -442,12 +444,15 @@ ailight-adapter hook codex
 ```bash
 ailight-adapter detect claude-code --json
 ailight-adapter detect codex --json
+ailight-adapter detect qoder --json
 ailight-adapter install claude-code --json
 ailight-adapter install codex --json
+ailight-adapter install qoder --json
 ailight-adapter repair claude-code --json
 ailight-adapter repair codex --json
 ailight-adapter uninstall claude-code --json
 ailight-adapter uninstall codex --json
+ailight-adapter uninstall qoder --json
 ```
 
 变更型命令 MUST 支持预览：
@@ -464,6 +469,7 @@ ailight-adapter install claude-code --dry-run --json
 ailight-adapter doctor --json
 ailight-adapter doctor claude-code --json
 ailight-adapter doctor codex --json
+ailight-adapter doctor qoder --json
 ```
 
 至少检查：
@@ -483,6 +489,7 @@ ailight-adapter doctor codex --json
 ailight-adapter version --json
 ailight-adapter translate claude-code < fixture.json
 ailight-adapter translate codex < fixture.json
+ailight-adapter translate qoder < fixture.json
 ailight-adapter emit WORKING --source manual
 ```
 
@@ -702,6 +709,22 @@ WorkBuddy 支持从 Adapter `0.1.3` 开始；提供 WorkBuddy 卡片的 Desktop 
 
 WorkBuddy 文档未定义可靠失败事件，Adapter MUST NOT 读取工具输出或退出码推断 `ERROR`。安装、检测、备份、幂等合并和卸载规则与 §9 一致。
 
+### 11.6 Qoder Adapter
+
+Qoder 桌面端与 Qoder CLI 使用兼容的 Hooks 结构；国际版使用 `~/.qoder/settings.json`，国内版使用 `~/.qoder-cn/settings.json`。Adapter `0.1.5` 起支持 `qoder` source；Desktop MUST 将兼容下限设为 `0.1.5`，避免旧 Adapter 被误判为可用。
+
+| Qoder 事件 | AI-Light 状态 | 语义 |
+|---|---|---|
+| `SessionStart` / `SessionEnd` | `IDLE` | 任务生命周期边界 |
+| `UserPromptSubmit` | `WORKING` | 用户提交新指令 |
+| `PermissionRequest` / `Elicitation` | `WAITING` | 等待权限或信息输入 |
+| `PermissionDenied` / `ElicitationResult` | `WORKING` | 结果返回后继续处理 |
+| `PostToolUseFailure` | `WORKING` | 单个工具失败已返回 Agent，不等于任务失败 |
+| `Stop` | `SUCCESS` | 主 Agent 本轮响应结束 |
+| `StopFailure` | `ERROR` | 主 Agent 停止失败 |
+
+携带 `agent_id` 的事件属于子智能体，不改变主任务灯效。Qoder 同时支持 HTTP handler，但 V1 统一安装 command handler，以复用 Adapter 的 `runtime.json` 服务发现、短期 Token、脱敏日志、跨平台命令和失败开放语义。路径选择采用存在性驱动：只存在一个发行版目录时管理该目录，两者并存时同时管理，两者均不存在时默认创建 `~/.qoder/settings.json`；全部目标完整才判定已连接。安装、检测、备份、幂等合并和卸载规则与 §9 一致；配置可见不代表 Runtime 已加载，真实闭环仍需启动低风险任务验证。
+
 ---
 
 ## 12. 桌面端集成体验
@@ -713,6 +736,7 @@ WorkBuddy 文档未定义可靠失败事件，Adapter MUST NOT 读取工具输�
 ```text
 Claude Code  [连接]
 Codex        [连接]
+Qoder        [连接]
 WorkBuddy    [连接]
 ```
 
@@ -1069,6 +1093,8 @@ Codex：
 - [ADR-0001：接入层设计决策](../decisions/ADR-0001-接入层设计决策.md)
 - [Claude Code Hooks Reference](https://code.claude.com/docs/en/hooks)
 - [Codex Configuration Reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+- [Qoder Hooks](https://docs.qoder.com/qoder/hooks)
+- [Qoder CLI Hooks Reference](https://docs.qoder.com/cli/hooks-reference)
 - [Apple：Protecting user data with App Sandbox](https://developer.apple.com/documentation/security/protecting-user-data-with-app-sandbox)
 - [Apple：Application Support Directory](https://developer.apple.com/documentation/foundation/url/applicationsupportdirectory)
 
@@ -1080,7 +1106,7 @@ Codex：
 |---|---|---|
 | D-CLI-01 | Adapter 形态 | Node.js 短生命周期 CLI，不做 daemon |
 | D-CLI-02 | 分发 | npm 包 `@ai-light/adapter`，命令 `ailight-adapter` |
-| D-CLI-03 | 首期工具 | Claude Code、Codex |
+| D-CLI-03 | 首期工具 | Claude Code、Codex；后续由 KAD-14/KAD-15 增加 WorkBuddy、Qoder |
 | D-CLI-04 | 核心边界 | 原始 Hook → 标准事件；不碰 BLE/主题 |
 | D-CLI-05 | 配置所有权 | CLI 统一管理，Desktop/Skill 调用 CLI |
 | D-CLI-06 | 共享目录 | `~/.ailight`，支持 `AILIGHT_HOME` |
@@ -1091,3 +1117,4 @@ Codex：
 | D-CLI-11 | 升级 | Desktop 编排一键/可选自动升级；Hook 不自更新 |
 | D-CLI-12 | Skills | 后续自动化入口，不是运行时依赖 |
 | D-CLI-13 | WorkBuddy | 复用兼容 Hook 协议，独立管理 `~/.workbuddy/settings.json` |
+| D-CLI-14 | Qoder | 复用 Adapter CLI，存在性驱动管理 `~/.qoder/settings.json` 与 `~/.qoder-cn/settings.json`，支持可靠失败终态 |

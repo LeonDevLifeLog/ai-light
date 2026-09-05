@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.38 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.38，2026-09-05） |
+| 文档版本 | V1.40 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.40，2026-09-05） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -652,14 +652,14 @@ Dashboard 主题卡 + Themes 页主题网格卡：3 灯条色块缩略 + 主题�
 ### 6.5 `IntegrationCard`
 
 **6.5.1 用途**
-Integrations 页的官方 Adapter 卡（Claude Code / Codex / WorkBuddy）。
+Integrations 页的官方 Adapter 卡（Claude Code / Codex / Qoder / WorkBuddy）。
 
 **6.5.2 对外契约**
 
 | 类别 | 项 | 说明 |
 |---|---|---|
 | Props | `client` | `{ id, name, description }` |
-| Props | `status` | `'connected' \| 'unconnected'` |
+| Props | `status` | `'connected' \| 'unconnected'` + `path` / `paths?` 配置路径 |
 | Props | `confirmPending` | Adapter 缺失或不兼容时的内联确认态（按钮为「确认并安装」/「确认并升级」，卡片展示说明 InlineAlert） |
 | Emit | `onClickConnect(clientId)` | 先检查运行环境；就绪→安装 Adapter 并写入托管 Hook；Adapter 缺失→进入确认态 |
 | Emit | `onClickDisconnect(clientId)` | 仅移除托管 Hook |
@@ -687,6 +687,7 @@ Integrations 页的官方 Adapter 卡（Claude Code / Codex / WorkBuddy）。
 - Node/npm 未就绪时连接直接停止，由 RuntimeEnvironmentCard 恢复卡承接（不再把错误吞成「未连接」）。
 - 配置解析失败时不写文件，Toast 明确要求先修复原配置。
 - [断开] 只移除 AI-Light 标记的托管条目，其他 Hook 保持不变；Adapter 不可用时返回 `ADAPTER_NOT_FOUND`（needs_repair 语义）。
+- Qoder 卡按存在性管理 `~/.qoder/settings.json` / `~/.qoder-cn/settings.json`，两者并存时展示两条路径且要求全部完整才进入 connected；连接后提示用真实任务验证 Runtime 已加载配置。
 
 **6.5.6 无障碍**
 - 连接和断开均为带文字按钮，不依赖图标表达状态。
@@ -905,7 +906,7 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 └─────────────────────────┘
 ```
 
-**联动**：4 个 IntegrationCard 完全独立；HelpFooter 纯静态。`reserved` 卡只解释当前限制，不渲染不可执行的按钮与配置折叠区；可配置卡使用「复制配置」「查看配置步骤」。
+**联动**：4 个 IntegrationCard 完全独立；HelpFooter 纯静态。
 
 ---
 
@@ -1891,6 +1892,8 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.40 | 2026-09-05 | Qoder IntegrationCard 增加国际版/国内版双路径契约：存在性驱动目标选择，并存时展示全部路径并要求全部 Hook 完整。对齐报告：§3 IPC Source Events 未变且均存在于 ipc-contract §5；§4.1 AppError.code 未变；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 未新增主题字段；KAD-16 引用有效。 |
+| V1.39 | 2026-09-05 | IntegrationCard 正式增加 Qoder：接入页四张卡均可连接，Qoder 通过 Adapter 0.1.5 管理 `~/.qoder/settings.json`，桌面端与 CLI 共用兼容 Hooks。对齐报告：§3 IPC Source Events 未变且均存在于 ipc-contract §5；§4.1 AppError.code 未变；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 未新增主题字段；KAD-15 引用有效。 |
 | V1.38 | 2026-09-05 | 附近设备仅展示 `recognized === true` 的状态灯候选，过滤后为空时展示状态灯空态；保留记忆关系与 RSSI 排序。对齐报告：§3 IPC events、§4.1 错误码、§4.2 蓝牙 result 名称核对通过；§6~§8 主题字段未变且引用存在；ADR/KAD 引用有效。同步澄清 ipc-contract §2.3：扫描标记按广播名前缀计算，连接后服务发现与握手负责验证。 |
 | V1.37 | 2026-09-05 | 运行环境卡新增常驻接入原理说明：npm 包链接、Hook 状态流、Node/npm 依赖和首次安装确认；中性底色与错误告警区分，流程自适应换行，外链失败内联反馈。对齐报告：§3 IPC events、§4.1 错误码、§4.2 蓝牙 result 名称核对通过；§6~§8 仅增加说明区，未新增主题字段；ADR/KAD 引用有效。 |
 | V1.36 | 2026-09-05 | 运行环境恢复闭环：请求/解析异常展示失败并可重试，保留旧结果；Node/npm 内联安装指引；Adapter 安装与升级分开标识；手动文件选择收纳到详情；恢复失败持久展示、取消不报成功，配置损坏优先引导重建。对齐报告：§3 IPC Source Events 均存在（prefers-color-scheme 为浏览器媒体查询，非 IPC event）；§4.1 错误码全部存在于 ipc-contract §4；§4.2 result 名称均存在于蓝牙 V0.4 §3.6；§6~§8 仅修改工具链展示，主题字段未变；ADR/KAD 引用有效。 |

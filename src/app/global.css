@@ -885,6 +885,9 @@ pre,
 .integration-logo--green {
   background: linear-gradient(135deg, #10b981, #047857);
 }
+.integration-logo--blue {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+}
 .integration-logo--slate {
   background: linear-gradient(135deg, #64748b, #334155);
 }

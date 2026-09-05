@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.39 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.39，2026-09-05） |
+| 文档版本 | V1.41 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.41，2026-09-05） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -20,7 +20,7 @@
 |---|---|---|
 | `/` | 状态总览 | 默认打开，看当前业务状态 / 设备 / 主题 |
 | `/devices` | 设备管理 | 连接 / 断开灯牌 |
-| `/integrations` | 接入外部工具 | 配置 Claude Code / Codex / WorkBuddy 等的 hook |
+| `/integrations` | 接入外部工具 | 配置 Claude Code / Codex / Qoder / WorkBuddy 等的 hook |
 | `/themes` | 主题中心 | 浏览 / 切换 / 编辑主题 |
 | `/preview` | 试听 | 模拟业务状态；连接设备后试听实际灯光与声音 |
 | `/settings` | 设置 | 显示（外观模式 / 灯组朝向 / 当前主题）+ 系统（开机自启 / 外部运行环境 / API 接口文档） |
@@ -174,12 +174,13 @@ UI 反馈：设备卡状态 tag 立即更新；失败显示 Toast（原因 + 重
 
 ## 5. 接入外部工具（`/integrations`）
 
-### 5.1 3 个客户端卡
+### 5.1 4 个客户端卡
 
 | 客户端 | 状态 tag（默认） | 配置文件 | 接入方式 |
 |---|---|---|---|
 | Claude Code | 已连接 / 未连接 | `~/.claude/settings.json` | Node Adapter command hook |
 | Codex | 已连接 / 未连接 | `~/.codex/hooks.json` | Node Adapter command hook；notify 仅作后续兼容降级 |
+| Qoder | 已连接 / 未连接 | `~/.qoder/settings.json` / `~/.qoder-cn/settings.json` | Node Adapter command hook；按已存在发行版管理，两者并存则同时接入 |
 | WorkBuddy | 已连接 / 未连接 | `~/.workbuddy/settings.json` | Node Adapter command hook；协议兼容 CodeBuddy，配置命名空间独立 |
 
 ### 5.2 操作
@@ -207,6 +208,8 @@ UI 反馈：设备卡状态 tag 立即更新；失败显示 Toast（原因 + 重
 能力以当前本机 Codex 配置与 Adapter 检测结果为准，不再固定显示“Desktop 暂不支持”。V1 优先 lifecycle command hooks，不与 `notify` 重复发送终态。
 
 WorkBuddy 只使用其明确支持的 `SessionStart`、`UserPromptSubmit`、`PreToolUse`、`Stop`、`SessionEnd` 事件，分别同步空闲、工作、等待提问、完成和会话结束；协议未提供可靠失败事件，因此不推断 `ERROR`。
+
+Qoder 桌面端与 CLI 使用兼容 Hooks；国际版配置位于 `~/.qoder/settings.json`，国内版位于 `~/.qoder-cn/settings.json`。AI-Light 只管理已存在的发行版目录，两者并存则同时接入，均不存在时默认创建国际版路径；全部目标完整才显示已连接。AI-Light 映射任务开始/结束、用户提交、权限与信息请求、停止及停止失败等确定性生命周期事件；单个工具失败保持工作态，`StopFailure` 才进入出错态，子智能体事件不抢占主任务灯效。配置出现在 Qoder「设置 → 钩子」不代表 Runtime 已加载，连接后仍需用真实低风险任务验证。
 
 ### 5.4 配置生效流程
 
@@ -775,6 +778,8 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.41 | 2026-09-05 | Qoder 接入兼容国际版 `.qoder` 与国内版 `.qoder-cn`：存在性驱动选择路径，并存时同时管理且全部完整才显示已连接；接入卡展示全部受管路径。对齐报告：§2.1 Source Events 未变且均存在于 ipc-contract §5；§11 AppError.code 未变；蓝牙 result code 未变且与 V0.4 §3.6 一致；未新增主题字段；KAD-16 引用有效。 |
+| V1.40 | 2026-09-05 | 接入页新增 Qoder 卡片：通过 Adapter 0.1.5 幂等管理 `~/.qoder/settings.json`，覆盖桌面端与 CLI 兼容 Hooks，并明确等待、恢复、完成、失败与子智能体过滤语义。对齐报告：§2.1 Source Events 未变且均存在于 ipc-contract §5；§11 AppError.code 未变；蓝牙 result code 未变且与 V0.4 §3.6 一致；未新增主题字段；KAD-15 引用有效。 |
 | V1.39 | 2026-09-05 | 附近设备仅展示 `recognized === true` 的状态灯候选，过滤后为空时展示状态灯空态；保留记忆关系与 RSSI 排序。对齐报告：§3 IPC events、§4.1 错误码、§4.2 蓝牙 result 名称核对通过；§6~§8 主题字段未变且引用存在；ADR/KAD 引用有效。同步澄清 ipc-contract §2.3：扫描标记按广播名前缀计算，连接后服务发现与握手负责验证。 |
 | V1.38 | 2026-09-05 | 运行环境卡新增常驻接入原理说明：npm 包链接、Hook 状态流、Node/npm 依赖和首次安装确认；中性底色与错误告警区分，流程自适应换行，外链失败内联反馈。对齐报告：§3 IPC events、§4.1 错误码、§4.2 蓝牙 result 名称核对通过；§6~§8 仅增加说明区，未新增主题字段；ADR/KAD 引用有效。 |
 | V1.37 | 2026-09-05 | 运行环境恢复闭环：请求/解析异常展示失败并可重试，保留旧结果；Node/npm 内联安装指引；Adapter 安装与升级分开标识；手动文件选择收纳到详情；恢复失败持久展示、取消不报成功，配置损坏优先引导重建。对齐报告：§3 IPC Source Events 均存在（prefers-color-scheme 为浏览器媒体查询，非 IPC event）；§4.1 错误码全部存在于 ipc-contract §4；§4.2 result 名称均存在于蓝牙 V0.4 §3.6；§6~§8 仅修改工具链展示，主题字段未变；ADR/KAD 引用有效。 |
