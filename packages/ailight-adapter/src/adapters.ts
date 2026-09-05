@@ -1,4 +1,4 @@
-export type ToolId = "claude-code" | "codex" | "qoder" | "workbuddy";
+export type ToolId = "claude-code" | "codex" | "qoder" | "trae" | "workbuddy";
 
 export interface NormalizedEvent {
   meta: Record<string, unknown>;
@@ -25,6 +25,12 @@ const WORKING_EVENTS = new Set([
   "PermissionDenied",
   "PostToolBatch",
   "PostToolUseFailure",
+]);
+const TRAE_WAITING_NOTIFICATIONS = new Set([
+  "ask_user_question",
+  "browser_interaction",
+  "document_review",
+  "permission_prompt",
 ]);
 
 function asObject(input: unknown): HookPayload | undefined {
@@ -63,7 +69,10 @@ export function translate(tool: ToolId, input: unknown): NormalizedEvent[] {
 
   // User-level hooks also run inside subagents. AI-Light V1 represents only
   // the main conversation, so nested agent events must not seize the lamp.
-  if (stringField(payload, "agent_id", "agentId")) {
+  // TraeCode is the exception: its top-level solo and custom agents both carry
+  // agent_id, and the current payload has no reliable subagent marker.
+  const agentId = stringField(payload, "agent_id", "agentId");
+  if (tool !== "trae" && agentId) {
     return [];
   }
 
@@ -122,6 +131,9 @@ function mapState(
   if (tool === "qoder") {
     return mapQoderState(hookEvent);
   }
+  if (tool === "trae") {
+    return mapTraeState(hookEvent, notificationType, toolName);
+  }
   if (hookEvent === "UserPromptSubmit") {
     return "WORKING";
   }
@@ -135,6 +147,34 @@ function mapState(
     return "IDLE";
   }
   return undefined;
+}
+
+function mapTraeState(
+  hookEvent: string,
+  notificationType: string | undefined,
+  toolName: string | undefined
+): NormalizedEvent["state"] | undefined {
+  if (hookEvent === "SessionStart") {
+    return "IDLE";
+  }
+  if (hookEvent === "UserPromptSubmit" || hookEvent === "PostToolUse") {
+    return "WORKING";
+  }
+  if (hookEvent === "PreToolUse" && toolName === "AskUserQuestion") {
+    return "WAITING";
+  }
+  if (hookEvent === "Stop") {
+    return "SUCCESS";
+  }
+  if (hookEvent !== "Notification" || !notificationType) {
+    return undefined;
+  }
+  if (notificationType === "idle_prompt") {
+    return "SUCCESS";
+  }
+  return TRAE_WAITING_NOTIFICATIONS.has(notificationType)
+    ? "WAITING"
+    : undefined;
 }
 
 function mapQoderState(

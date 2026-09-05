@@ -403,18 +403,20 @@ export const api = {
       ? call<AppConfig>("update_config", { patch })
       : { ...mockConfig, ...patch },
   getIntegrationStatus: async (
-    tool: "claude-code" | "codex" | "qoder" | "workbuddy"
+    tool: "claude-code" | "codex" | "qoder" | "trae" | "workbuddy"
   ) =>
     isTauri()
       ? call<IntegrationStatus>("get_integration_status", { tool })
       : { connected: false, managedCount: 0, path: "" },
-  installIntegration: (tool: "claude-code" | "codex" | "qoder" | "workbuddy") =>
+  installIntegration: (
+    tool: "claude-code" | "codex" | "qoder" | "trae" | "workbuddy"
+  ) =>
     call<{ changed: boolean; path: string; paths?: string[] }>(
       "install_integration",
       { tool }
     ),
   uninstallIntegration: (
-    tool: "claude-code" | "codex" | "qoder" | "workbuddy"
+    tool: "claude-code" | "codex" | "qoder" | "trae" | "workbuddy"
   ) =>
     call<{ changed: boolean; path: string; paths?: string[] }>(
       "uninstall_integration",

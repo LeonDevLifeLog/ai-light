@@ -17,6 +17,8 @@ const MANAGED_MARKER_PATTERN = /--managed-by.*ai-light/;
 const WINDOWS_COMMAND_PATTERN =
   /^powershell\.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand [A-Za-z0-9+/=]+$/;
 const QODER_PATTERN = /qoder/;
+const TRAE_PATTERN = /trae/;
+const CONFIG_PARSE_FAILED_PATTERN = /CONFIG_PARSE_FAILED/;
 const WORKBUDDY_PATTERN = /workbuddy/;
 
 interface TestHookConfig {
@@ -329,6 +331,98 @@ test("selects the existing Qoder variant or defaults to .qoder", async () => {
       process.env.AILIGHT_TEST_USER_HOME = undefined;
     } else {
       process.env.AILIGHT_TEST_USER_HOME = previousHome;
+    }
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("manages TraeCode hooks in the independent versioned config", async () => {
+  const root = await mkdtemp(join(tmpdir(), "ailight-adapter-trae-"));
+  const previousHome = process.env.AILIGHT_TEST_USER_HOME;
+  const previousAiLightHome = process.env.AILIGHT_HOME;
+  process.env.AILIGHT_TEST_USER_HOME = root;
+  process.env.AILIGHT_HOME = join(root, ".ailight");
+  try {
+    const path = configPath("trae");
+    assert.equal(path, join(root, ".trae-cn", "hooks.json"));
+    await mkdir(join(root, ".trae-cn"), { recursive: true });
+    await writeFile(
+      path,
+      JSON.stringify({
+        hooks: { Stop: [{ hooks: [{ command: "user", type: "command" }] }] },
+        version: 1,
+      })
+    );
+    await install("trae", "/adapter path/cli.js", false);
+    await install("trae", "/adapter path/cli.js", false);
+
+    const config = JSON.parse(await readFile(path, "utf8")) as {
+      hooks: Record<
+        string,
+        Array<{
+          hooks: Array<{ command: string; commandWindows?: string }>;
+          matcher?: string;
+        }>
+      >;
+      version: number;
+    };
+    assert.equal(config.version, 1);
+    assert.equal((await detect("trae")).connected, true);
+    assert.equal(config.hooks.Stop?.flatMap((group) => group.hooks).length, 2);
+    assert.equal(config.hooks.PreToolUse?.[0]?.matcher, "AskUserQuestion");
+    assert.equal(
+      config.hooks.Notification?.[0]?.matcher,
+      "idle_prompt|permission_prompt|document_review|ask_user_question|browser_interaction"
+    );
+    const handler = config.hooks.UserPromptSubmit?.[0]?.hooks[0];
+    assert.match(handler?.command ?? "", TRAE_PATTERN);
+    assert.equal(handler?.commandWindows, undefined);
+
+    await uninstall("trae", false);
+    const clean = JSON.parse(await readFile(path, "utf8")) as typeof config;
+    assert.equal(clean.hooks.Stop?.[0]?.hooks[0]?.command, "user");
+    assert.equal(clean.hooks.SessionStart, undefined);
+  } finally {
+    if (previousHome === undefined) {
+      process.env.AILIGHT_TEST_USER_HOME = undefined;
+    } else {
+      process.env.AILIGHT_TEST_USER_HOME = previousHome;
+    }
+    if (previousAiLightHome === undefined) {
+      process.env.AILIGHT_HOME = undefined;
+    } else {
+      process.env.AILIGHT_HOME = previousAiLightHome;
+    }
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("preserves an unsupported TraeCode schema without writing", async () => {
+  const root = await mkdtemp(join(tmpdir(), "ailight-adapter-trae-schema-"));
+  const previousHome = process.env.AILIGHT_TEST_USER_HOME;
+  const previousAiLightHome = process.env.AILIGHT_HOME;
+  process.env.AILIGHT_TEST_USER_HOME = root;
+  process.env.AILIGHT_HOME = join(root, ".ailight");
+  try {
+    const path = configPath("trae");
+    await mkdir(join(root, ".trae-cn"), { recursive: true });
+    const original = `${JSON.stringify({ hooks: {}, version: 2 })}\n`;
+    await writeFile(path, original);
+    await assert.rejects(
+      install("trae", "/adapter/cli.js", false),
+      CONFIG_PARSE_FAILED_PATTERN
+    );
+    assert.equal(await readFile(path, "utf8"), original);
+  } finally {
+    if (previousHome === undefined) {
+      process.env.AILIGHT_TEST_USER_HOME = undefined;
+    } else {
+      process.env.AILIGHT_TEST_USER_HOME = previousHome;
+    }
+    if (previousAiLightHome === undefined) {
+      process.env.AILIGHT_HOME = undefined;
+    } else {
+      process.env.AILIGHT_HOME = previousAiLightHome;
     }
     await rm(root, { force: true, recursive: true });
   }

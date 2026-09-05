@@ -1,6 +1,6 @@
 # 接入 AI 编程工具
 
-AI Light 当前面向最终用户提供 Claude Code、Codex、Qoder 和 WorkBuddy 的一键接入。连接成功后，工具支持的工作、等待、完成和失败状态会自动同步到 AI Light。
+AI Light 当前面向最终用户提供 Claude Code、Codex、Qoder、TraeCode 和 WorkBuddy 的一键接入。连接成功后，工具支持的工作、等待、完成和失败状态会自动同步到 AI Light。
 
 ## 开始之前
 
@@ -46,6 +46,16 @@ AI Light 当前面向最终用户提供 Claude Code、Codex、Qoder 和 WorkBudd
 5. 在 Qoder 桌面端或 Qoder CLI 新建一次低风险任务，检查 AI Light 状态是否变化。
 
 AI Light 只合并用户级配置中由自己管理的 Hook：国际版使用 `~/.qoder/settings.json`，国内版使用 `~/.qoder-cn/settings.json`；两个目录都存在时会同时接入，两个目录都不存在时默认创建国际版路径。Qoder 的“设置 → 钩子”显示配置只代表文件已写入；必须运行真实任务，才能确认 Runtime 已加载并成功执行。项目级 `.qoder/settings.json` 与 `.qoder/settings.local.json` 会继续由 Qoder 合并，AI Light 不修改它们。
+
+## 连接 TraeCode
+
+1. 确认 TraeCode 版本支持 Hooks，并在 TraeCode 的“设置 → Hooks”中启用全局 Hook。
+2. 打开 AI Light 的“接入”页面。
+3. 找到 TraeCode 卡片并选择“连接”。
+4. 等待卡片显示“已连接”。
+5. 新建一次 TraeCode 任务，检查 AI Light 状态是否变化。
+
+AI Light 只管理 `~/.trae-cn/hooks.json` 中带有 AI-Light 标记的全局 Hook，不要求开启“导入 CLAUDE 中的 Hooks 配置”。TraeCode 当前可以同步会话开始、工作、等待交互和本轮完成；没有可靠的失败事件，因此不会根据输出或工具结果猜测“出错了”。若 TraeCode 将 Hook 设置为沙箱运行，必须确保沙箱允许执行已检测到的 Node.js 与 Adapter 路径。
 
 ## 连接 WorkBuddy
 

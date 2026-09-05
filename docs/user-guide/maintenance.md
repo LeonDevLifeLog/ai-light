@@ -27,7 +27,7 @@ AI Light 的版本和高级服务信息位于应用侧栏底部的“高级信�
 
 ## 推荐卸载顺序
 
-1. 在“接入”页面断开已连接的 Claude Code、Codex、Qoder 和 WorkBuddy。
+1. 在“接入”页面断开已连接的 Claude Code、Codex、Qoder、TraeCode 和 WorkBuddy。
 2. 从托盘菜单退出 AI Light。
 3. 按操作系统正常方式卸载 AI Light 应用。
 4. 如果不再使用任何 AI Light 接入，再卸载配套组件。

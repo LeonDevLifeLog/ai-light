@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.40 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.40，2026-09-05） |
+| 文档版本 | V1.41 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.41，2026-09-05） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -119,7 +119,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 |---|---|---|
 | Dashboard | `StatusHero` / `DeviceCard` / `ThemeCard` | 3 |
 | Devices | `ScanProgress` / `ScanResultList` / `DeviceDetailCard` / `FaultAlert` | 4 |
-| Integrations | `IntegrationCard` × 4 / `HelpFooter` | 5 |
+| Integrations | `IntegrationCard` × 5 / `HelpFooter` | 6 |
 | Themes | `ThemeGrid` / `ThemeDetailPanel` / `ImportThemeDialog` / `DeleteThemeDialog` / `ThemeEditorDialog` | 5 |
 | Preview | `StandardStateButtonGroup` / `CustomStateInput` / `CustomStateQuickList` / `ResetOutputsButton` | 4 |
 | Settings | `SettingGroup` × N（外观 / 设备 / 主题 / 系统） | 4 |
@@ -652,7 +652,7 @@ Dashboard 主题卡 + Themes 页主题网格卡：3 灯条色块缩略 + 主题�
 ### 6.5 `IntegrationCard`
 
 **6.5.1 用途**
-Integrations 页的官方 Adapter 卡（Claude Code / Codex / Qoder / WorkBuddy）。
+Integrations 页的官方 Adapter 卡（Claude Code / Codex / Qoder / TraeCode / WorkBuddy）。
 
 **6.5.2 对外契约**
 
@@ -688,6 +688,7 @@ Integrations 页的官方 Adapter 卡（Claude Code / Codex / Qoder / WorkBuddy�
 - 配置解析失败时不写文件，Toast 明确要求先修复原配置。
 - [断开] 只移除 AI-Light 标记的托管条目，其他 Hook 保持不变；Adapter 不可用时返回 `ADAPTER_NOT_FOUND`（needs_repair 语义）。
 - Qoder 卡按存在性管理 `~/.qoder/settings.json` / `~/.qoder-cn/settings.json`，两者并存时展示两条路径且要求全部完整才进入 connected；连接后提示用真实任务验证 Runtime 已加载配置。
+- TraeCode 卡管理 `~/.trae-cn/hooks.json` schema v1；不启用或修改 Claude Hook 导入设置。沙箱运行时，Node.js 与 Adapter 路径必须可执行。
 
 **6.5.6 无障碍**
 - 连接和断开均为带文字按钮，不依赖图标表达状态。
@@ -900,13 +901,13 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 ┌─────────────────────────┐
 │ 标题 + 描述              │
 ├─────────────────────────┤
-│ IntegrationCard × 4    │
+│ IntegrationCard × 5    │
 ├─────────────────────────┤
 │     HelpFooter          │ "这些配置在做什么？" 解释卡
 └─────────────────────────┘
 ```
 
-**联动**：4 个 IntegrationCard 完全独立；HelpFooter 纯静态。
+**联动**：5 个 IntegrationCard 完全独立；HelpFooter 纯静态。
 
 ---
 
@@ -1892,6 +1893,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.41 | 2026-09-05 | §6.5 新增 TraeCode IntegrationCard，沿用既有连接、确认安装、断开及无障碍契约；配置路径为 `~/.trae-cn/hooks.json`，不依赖 Claude Hook 导入。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.40 | 2026-09-05 | Qoder IntegrationCard 增加国际版/国内版双路径契约：存在性驱动目标选择，并存时展示全部路径并要求全部 Hook 完整。对齐报告：§3 IPC Source Events 未变且均存在于 ipc-contract §5；§4.1 AppError.code 未变；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 未新增主题字段；KAD-16 引用有效。 |
 | V1.39 | 2026-09-05 | IntegrationCard 正式增加 Qoder：接入页四张卡均可连接，Qoder 通过 Adapter 0.1.5 管理 `~/.qoder/settings.json`，桌面端与 CLI 共用兼容 Hooks。对齐报告：§3 IPC Source Events 未变且均存在于 ipc-contract §5；§4.1 AppError.code 未变；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 未新增主题字段；KAD-15 引用有效。 |
 | V1.38 | 2026-09-05 | 附近设备仅展示 `recognized === true` 的状态灯候选，过滤后为空时展示状态灯空态；保留记忆关系与 RSSI 排序。对齐报告：§3 IPC events、§4.1 错误码、§4.2 蓝牙 result 名称核对通过；§6~§8 主题字段未变且引用存在；ADR/KAD 引用有效。同步澄清 ipc-contract §2.3：扫描标记按广播名前缀计算，连接后服务发现与握手负责验证。 |

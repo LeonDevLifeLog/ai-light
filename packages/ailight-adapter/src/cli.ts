@@ -17,6 +17,7 @@ function isTool(value: string | undefined): value is ToolId {
     value === "claude-code" ||
     value === "codex" ||
     value === "qoder" ||
+    value === "trae" ||
     value === "workbuddy"
   );
 }

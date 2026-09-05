@@ -22,7 +22,7 @@ import {
 } from "@/lib/ailight";
 import { runAsync } from "@/lib/utils";
 
-type ToolId = "claude-code" | "codex" | "qoder" | "workbuddy";
+type ToolId = "claude-code" | "codex" | "qoder" | "trae" | "workbuddy";
 
 interface Integration {
   accent: string;
@@ -53,6 +53,13 @@ const integrations: Integration[] = [
     id: "qoder",
     name: "Qoder",
     source: "Q",
+  },
+  {
+    accent: "slate",
+    description: "同步工作、等待交互、本轮完成和会话开始状态。",
+    id: "trae",
+    name: "TraeCode",
+    source: "T",
   },
   {
     accent: "violet",
