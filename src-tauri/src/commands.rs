@@ -22,6 +22,32 @@ use crate::toolchain::model::{
 use crate::toolchain::{runner, validate, ToolchainError};
 use crate::AppState;
 
+const UPDATE_REPOSITORY_URL: &str = "https://github.com/LeonDevLifeLog/ai-light";
+const UPDATE_API_URLS: [&str; 4] = [
+    "https://api.github.com/repos/LeonDevLifeLog/ai-light/releases/latest",
+    "https://ghfast.top/https://api.github.com/repos/LeonDevLifeLog/ai-light/releases/latest",
+    "https://gh-proxy.com/https://api.github.com/repos/LeonDevLifeLog/ai-light/releases/latest",
+    "https://ghproxy.net/https://api.github.com/repos/LeonDevLifeLog/ai-light/releases/latest",
+];
+const UPDATE_DOWNLOAD_PREFIXES: [&str; 4] = [
+    "https://ghfast.top/",
+    "https://gh-proxy.com/",
+    "https://ghproxy.net/",
+    "",
+];
+
+fn update_asset_suffix() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "x64-setup.exe"
+    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        "aarch64.dmg"
+    } else if cfg!(target_os = "macos") {
+        "x64.dmg"
+    } else {
+        "amd64.AppImage"
+    }
+}
+
 // ---- 错误模型（ipc-contract §4 + 设计方案 §7 错误码扩展） ----
 
 #[derive(Debug, Serialize)]
@@ -64,10 +90,83 @@ fn shared(app: &AppHandle) -> std::sync::Arc<SharedState> {
     app.state::<AppState>().shared.clone()
 }
 
+#[tauri::command]
+pub async fn fetch_latest_release() -> CmdResult<serde_json::Value> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .user_agent("AI-Light update checker")
+        .build()
+        .map_err(internal)?;
+    let mut requests = tokio::task::JoinSet::new();
+    for url in UPDATE_API_URLS {
+        let client = client.clone();
+        requests.spawn(async move {
+            let response = client.get(url).send().await.ok()?;
+            if !response.status().is_success() {
+                return None;
+            }
+            let value = response.json::<serde_json::Value>().await.ok()?;
+            let valid = value
+                .get("tag_name")
+                .and_then(|item| item.as_str())
+                .is_some()
+                && value
+                    .get("assets")
+                    .and_then(|item| item.as_array())
+                    .is_some();
+            valid.then_some(value)
+        });
+    }
+    while let Some(result) = requests.join_next().await {
+        if let Ok(Some(mut value)) = result {
+            requests.abort_all();
+            if let Some(object) = value.as_object_mut() {
+                object.insert(
+                    "_asset_suffix".to_string(),
+                    serde_json::Value::String(update_asset_suffix().to_string()),
+                );
+            }
+            return Ok(value);
+        }
+    }
+    Err(err(
+        "UPDATE_CHECK_FAILED",
+        "所有更新源暂时不可用，请稍后重试",
+    ))
+}
+
+#[tauri::command]
+pub async fn resolve_update_download_url(download_url: String) -> CmdResult<String> {
+    let expected_prefix = format!("{UPDATE_REPOSITORY_URL}/releases/download/");
+    if !download_url.starts_with(&expected_prefix) {
+        return Err(err("BAD_REQUEST", "更新下载地址不属于 AI-Light 官方仓库"));
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .user_agent("AI-Light update downloader")
+        .build()
+        .map_err(internal)?;
+    for prefix in UPDATE_DOWNLOAD_PREFIXES {
+        let candidate = format!("{prefix}{download_url}");
+        if client
+            .head(&candidate)
+            .send()
+            .await
+            .is_ok_and(|response| response.status().is_success())
+        {
+            return Ok(candidate);
+        }
+    }
+    Ok(format!("{UPDATE_REPOSITORY_URL}/releases/latest"))
+}
+
 // ---- Adapter CLI 集成（统一走 ToolchainService / ProcessRunner，设计方案 §4） ----
 
 fn valid_integration_tool(tool: &str) -> bool {
-    matches!(tool, "claude-code" | "codex" | "qoder" | "trae" | "workbuddy")
+    matches!(
+        tool,
+        "claude-code" | "codex" | "qoder" | "trae" | "workbuddy"
+    )
 }
 
 /// ToolchainError → AppError（设计方案 §7 错误码表）

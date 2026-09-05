@@ -1,6 +1,7 @@
 import {
   BookOpen,
   ChevronRight,
+  Download,
   ExternalLink,
   Monitor,
   Moon,
@@ -31,6 +32,11 @@ import type {
   ToolchainStatus,
 } from "@/lib/ailight";
 import { api, asAppError } from "@/lib/ailight";
+import {
+  type AppUpdateInfo,
+  checkAppUpdate,
+  resolveDownloadUrl,
+} from "@/lib/app-update";
 import { cn, runAsync } from "@/lib/utils";
 
 function SettingRow({
@@ -213,6 +219,9 @@ export function SettingsPage() {
   const { snapshot, config, patchConfig, notify } = useAppState();
   const [saving, setSaving] = useState<string | null>(null);
   const [openingDocs, setOpeningDocs] = useState(false);
+  const [appUpdate, setAppUpdate] = useState<AppUpdateInfo | null>(null);
+  const [checkingAppUpdate, setCheckingAppUpdate] = useState(false);
+  const [openingDownload, setOpeningDownload] = useState(false);
   const [preview, setPreview] = useState<{
     swatches: Array<{ state: string; color: string }>;
     hasSound: boolean;
@@ -303,6 +312,46 @@ export function SettingsPage() {
       });
     } finally {
       setOpeningDocs(false);
+    }
+  };
+
+  const checkApplicationUpdate = async () => {
+    if (!snapshot) {
+      return;
+    }
+    setCheckingAppUpdate(true);
+    try {
+      const result = await checkAppUpdate(snapshot.service.version, true);
+      setAppUpdate(result);
+      if (!result.updateAvailable) {
+        notify({ tone: "success", title: "AI-Light 已是最新版本" });
+      }
+    } catch (error) {
+      notify({
+        tone: "info",
+        title: "暂时无法检查更新",
+        message: error instanceof Error ? error.message : "请稍后重试",
+      });
+    } finally {
+      setCheckingAppUpdate(false);
+    }
+  };
+
+  const openApplicationDownload = async () => {
+    if (!appUpdate) {
+      return;
+    }
+    setOpeningDownload(true);
+    try {
+      await api.openExternal(await resolveDownloadUrl(appUpdate));
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "无法打开下载地址",
+        message: asAppError(error).message,
+      });
+    } finally {
+      setOpeningDownload(false);
     }
   };
 
@@ -473,6 +522,35 @@ export function SettingsPage() {
             >
               <span />
             </button>
+          </SettingRow>
+          <SettingRow
+            description={
+              appUpdate?.updateAvailable
+                ? `当前 ${appUpdate.currentVersion}，可更新至 ${appUpdate.latestVersion}`
+                : `当前版本 ${snapshot?.service.version ?? "—"}；网络异常不影响使用`
+            }
+            icon={<Download />}
+            title="应用更新"
+          >
+            <div className="toolchain-recovery">
+              <ActionButton
+                busy={checkingAppUpdate}
+                disabled={!snapshot || openingDownload}
+                onClick={() => runAsync(checkApplicationUpdate())}
+              >
+                检查更新
+              </ActionButton>
+              {appUpdate?.updateAvailable ? (
+                <ActionButton
+                  busy={openingDownload}
+                  disabled={checkingAppUpdate}
+                  onClick={() => runAsync(openApplicationDownload())}
+                  tone="primary"
+                >
+                  下载 {appUpdate.latestVersion}
+                </ActionButton>
+              ) : null}
+            </div>
           </SettingRow>
           <SettingRow
             description="接入工具依赖的 Node.js / npm / Adapter 运行环境"

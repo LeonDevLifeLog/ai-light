@@ -12,6 +12,7 @@ import { NavLink, Outlet, useNavigate } from "react-router";
 import { useAppState } from "@/app/app-context";
 import { ActionButton, InlineAlert, Skeleton } from "@/components/app-ui";
 import { subscribe } from "@/lib/ailight";
+import { checkAppUpdate } from "@/lib/app-update";
 import { cn, runAsync } from "@/lib/utils";
 
 const navigation = [
@@ -24,8 +25,15 @@ const navigation = [
 ];
 
 export function AppShell() {
-  const { snapshot, loading, fatalError, refresh, toasts, dismissToast } =
-    useAppState();
+  const {
+    snapshot,
+    loading,
+    fatalError,
+    refresh,
+    toasts,
+    dismissToast,
+    notify,
+  } = useAppState();
   const navigate = useNavigate();
 
   // 托盘「打开配置」→ 跳转 /devices（Rust 侧 emit open-config）
@@ -38,6 +46,28 @@ export function AppShell() {
       unlisten?.();
     };
   }, [navigate]);
+
+  useEffect(() => {
+    if (!snapshot?.service.version) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      runAsync(
+        checkAppUpdate(snapshot.service.version)
+          .then((update) => {
+            if (update.updateAvailable) {
+              notify({
+                tone: "info",
+                title: `发现 AI-Light ${update.latestVersion}`,
+                message: "可前往设置页查看并下载。",
+              });
+            }
+          })
+          .catch(() => undefined)
+      );
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, [notify, snapshot?.service.version]);
 
   return (
     <div className="app-frame">

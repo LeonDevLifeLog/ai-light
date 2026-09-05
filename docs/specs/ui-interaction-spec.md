@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.42 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.42，2026-09-05） |
+| 文档版本 | V1.43 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.43，2026-09-05） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -739,6 +739,7 @@ Settings 页分组内的单行设置项：左图标 + 名称 + 可选说明，�
 - 端口切换：需重启服务 → Toast "服务重启中..." → 成功后 Toast "端口已切换"
 - 自启动：✅ 已实装（tauri-plugin-autostart 2.5.1，KAD-09）；失败路径 `AUTOSTART_FAILED` → Toast + 控件回滚到原值；OS 登录项为唯一事实源，config 为启动校准缓存
 - 仲裁固定为最近活动优先，不提供设置控件；最后上报的工具接管灯效（ADR-0005 / KAD-13）
+- 应用更新作为系统组直接子项展示；初始态显示当前版本与 [检查更新]，检查中禁用重复触发；有新版时展示目标版本与 [下载]。启动检查失败静默，主动检查失败显示中性 Toast。下载按国内镜像优先顺序探测，均不可用时打开 Release 页面，不自动执行安装包
 - API 接口文档作为系统组直接子项展示；按钮根据 `service.port` 打开 `http://127.0.0.1:{port}/docs/`，调用中进入 loading 并禁用，状态未就绪时 disabled，打开失败 Toast，成功不额外反馈
 
 **6.6.6 无障碍**
@@ -965,7 +966,7 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 ├─────────────────────────┤
 │ SettingGroup: 显示       │ themeMode + badgeOrientation + 当前主题
 ├─────────────────────────┤
-│ SettingGroup: 系统       │ autostart + 外部运行环境 + API 接口文档
+│ SettingGroup: 系统       │ autostart + 应用更新 + 外部运行环境 + API 接口文档
 └─────────────────────────┘
 ```
 
@@ -973,7 +974,7 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 
 **7.6.1 显示组**：外观模式 = 三张 ModeOption 卡片（亮色 / 暗色 / 跟随系统，图标 + 一句说明），切换经 `update_config(themeMode)` 持久化，`html[data-theme]` 即时更新；"跟随系统"下 `data-theme` 随 `prefers-color-scheme` 变化。灯组朝向（SegControl 横排/纵向）；当前主题 = 主题预览入口（Link → /themes）：3 个灯色圆点（取当前主题 WORKING/SUCCESS/ERROR 场景实际 `leds.high`/`low` 色）+ 主题名 + 可选「提示音」标记 + ChevronRight。预览随 `config.activeTheme` 变化刷新；主题读取失败回退为纯名称。
 
-**7.6.2 系统组**：依次展示开机自启、外部运行环境、API 接口文档。开机自启使用 Switch（`aria-checked` + 开启态视觉 = 品牌绿底 + 滑块右移 16px）；外部运行环境摘要后紧随详情 disclosure；API 接口文档为直接可见的 SettingRow，按钮使用系统默认浏览器打开实际监听端口下的 `/docs/` Swagger UI，不使用可能因启动退避而失真的 `portPreference`。
+**7.6.2 系统组**：依次展示开机自启、应用更新、外部运行环境、API 接口文档。开机自启使用 Switch（`aria-checked` + 开启态视觉 = 品牌绿底 + 滑块右移 16px）；应用更新显示当前/目标版本并提供检查与下载按钮，6 小时缓存避免重复请求，所有网络失败均不影响应用使用；外部运行环境摘要后紧随详情 disclosure；API 接口文档为直接可见的 SettingRow，按钮使用系统默认浏览器打开实际监听端口下的 `/docs/` Swagger UI，不使用可能因启动退避而失真的 `portPreference`。
 
 ---
 
@@ -1899,6 +1900,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.43 | 2026-09-05 | §6.6/§7.6 新增应用更新 SettingRow：启动延迟与缓存检查、手动检查、多元数据源竞争、国内镜像下载探测、Release 页面兜底；不自动安装。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 新增 `UPDATE_CHECK_FAILED` 并已同步 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.42 | 2026-09-05 | §6.5 将 IntegrationCard 的完整托管状态文案改为“配置已写入”，新增 `manual-step` / `ready-to-verify` 两类下一步区域：Codex 信任 Hook、TraeCode 开启全局 Hook、Qoder 无额外操作、Claude Code 直接验证；禁止把不可观测的第三方设置伪装为自动完成。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.41 | 2026-09-05 | §6.5 新增 TraeCode IntegrationCard，沿用既有连接、确认安装、断开及无障碍契约；配置路径为 `~/.trae-cn/hooks.json`，不依赖 Claude Hook 导入。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.40 | 2026-09-05 | Qoder IntegrationCard 增加国际版/国内版双路径契约：存在性驱动目标选择，并存时展示全部路径并要求全部 Hook 完整。对齐报告：§3 IPC Source Events 未变且均存在于 ipc-contract §5；§4.1 AppError.code 未变；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 未新增主题字段；KAD-16 引用有效。 |

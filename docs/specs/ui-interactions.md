@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.43 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.43，2026-09-05） |
+| 文档版本 | V1.44 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.44，2026-09-05） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -414,6 +414,7 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 ### 9.2 系统
 
 - 开机自启：✅ 已实装（2026-08-21，KAD-09 / ADR-0004）。Switch 真实切换：`update_config` 先 OS 后 config（OS 登录项为唯一事实源，config 为启动校准缓存）；失败返回 `AUTOSTART_FAILED` → Toast + 回滚到原值；重启时 `is_enabled()` 校准写回。
+- 应用更新：启动 5 秒后后台检查，命中 6 小时缓存时不联网；检测失败静默且不误报“已是最新版”。设置页提供主动 [检查更新]，同时竞争 GitHub latest-release API 与三个镜像代理，首个结构合法的响应生效；有新版时展示当前/目标版本。[下载] 前依次探测 `ghfast.top`、`gh-proxy.com`、`ghproxy.net` 与官方地址，全部不可用时打开 Release 页面。应用不自动执行安装包，不依赖 Tauri Updater 签名。
 - 外部运行环境：摘要行后接默认收起的详情与操作，复用 Node.js / npm / Adapter 详情与路径恢复能力。Adapter 已就绪时为高级用户提供 [检查更新]；只有用户触发后才访问 npm registry，并展示当前版本、目标兼容版本与是否可升级。升级按钮必须明确写出精确目标版本（如「升级至 0.1.10」），不得安装 `latest`；完成后重新检测工具链并运行 Adapter doctor，成功 Toast 展示新版本，失败保留当前信息与可重试操作。不提供后台自动检查或自动升级开关。
 - API 接口文档：作为系统组直接子项展示，不折叠；[打开文档] 使用系统默认浏览器打开当前实际监听地址 `http://127.0.0.1:{service.port}/docs/`。打开中显示「正在打开…」并屏蔽重复触发；应用状态尚未就绪时禁用。成功不额外提示，打开失败显示原因 Toast。端口由 AI-Light 自动管理，不提供用户编辑。
 
@@ -523,6 +524,8 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | 设备故障（FAULT_EVENT）| 红色 Alert 卡 + Dashboard 设备卡故障指示 |
 | hook_server 未启动 | L1 服务侧问题；UI 不感知（红绿灯不变）|
 | 设置保存失败 | UI 显示原值 + Toast 错误说明 |
+| 更新检测源全部失败 | 启动检查静默；用户主动检查时显示中性 Toast“暂时无法检查更新”，不显示“已是最新版” |
+| 更新下载源全部不可用 | 打开对应 GitHub Release 页面，用户可复制或选择其他资产 |
 | 启动期 no reactor panic | 启动期崩溃（ADR-0003 / KAD-08）；不可恢复 → 进程退出 |
 
 ---
@@ -787,6 +790,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.44 | 2026-09-05 | §9/§11 新增低成本应用更新检测：6 小时缓存、启动静默检查、用户主动检查、GitHub API 与国内镜像容错、下载源探测及 Release 页面兜底；不自动安装、不引入 Tauri Updater 签名。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且与 ipc-contract §5 一致；§4.1 新增 `UPDATE_CHECK_FAILED` 并已同步 ipc-contract §4；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.43 | 2026-09-05 | §5 将 Adapter 完整状态从“已连接”改为“配置已写入”，新增写入后的工具专属下一步引导：Codex 手动信任新增 Hook、TraeCode 手动开启全局 Hook、Qoder 不增加额外操作、Claude Code 直接验证并以 `/hooks` 作为排错；统一以真实低风险任务作为生效验收。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且与 ipc-contract §5 一致；§4.1 未新增 AppError.code；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.42 | 2026-09-05 | §1/§5 新增 TraeCode 一键接入卡与 `~/.trae-cn/hooks.json` 原生全局配置；明确四态事件映射、顶层 Agent 身份边界、沙箱执行边界和不推断失败态。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且与 ipc-contract §5 一致；§4.1 未新增 AppError.code；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.41 | 2026-09-05 | Qoder 接入兼容国际版 `.qoder` 与国内版 `.qoder-cn`：存在性驱动选择路径，并存时同时管理且全部完整才显示已连接；接入卡展示全部受管路径。对齐报告：§2.1 Source Events 未变且均存在于 ipc-contract §5；§11 AppError.code 未变；蓝牙 result code 未变且与 V0.4 §3.6 一致；未新增主题字段；KAD-16 引用有效。 |

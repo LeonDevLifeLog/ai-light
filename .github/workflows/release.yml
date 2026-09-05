@@ -120,3 +120,37 @@ jobs:
           test -n "$plist_path"
           test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSBluetoothAlwaysUsageDescription' "$plist_path")"
           test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSBluetoothPeripheralUsageDescription' "$plist_path")"
+
+  manifest:
+    name: Generate update metadata
+    needs: [validate, publish]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Generate update.json from uploaded assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          gh api "repos/$REPOSITORY/releases/tags/$RELEASE_TAG" > release.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const release = JSON.parse(fs.readFileSync('release.json', 'utf8'));
+          const assets = Object.fromEntries(release.assets.map((asset) => [asset.name, {
+            size: asset.size,
+            sha256: asset.digest?.replace(/^sha256:/, '') ?? null,
+            url: asset.browser_download_url,
+          }]));
+          const metadata = {
+            version: release.tag_name.replace(/^v/, ''),
+            releaseUrl: release.html_url,
+            publishedAt: release.published_at,
+            notes: release.body ?? '',
+            assets,
+          };
+          fs.writeFileSync('update.json', `${JSON.stringify(metadata, null, 2)}\n`);
+          if (Object.values(assets).some((asset) => !asset.sha256)) {
+            throw new Error('GitHub did not provide a SHA-256 digest for every asset');
+          }
+          NODE
+          gh release upload "$RELEASE_TAG" update.json --clobber --repo "$REPOSITORY"
