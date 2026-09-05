@@ -84,8 +84,23 @@ function quotePosix(value: string) {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-function quoteWindows(value: string) {
-  return `"${value.replaceAll('"', '\\"')}"`;
+function quotePowerShell(value: string) {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function windowsPowerShellCommand(executable: string, args: string[]) {
+  const script = `& ${[executable, ...args].map(quotePowerShell).join(" ")}`;
+  const encoded = Buffer.from(script, "utf16le").toString("base64");
+  return [
+    "powershell.exe",
+    "-NoLogo",
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-EncodedCommand",
+    encoded,
+  ].join(" ");
 }
 
 async function loadConfig(path: string): Promise<ToolConfig> {
@@ -136,10 +151,14 @@ function withManaged(config: ToolConfig, tool: ToolId, cliScript: string) {
             command: [process.execPath, ...invocation]
               .map(quotePosix)
               .join(" "),
-            commandWindows: [process.execPath, ...invocation]
-              .map(quoteWindows)
-              .join(" "),
-            timeout: 2,
+            // Codex may launch commandWindows through cmd.exe or PowerShell.
+            // An explicitly encoded PowerShell command avoids ambiguous nested
+            // quoting when Node or the adapter path contains spaces/metacharacters.
+            commandWindows: windowsPowerShellCommand(
+              process.execPath,
+              invocation
+            ),
+            timeout: 20,
             type: "command",
           };
     hooks[item.event] = [
