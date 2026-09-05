@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.41 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.41，2026-09-05） |
+| 文档版本 | V1.42 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.42，2026-09-05） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -658,7 +658,7 @@ Integrations 页的官方 Adapter 卡（Claude Code / Codex / Qoder / TraeCode /
 
 | 类别 | 项 | 说明 |
 |---|---|---|
-| Props | `client` | `{ id, name, description }` |
+| Props | `client` | `{ id, name, description, nextStep }`；`nextStep` 含标题、说明、编号步骤与是否需要手动设置 |
 | Props | `status` | `'connected' \| 'unconnected'` + `path` / `paths?` 配置路径 |
 | Props | `confirmPending` | Adapter 缺失或不兼容时的内联确认态（按钮为「确认并安装」/「确认并升级」，卡片展示说明 InlineAlert） |
 | Emit | `onClickConnect(clientId)` | 先检查运行环境；就绪→安装 Adapter 并写入托管 Hook；Adapter 缺失→进入确认态 |
@@ -670,8 +670,10 @@ Integrations 页的官方 Adapter 卡（Claude Code / Codex / Qoder / TraeCode /
 
 | 态 | 触发条件 | 视觉 | 可交互 |
 |---|---|---|---|
-| `connected` | Adapter 托管条目完整 | success tag「已连接」+ 断开按钮 | hover |
-| `unconnected` | 未安装或托管条目不完整 | warn tag「未连接」+ 主按钮「连接」 | hover |
+| `connected` | Adapter 托管条目完整 | success tag「配置已写入」+ 断开按钮 + 下一步引导 | hover |
+| `manual-step` | Codex / TraeCode 配置已写入但仍需客户端操作 | warning 语义引导卡 + 编号步骤 | hover |
+| `ready-to-verify` | Claude Code / Qoder / WorkBuddy 配置已写入 | success 语义引导卡 + 真实任务验证步骤 | hover |
+| `unconnected` | 未安装或托管条目不完整 | warn tag「未配置」+ 主按钮「连接」 | hover |
 | `loading` | 连接/断开执行中 | button loading | 禁止重复触发 |
 | `error` | 管理命令失败 | 状态保持原值 + 含恢复方向的 Toast | hover |
 
@@ -688,11 +690,15 @@ Integrations 页的官方 Adapter 卡（Claude Code / Codex / Qoder / TraeCode /
 - 配置解析失败时不写文件，Toast 明确要求先修复原配置。
 - [断开] 只移除 AI-Light 标记的托管条目，其他 Hook 保持不变；Adapter 不可用时返回 `ADAPTER_NOT_FOUND`（needs_repair 语义）。
 - Qoder 卡按存在性管理 `~/.qoder/settings.json` / `~/.qoder-cn/settings.json`，两者并存时展示两条路径且要求全部完整才进入 connected；连接后提示用真实任务验证 Runtime 已加载配置。
-- TraeCode 卡管理 `~/.trae-cn/hooks.json` schema v1；不启用或修改 Claude Hook 导入设置。沙箱运行时，Node.js 与 Adapter 路径必须可执行。
+- Codex 卡在配置写入后引导用户前往「设置 → Hooks」，审核并信任标记为新钩子的 AI-Light Hook；不把项目/工作区信任误写为 Hook 信任。
+- TraeCode 卡管理 `~/.trae-cn/hooks.json` schema v1；配置写入后引导用户在「设置 → Hooks」开启全局 Hook，不启用或修改 Claude Hook 导入设置。沙箱运行时，Node.js 与 Adapter 路径必须可执行。
+- Qoder 不展示额外设置步骤；Claude Code 的 `/hooks` 仅作为检查和排错信息。所有客户端都以真实低风险任务事件作为最终验收。
+- 目标客户端的信任/开关状态当前不可由 AI-Light 可靠读取；引导不得显示自动完成勾选或把用户确认持久化成已验证状态。
 
 **6.5.6 无障碍**
 - 连接和断开均为带文字按钮，不依赖图标表达状态。
 - loading 使用原生 `disabled`，Toast 通过现有 `aria-live` 区域播报。
+- 下一步使用原生有序列表；手动操作与可验证状态同时使用图标、文字和边框语义，不依赖颜色区分。
 
 ---
 
@@ -1893,6 +1899,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.42 | 2026-09-05 | §6.5 将 IntegrationCard 的完整托管状态文案改为“配置已写入”，新增 `manual-step` / `ready-to-verify` 两类下一步区域：Codex 信任 Hook、TraeCode 开启全局 Hook、Qoder 无额外操作、Claude Code 直接验证；禁止把不可观测的第三方设置伪装为自动完成。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.41 | 2026-09-05 | §6.5 新增 TraeCode IntegrationCard，沿用既有连接、确认安装、断开及无障碍契约；配置路径为 `~/.trae-cn/hooks.json`，不依赖 Claude Hook 导入。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.40 | 2026-09-05 | Qoder IntegrationCard 增加国际版/国内版双路径契约：存在性驱动目标选择，并存时展示全部路径并要求全部 Hook 完整。对齐报告：§3 IPC Source Events 未变且均存在于 ipc-contract §5；§4.1 AppError.code 未变；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 未新增主题字段；KAD-16 引用有效。 |
 | V1.39 | 2026-09-05 | IntegrationCard 正式增加 Qoder：接入页四张卡均可连接，Qoder 通过 Adapter 0.1.5 管理 `~/.qoder/settings.json`，桌面端与 CLI 共用兼容 Hooks。对齐报告：§3 IPC Source Events 未变且均存在于 ipc-contract §5；§4.1 AppError.code 未变；§4.2 result code 与蓝牙 V0.4 §3.6 一致；§6~§8 未新增主题字段；KAD-15 引用有效。 |
