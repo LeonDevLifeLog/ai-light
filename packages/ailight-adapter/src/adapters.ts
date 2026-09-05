@@ -1,4 +1,4 @@
-export type ToolId = "claude-code" | "codex" | "workbuddy";
+export type ToolId = "claude-code" | "codex" | "qoder" | "workbuddy";
 
 export interface NormalizedEvent {
   meta: Record<string, unknown>;
@@ -119,6 +119,9 @@ function mapState(
     }
     return hookEvent === "Stop" ? "SUCCESS" : undefined;
   }
+  if (tool === "qoder") {
+    return mapQoderState(hookEvent);
+  }
   if (hookEvent === "UserPromptSubmit") {
     return "WORKING";
   }
@@ -132,6 +135,24 @@ function mapState(
     return "IDLE";
   }
   return undefined;
+}
+
+function mapQoderState(
+  hookEvent: string
+): NormalizedEvent["state"] | undefined {
+  if (hookEvent === "SessionStart" || hookEvent === "SessionEnd") {
+    return "IDLE";
+  }
+  if (hookEvent === "PermissionRequest" || hookEvent === "Elicitation") {
+    return "WAITING";
+  }
+  if (hookEvent === "StopFailure") {
+    return "ERROR";
+  }
+  if (hookEvent === "UserPromptSubmit" || WORKING_EVENTS.has(hookEvent)) {
+    return "WORKING";
+  }
+  return hookEvent === "Stop" ? "SUCCESS" : undefined;
 }
 
 function mapClaudeState(

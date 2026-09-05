@@ -225,6 +225,24 @@
 - **后果**：WorkBuddy 与 CodeBuddy 可并存且配置互不影响；当前可表达 `IDLE / WORKING / WAITING / SUCCESS`，暂不能表达可靠失败态。
 - **验证**：配置路径、幂等合并、用户 Hook 保留、安全卸载和事件翻译自动测试；真实客户端闭环仍需实机验收。
 
+### KAD-15 Qoder 复用 Adapter CLI 并管理独立配置命名空间
+
+> **【摘要】** Qoder 桌面端与 Qoder CLI 使用兼容的 Hooks 结构，并从用户级 `~/.qoder/settings.json` 合并配置；AI-Light 继续通过 Adapter CLI 接入，不为 Qoder 引入独立 HTTP 配置路径。
+
+- **决策**：Adapter `0.1.5` 增加 `qoder` source，只管理 `~/.qoder/settings.json` 中带 AI-Light 标记的 command Hooks；Desktop 将 Adapter 兼容下限提升到 `0.1.5`。
+- **事件边界**：`SessionStart/SessionEnd → IDLE`，`UserPromptSubmit/PermissionDenied/ElicitationResult/PostToolUseFailure → WORKING`，`PermissionRequest/Elicitation → WAITING`，`Stop → SUCCESS`，`StopFailure → ERROR`；携带 `agent_id` 的子智能体事件不改变主任务灯效。
+- **后果**：桌面端与 CLI 共用一张 Qoder 接入卡和同一配置；已有用户 Hooks 被保留，重复安装幂等，卸载只移除 AI-Light 托管项。HTTP handler 虽受 Qoder 支持，但不绕过 Adapter 的运行时发现、短期 Token、日志与失败开放语义。
+- **验证**：配置路径、事件集合、幂等合并、用户 Hook 保留、安全卸载、子智能体过滤和事件翻译自动测试；真实 Qoder Runtime 加载与灯牌闭环仍需实机验收。
+
+### KAD-16 Qoder 国际版与国内版配置采用存在性驱动的多目标管理
+
+> **【摘要】** Qoder 在不同发行版中分别使用 `~/.qoder` 与 `~/.qoder-cn`，且两者可能并存；单路径优先级会造成另一 Runtime 未接入却显示已连接。
+
+- **决策**：只管理已存在的 Qoder 配置目录；仅存在一个时管理该目录，两者并存时同时管理两份 `settings.json`，均不存在时默认创建 `~/.qoder/settings.json`。
+- **检测语义**：所有发现到的目标均包含完整 AI-Light Hooks 才返回已连接；响应以 `paths` 暴露完整目标列表，同时保留首项 `path` 兼容旧调用方。
+- **写入语义**：写前解析全部目标，任一配置不可解析则不开始写入；每个目标独立备份并原子替换。底层文件系统不提供跨文件事务，写入中途失败必须显式报错，后续检测不得把部分成功伪装为完整连接。
+- **验证**：覆盖仅国际版、仅国内版、双目录并存和均不存在四种路径选择；双目录测试验证幂等安装、用户 Hook 保留、安全卸载与完整检测。
+
 ---
 
 ## 4. 不确定性清单（open questions）

@@ -4,13 +4,29 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { configPath, detect, install, uninstall } from "./integrations.js";
+import {
+  configPath,
+  configPaths,
+  detect,
+  install,
+  uninstall,
+} from "./integrations.js";
 
 const POSIX_SCRIPT_PATTERN = /'\/adapter path\/cli\.js'/;
 const MANAGED_MARKER_PATTERN = /--managed-by.*ai-light/;
 const WINDOWS_COMMAND_PATTERN =
   /^powershell\.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand [A-Za-z0-9+/=]+$/;
+const QODER_PATTERN = /qoder/;
 const WORKBUDDY_PATTERN = /workbuddy/;
+
+interface TestHookConfig {
+  hooks: Record<
+    string,
+    Array<{
+      hooks: Array<{ args?: string[]; command: string }>;
+    }>
+  >;
+}
 
 function runCommand(
   executable: string,
@@ -225,6 +241,94 @@ test("runs the Codex Windows command through cmd and PowerShell with hostile pat
       process.env.AILIGHT_HOME = undefined;
     } else {
       process.env.AILIGHT_HOME = previousAiLightHome;
+    }
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("manages both existing Qoder config directories", async () => {
+  const root = await mkdtemp(join(tmpdir(), "ailight-adapter-qoder-"));
+  const previousHome = process.env.AILIGHT_TEST_USER_HOME;
+  const previousAiLightHome = process.env.AILIGHT_HOME;
+  process.env.AILIGHT_TEST_USER_HOME = root;
+  process.env.AILIGHT_HOME = join(root, ".ailight");
+  try {
+    const paths = [
+      join(root, ".qoder", "settings.json"),
+      join(root, ".qoder-cn", "settings.json"),
+    ];
+    for (const path of paths) {
+      await mkdir(join(path, ".."), { recursive: true });
+      await writeFile(
+        path,
+        JSON.stringify({
+          hooks: {
+            Stop: [{ hooks: [{ command: "user", type: "command" }] }],
+          },
+        })
+      );
+    }
+
+    await install("qoder", "/adapter path/cli.js", false);
+    await install("qoder", "/adapter path/cli.js", false);
+
+    const status = await detect("qoder");
+    assert.equal(status.connected, true);
+    assert.deepEqual(status.paths, paths);
+    for (const path of paths) {
+      const config = JSON.parse(await readFile(path, "utf8")) as TestHookConfig;
+      assert.equal(
+        config.hooks.Stop?.flatMap((group) => group.hooks).length,
+        2
+      );
+      assert.equal(config.hooks.StopFailure?.length, 1);
+      assert.equal(config.hooks.Elicitation?.length, 1);
+      assert.equal(config.hooks.FileChanged, undefined);
+      assert.equal(config.hooks.Stop?.[1]?.hooks[0]?.args, undefined);
+      assert.match(
+        config.hooks.Stop?.[1]?.hooks[0]?.command ?? "",
+        QODER_PATTERN
+      );
+    }
+
+    await uninstall("qoder", false);
+    for (const path of paths) {
+      const clean = JSON.parse(await readFile(path, "utf8")) as TestHookConfig;
+      assert.equal(clean.hooks.Stop?.[0]?.hooks[0]?.command, "user");
+      assert.equal(clean.hooks.StopFailure, undefined);
+    }
+  } finally {
+    if (previousHome === undefined) {
+      process.env.AILIGHT_TEST_USER_HOME = undefined;
+    } else {
+      process.env.AILIGHT_TEST_USER_HOME = previousHome;
+    }
+    if (previousAiLightHome === undefined) {
+      process.env.AILIGHT_HOME = undefined;
+    } else {
+      process.env.AILIGHT_HOME = previousAiLightHome;
+    }
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("selects the existing Qoder variant or defaults to .qoder", async () => {
+  const root = await mkdtemp(join(tmpdir(), "ailight-adapter-qoder-paths-"));
+  const previousHome = process.env.AILIGHT_TEST_USER_HOME;
+  process.env.AILIGHT_TEST_USER_HOME = root;
+  try {
+    assert.deepEqual(await configPaths("qoder"), [
+      join(root, ".qoder", "settings.json"),
+    ]);
+    await mkdir(join(root, ".qoder-cn"), { recursive: true });
+    assert.deepEqual(await configPaths("qoder"), [
+      join(root, ".qoder-cn", "settings.json"),
+    ]);
+  } finally {
+    if (previousHome === undefined) {
+      process.env.AILIGHT_TEST_USER_HOME = undefined;
+    } else {
+      process.env.AILIGHT_TEST_USER_HOME = previousHome;
     }
     await rm(root, { force: true, recursive: true });
   }

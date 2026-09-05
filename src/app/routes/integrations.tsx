@@ -22,7 +22,7 @@ import {
 } from "@/lib/ailight";
 import { runAsync } from "@/lib/utils";
 
-type ToolId = "claude-code" | "codex" | "workbuddy";
+type ToolId = "claude-code" | "codex" | "qoder" | "workbuddy";
 
 interface Integration {
   accent: string;
@@ -46,6 +46,13 @@ const integrations: Integration[] = [
     id: "codex",
     name: "Codex",
     source: "X",
+  },
+  {
+    accent: "blue",
+    description: "同步工作、等待输入、本轮完成、失败和会话结束状态。",
+    id: "qoder",
+    name: "Qoder",
+    source: "Q",
   },
   {
     accent: "violet",
@@ -101,7 +108,11 @@ function IntegrationRow({
         <div className="integration-card__heading">
           <div>
             <h2>{integration.name}</h2>
-            {status?.path ? <code>{status.path}</code> : null}
+            {(status?.paths ?? (status?.path ? [status.path] : [])).map(
+              (path) => (
+                <code key={path}>{path}</code>
+              )
+            )}
           </div>
           <div className="integration-actions">
             <StatusTag tone={connected ? "success" : "warning"}>

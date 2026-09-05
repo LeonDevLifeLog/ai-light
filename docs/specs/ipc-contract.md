@@ -99,13 +99,13 @@
 |---|---|---|---|---|
 | `get_config()` | — | Config（§3） | — | P1 |
 | `update_config(patch)` | patch: Partial\<Config> | 更新后完整 Config | `BAD_REQUEST` / `AUTOSTART_FAILED` | P1 |
-| `get_integration_status(tool)` | `claude-code \| codex \| workbuddy` | Adapter 托管状态 | `BAD_REQUEST` / `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` | P1 |
-| `install_integration(tool)` | `claude-code \| codex \| workbuddy` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` / `EXECUTABLE_TIMEOUT` | P1 |
-| `uninstall_integration(tool)` | `claude-code \| codex \| workbuddy` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` / `TOOLCHAIN_*` | P1 |
+| `get_integration_status(tool)` | `claude-code \| codex \| qoder \| workbuddy` | Adapter 托管状态 | `BAD_REQUEST` / `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` | P1 |
+| `install_integration(tool)` | `claude-code \| codex \| qoder \| workbuddy` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` / `EXECUTABLE_TIMEOUT` | P1 |
+| `uninstall_integration(tool)` | `claude-code \| codex \| qoder \| workbuddy` | 写入结果 | `BAD_REQUEST` / `ADAPTER_*` / `TOOLCHAIN_*` | P1 |
 
 **`update_config` 允许字段**：`token` / `autostart` / `badgeOrientation` / `themeMode`。`portPreference` 为遗留兼容字段，不再接受用户 patch；Hook Server 固定优先 25679 并自动退避，实际地址通过 `~/.ailight/runtime.json` 提供给 Adapter（KAD-11）。`autostart` 采用"先 OS 后 config"：OS 登录项操作成功才写缓存，失败返回 `AUTOSTART_FAILED` 且 config 不变（KAD-09）。`rememberedDevice` 由连接流程管理，不接受用户 patch。仲裁固定为最近活动优先，不属于配置（ADR-0005 / KAD-13）。
 
-**接入域与工具链（ADR-0006）**：`get_integration_status` / `install_integration` / `uninstall_integration` 全部经由 ToolchainService 解析的同一份工具链执行（稳定入口 `node + adapter cli.js`，不依赖 PATH 与 `.cmd` shim）。`get_integration_status` 为只读查询可用缓存；Adapter 缺失时返回结构化未连接状态 `{ connected: false, reason: "adapter_missing", toolchainState, toolchainSummary }` 而非错误。`install_integration` 强制复验；Adapter 缺失时用已选 Node + npm CLI 安装明确兼容版本（不装 `latest`），安装后重新解析。`uninstall_integration` 在 Adapter 不可用时返回 `ADAPTER_NOT_FOUND`（needs_repair 语义），不得误删其他 Hook。
+**接入域与工具链（ADR-0006）**：`get_integration_status` / `install_integration` / `uninstall_integration` 全部经由 ToolchainService 解析的同一份工具链执行（稳定入口 `node + adapter cli.js`，不依赖 PATH 与 `.cmd` shim）。`get_integration_status` 为只读查询可用缓存；Adapter 缺失时返回结构化未连接状态 `{ connected: false, reason: "adapter_missing", toolchainState, toolchainSummary }` 而非错误。成功响应保留主配置 `path`，并可通过 `paths` 返回全部受管配置路径（Qoder 国际版与国内版并存时为两项）。`install_integration` 强制复验；Adapter 缺失时用已选 Node + npm CLI 安装明确兼容版本（不装 `latest`），安装后重新解析。`uninstall_integration` 在 Adapter 不可用时返回 `ADAPTER_NOT_FOUND`（needs_repair 语义），不得误删其他 Hook。
 
 ### 2.6 工具链域（ADR-0006）
 
@@ -176,7 +176,7 @@
 | `DEVICE_NOT_CONNECTED` | 设备未连接 | preview_scene 前置检查 |
 | `DEVICE_DISCONNECT_FAILED` | 主动断开失败 | disconnect_device / forget_device；忘记操作不会清除记忆 |
 | `AUTOSTART_FAILED` | 开机自启 OS 登录项操作失败 | update_config(autostart) 时 enable/disable 抛错（权限、路径失效、平台异常等） |
-| `ADAPTER_NOT_FOUND` | Adapter CLI 不可执行 | 查询或管理 Claude Code/Codex/WorkBuddy 接入 |
+| `ADAPTER_NOT_FOUND` | Adapter CLI 不可执行 | 查询或管理 Claude Code/Codex/Qoder/WorkBuddy 接入 |
 | `ADAPTER_COMMAND_FAILED` | Adapter 管理命令失败 | 检测、安装或卸载 Hook |
 | `ADAPTER_INSTALL_FAILED` | npm 全局安装失败 | 首次连接工具 |
 | `ADAPTER_UPDATE_FAILED` | Adapter 主动检查或精确版本升级失败 | Settings 高级运行环境中的检查/升级（恢复：保留现状并重试） |
