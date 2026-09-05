@@ -58,10 +58,12 @@ git push origin v0.1.0
 
 1. 确认 `Validate release version` 成功。
 2. 确认四个平台矩阵任务均成功。
-3. 在 Draft Release 中确认各平台安装包齐全。
+3. 在 Draft Release 中确认各平台安装包齐全，并存在自动生成的 `update.json`；其中每个安装包都必须包含 GitHub 计算的 SHA-256、大小与官方下载地址。
 4. 至少在目标平台执行安装、启动和核心功能冒烟测试。
 5. 检查自动生成的 Release Notes。
 6. 验收完成后，在 GitHub 页面人工发布 Draft Release。
+
+公开后，客户端通过 GitHub latest-release API 检测版本，并在官方 API、`ghfast.top`、`gh-proxy.com` 与 `ghproxy.net` 之间容错。下载前依次探测国内镜像，均不可用时回退到 Release 页面。公益镜像不作为版本事实源，也不自动执行下载后的安装包。
 
 ## 失败处理与回滚
 

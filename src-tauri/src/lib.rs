@@ -286,6 +286,8 @@ pub fn run() {
             commands::select_executable,
             commands::check_adapter_update,
             commands::upgrade_adapter,
+            commands::fetch_latest_release,
+            commands::resolve_update_download_url,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

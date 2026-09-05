@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.2 |
-| 文档状态 | 生效；设备快照已区分电池能力、在位状态与测量值（2026-09-01） |
+| 文档版本 | V1.3 |
+| 文档状态 | 生效；已增加应用更新多源网络命令（2026-09-05） |
 | 适用范围 | Rust Core ↔ 前端（React）的接口面；以及 config.json 存储格式 |
 | 架构依据 | KAD-03（Rust 唯一事实源 + events 推送）、ADR-0001/0002、hook-api V1.0、theme-format V1.0 |
 | 生效日期 | 2026-08-19 |
@@ -117,6 +117,8 @@
 | `select_executable(kind)` | kind: `node \| npm \| adapter` | ToolchainStatus（取消选择返回当前状态，不改变配置） | `BAD_REQUEST`（kind 非法）/ `TOOLCHAIN_OVERRIDE_INVALID`（所选路径验证失败） | P1 |
 | `check_adapter_update()` | — | AdapterUpdateInfo `{ currentVersion, targetVersion, updateAvailable, compatible }` | `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` / `ADAPTER_UPDATE_FAILED` | P1 |
 | `upgrade_adapter(targetVersion)` | targetVersion: 精确 semver | `{ toolchain: ToolchainStatus, doctor: object }` | `ADAPTER_*` / `NODE_*` / `NPM_NOT_FOUND` / `TOOLCHAIN_*` / `ADAPTER_UPDATE_FAILED` / `EXECUTABLE_TIMEOUT` | P1 |
+| `fetch_latest_release()` | — | GitHub latest-release JSON（Rust 侧多源容错并校验基础结构） | `UPDATE_CHECK_FAILED` / `INTERNAL` | P1 |
+| `resolve_update_download_url(downloadUrl)` | AI-Light 官方 Release 资产 URL | 首个可达镜像 URL；全部不可达时返回 Release 页面 | `BAD_REQUEST` / `INTERNAL` | P1 |
 
 **主动升级约束**：仅在用户点击“检查更新”时访问 npm registry；候选必须位于桌面端兼容范围，升级命令只接受 registry 已发布的精确版本，不使用 `latest`。安装完成后必须重新解析工具链并执行 `doctor --json`，成功结果同时返回新的 ToolchainStatus 与诊断结果。客户端不提供后台自动检查或自动升级开关。
 
@@ -180,6 +182,7 @@
 | `ADAPTER_COMMAND_FAILED` | Adapter 管理命令失败 | 检测、安装或卸载 Hook |
 | `ADAPTER_INSTALL_FAILED` | npm 全局安装失败 | 首次连接工具 |
 | `ADAPTER_UPDATE_FAILED` | Adapter 主动检查或精确版本升级失败 | Settings 高级运行环境中的检查/升级（恢复：保留现状并重试） |
+| `UPDATE_CHECK_FAILED` | 官方与镜像更新源均不可用或响应无效 | 启动检查静默；主动检查显示中性提示，可稍后重试 |
 | `ADAPTER_INVALID_OUTPUT` | Adapter 返回无法解析的数据 | Adapter 管理命令执行后解析失败 |
 | `NPM_NOT_FOUND` | 已发现 Node，但无关联 npm | 首次连接且 Adapter 尚未安装 |
 | `NODE_NOT_FOUND` | 未发现 Node.js | 工具链解析失败（恢复：安装 Node 20+ 或手动选择） |
@@ -220,7 +223,7 @@
 
 ## 7. 第一期实现范围（P1 汇总）
 
-**P1 commands**：get_app_state / get_themes / get_theme / set_active_theme / import_theme / export_theme / delete_theme / scan_devices / connect_device / disconnect_device / forget_device / trigger_state / preview_scene / reset_outputs / get_config / update_config / get_integration_status / install_integration / uninstall_integration / get_toolchain_status / set_toolchain_overrides / reset_toolchain_overrides / select_executable
+**P1 commands**：get_app_state / get_themes / get_theme / set_active_theme / import_theme / export_theme / delete_theme / scan_devices / connect_device / disconnect_device / forget_device / trigger_state / preview_scene / reset_outputs / get_config / update_config / get_integration_status / install_integration / uninstall_integration / get_toolchain_status / set_toolchain_overrides / reset_toolchain_overrides / select_executable / fetch_latest_release / resolve_update_download_url
 **P1 events**：business-state-changed / device-connection-changed / device-power-changed / device-fault / theme-changed
 **P2（后续）**：hook-log
 
@@ -238,6 +241,7 @@
 - **试听错误映射**：✅ `preview_scene` 在设备未连接时前置返回 `DEVICE_NOT_CONNECTED`。
 - **开机自启（G-06）**：✅ 已实装（2026-08-21）。`update_config` 先 OS 后 config（新增 `AUTOSTART_FAILED`）；setup 启动校准 `is_enabled()` 写回 config；平台 = macOS LaunchAgent / Windows Run key / Linux XDG autostart（tauri-plugin-autostart 2.5.1）；三平台实机待验证（U-08）。
 - **配置项**：Hook Server 固定优先 25679、占用时自动退避；`portPreference` 仅为旧配置兼容字段，设置页不再开放修改。其余配置项均已生效。
+- **应用更新 commands（2 个，2026-09-05 增补）**：✅ Rust 侧执行官方与镜像请求，避开 WebView CORS；检测源全部失败返回 `UPDATE_CHECK_FAILED`，下载源全部不可达则返回 GitHub Release 页面。
 
 *本文随实现推进修订；修改须同步更新 UI 设计与 Rust 实现双方。*
 
@@ -245,4 +249,5 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.3 | 2026-09-05 | 新增 `fetch_latest_release` / `resolve_update_download_url` 与 `UPDATE_CHECK_FAILED`：Rust 侧负责多源超时、响应基础校验和下载镜像探测，前端负责版本比较、6 小时缓存及用户反馈。 |
 | V1.2 | 2026-09-01 | 设备快照与 `device-power-changed` 补齐 `capabilityBits`、`batteryMv`；`batteryPercent = null` 仅表示百分比不可用，电池存在性由 `capabilityBits.Bit4` 与 `powerFlags.Bit0` 判断。 |
