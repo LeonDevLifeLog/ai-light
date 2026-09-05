@@ -121,6 +121,80 @@ test("maps Qoder lifecycle, attention, recovery, and failure events", () => {
   assert.deepEqual(translate("qoder", { hook_event_name: "FileChanged" }), []);
 });
 
+test("maps TraeCode lifecycle and attention events", () => {
+  assert.equal(
+    translate("trae", { hook_event_name: "SessionStart" })[0]?.state,
+    "IDLE"
+  );
+  assert.equal(
+    translate("trae", { hook_event_name: "UserPromptSubmit" })[0]?.state,
+    "WORKING"
+  );
+  assert.equal(
+    translate("trae", { hook_event_name: "PostToolUse" })[0]?.state,
+    "WORKING"
+  );
+  assert.equal(
+    translate("trae", {
+      hook_event_name: "PreToolUse",
+      tool_name: "AskUserQuestion",
+    })[0]?.state,
+    "WAITING"
+  );
+  for (const notificationType of [
+    "permission_prompt",
+    "document_review",
+    "ask_user_question",
+    "browser_interaction",
+  ]) {
+    assert.equal(
+      translate("trae", {
+        hook_event_name: "Notification",
+        notification_type: notificationType,
+      })[0]?.state,
+      "WAITING"
+    );
+  }
+  assert.equal(
+    translate("trae", {
+      hook_event_name: "Notification",
+      notification_type: "idle_prompt",
+    })[0]?.state,
+    "SUCCESS"
+  );
+  assert.equal(
+    translate("trae", { hook_event_name: "Stop" })[0]?.state,
+    "SUCCESS"
+  );
+  assert.deepEqual(
+    translate("trae", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Read",
+    }),
+    []
+  );
+});
+
+test("keeps TraeCode identified agents as top-level tasks", () => {
+  const soloEvent = translate("trae", {
+    agent_id: "solo_agent",
+    agent_type: "solo_agent",
+    hook_event_name: "UserPromptSubmit",
+    session_id: "trae-main",
+  })[0];
+  assert.equal(soloEvent?.state, "WORKING");
+  assert.equal(soloEvent?.session, "trae-main");
+
+  const customEvent = translate("trae", {
+    agent_id: "custom_reviewer",
+    agent_type: "custom",
+    hook_event_name: "UserPromptSubmit",
+    session_id: "trae-custom",
+  })[0];
+  assert.equal(customEvent?.state, "WORKING");
+  assert.equal(customEvent?.session, "trae-custom");
+});
+
 test("maps WorkBuddy supported lifecycle events", () => {
   assert.equal(
     translate("workbuddy", { hook_event_name: "SessionStart" })[0]?.state,

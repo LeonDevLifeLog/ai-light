@@ -243,6 +243,15 @@
 - **写入语义**：写前解析全部目标，任一配置不可解析则不开始写入；每个目标独立备份并原子替换。底层文件系统不提供跨文件事务，写入中途失败必须显式报错，后续检测不得把部分成功伪装为完整连接。
 - **验证**：覆盖仅国际版、仅国内版、双目录并存和均不存在四种路径选择；双目录测试验证幂等安装、用户 Hook 保留、安全卸载与完整检测。
 
+### KAD-17 TraeCode 使用原生全局 Hook 配置
+
+> **【摘要】** TraeCode 接入使用其原生 `~/.trae-cn/hooks.json`，不依赖“导入 Claude Code Hook”，避免两个客户端共享配置所有权。
+
+- **决策**：Adapter `0.1.6` 增加 `trae` source，Desktop 将兼容下限同步提升为 `0.1.6`；按 TraeCode schema v1 幂等管理全局 Hook，保留已有 Hook，断开时只移除 AI-Light 标记的命令。Windows 写入 PowerShell 命令，macOS/Linux 写入 Bash 可执行命令。
+- **事件边界**：`SessionStart → IDLE`、`UserPromptSubmit/PostToolUse → WORKING`、提问及交互类 `PreToolUse/Notification → WAITING`、`Stop/idle_prompt → SUCCESS`。TraeCode 的默认 Agent（`solo_agent`）和自定义 Agent（`custom`）作为顶层任务都会携带 `agent_id`，且当前 Hook 载荷没有可靠的嵌套标记，因此 TraeCode 不使用 `agent_id` 过滤事件；其他客户端继续按 `agent_id` 忽略子智能体事件。协议没有可靠失败事件，不从输出文本或 `tool_response` 推断 `ERROR`。
+- **后果**：TraeCode 和 Claude Code 配置可独立连接、断开；同一终态由 `Stop` 与异步 `idle_prompt` 重复上报是允许的幂等行为。
+- **验证**：覆盖配置路径、schema 版本、幂等合并、用户 Hook 保留、安全卸载和完整事件翻译；真实 TraeCode → Desktop → 灯效闭环仍需实机验收。
+
 ---
 
 ## 4. 不确定性清单（open questions）

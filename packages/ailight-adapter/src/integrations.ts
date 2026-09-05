@@ -26,6 +26,7 @@ interface HookGroup {
 
 interface ToolConfig {
   hooks?: Record<string, HookGroup[]>;
+  version?: number;
   [key: string]: unknown;
 }
 
@@ -69,6 +70,18 @@ const EVENTS: Record<ToolId, Array<{ event: string; matcher?: string }>> = {
     { event: "StopFailure" },
     { event: "SessionEnd" },
   ],
+  trae: [
+    { event: "SessionStart" },
+    { event: "UserPromptSubmit" },
+    { event: "PreToolUse", matcher: "AskUserQuestion" },
+    { event: "PostToolUse" },
+    { event: "Stop" },
+    {
+      event: "Notification",
+      matcher:
+        "idle_prompt|permission_prompt|document_review|ask_user_question|browser_interaction",
+    },
+  ],
   workbuddy: [
     { event: "SessionStart", matcher: "startup" },
     { event: "UserPromptSubmit" },
@@ -88,6 +101,9 @@ export function configPath(tool: ToolId, env = process.env) {
   }
   if (tool === "qoder") {
     return join(userHome, ".qoder", "settings.json");
+  }
+  if (tool === "trae") {
+    return join(userHome, ".trae-cn", "hooks.json");
   }
   return join(userHome, ".codex", "hooks.json");
 }
@@ -156,6 +172,36 @@ function windowsPowerShellCommand(executable: string, args: string[]) {
   ].join(" ");
 }
 
+function managedHandler(tool: ToolId, invocation: string[]): HookHandler {
+  if (tool === "claude-code") {
+    return {
+      args: invocation,
+      command: process.execPath,
+      timeout: 2,
+      type: "command",
+    };
+  }
+  if (tool === "trae") {
+    return {
+      command:
+        process.platform === "win32"
+          ? windowsPowerShellCommand(process.execPath, invocation)
+          : [process.execPath, ...invocation].map(quotePosix).join(" "),
+      timeout: 20,
+      type: "command",
+    };
+  }
+  return {
+    command: [process.execPath, ...invocation].map(quotePosix).join(" "),
+    // Codex may launch commandWindows through cmd.exe or PowerShell.
+    // An explicitly encoded PowerShell command avoids ambiguous nested
+    // quoting when Node or the adapter path contains spaces/metacharacters.
+    commandWindows: windowsPowerShellCommand(process.execPath, invocation),
+    timeout: 20,
+    type: "command",
+  };
+}
+
 async function loadConfig(path: string): Promise<ToolConfig> {
   try {
     const value = JSON.parse(await readFile(path, "utf8")) as unknown;
@@ -188,32 +234,14 @@ function withoutManaged(config: ToolConfig) {
 }
 
 function withManaged(config: ToolConfig, tool: ToolId, cliScript: string) {
+  if (tool === "trae" && config.version !== undefined && config.version !== 1) {
+    throw new Error("CONFIG_PARSE_FAILED");
+  }
   const clean = withoutManaged(config);
   const hooks = { ...(clean.hooks ?? {}) };
   for (const item of EVENTS[tool]) {
     const invocation = [cliScript, "hook", tool, ...MANAGED_ARGS];
-    const handler: HookHandler =
-      tool === "claude-code"
-        ? {
-            args: invocation,
-            command: process.execPath,
-            timeout: 2,
-            type: "command",
-          }
-        : {
-            command: [process.execPath, ...invocation]
-              .map(quotePosix)
-              .join(" "),
-            // Codex may launch commandWindows through cmd.exe or PowerShell.
-            // An explicitly encoded PowerShell command avoids ambiguous nested
-            // quoting when Node or the adapter path contains spaces/metacharacters.
-            commandWindows: windowsPowerShellCommand(
-              process.execPath,
-              invocation
-            ),
-            timeout: 20,
-            type: "command",
-          };
+    const handler = managedHandler(tool, invocation);
     hooks[item.event] = [
       ...(hooks[item.event] ?? []),
       {
@@ -222,7 +250,7 @@ function withManaged(config: ToolConfig, tool: ToolId, cliScript: string) {
       },
     ];
   }
-  return { ...clean, hooks };
+  return { ...clean, ...(tool === "trae" ? { version: 1 } : {}), hooks };
 }
 
 async function persist(path: string, config: ToolConfig, backup: boolean) {

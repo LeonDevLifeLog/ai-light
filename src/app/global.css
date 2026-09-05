@@ -920,6 +920,94 @@ pre,
   font-size: 12px;
   color: var(--text-secondary);
 }
+.integration-next-step {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  margin-top: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+}
+.integration-next-step--manual {
+  background: rgba(245, 158, 11, 0.06);
+  border-color: rgba(245, 158, 11, 0.24);
+}
+.integration-next-step--ready {
+  background: rgba(34, 197, 94, 0.05);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+.integration-next-step__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--alert-success);
+  background: rgba(34, 197, 94, 0.1);
+  border-radius: 9px;
+}
+.integration-next-step--manual .integration-next-step__icon {
+  color: var(--warning);
+  background: rgba(245, 158, 11, 0.12);
+}
+.integration-next-step__content {
+  min-width: 0;
+}
+.integration-next-step__content > strong {
+  display: block;
+  font-size: 13px;
+}
+.integration-next-step__content > p {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.integration-next-step__content ol {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  margin: 11px 0 0;
+  list-style: none;
+  counter-reset: integration-step;
+}
+.integration-next-step__content li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--foreground);
+  counter-increment: integration-step;
+}
+.integration-next-step__content li::before {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  content: counter(integration-step);
+  background: var(--overlay-hover);
+  border: 1px solid var(--border-soft);
+  border-radius: 50%;
+}
+.integration-next-step__footnote {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: 12px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-tertiary);
+}
+.integration-next-step__footnote svg {
+  flex: none;
+  margin-top: 1px;
+}
 details {
   margin-top: 12px;
 }

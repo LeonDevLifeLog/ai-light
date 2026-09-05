@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.41 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.41，2026-09-05） |
+| 文档版本 | V1.43 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.43，2026-09-05） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -20,7 +20,7 @@
 |---|---|---|
 | `/` | 状态总览 | 默认打开，看当前业务状态 / 设备 / 主题 |
 | `/devices` | 设备管理 | 连接 / 断开灯牌 |
-| `/integrations` | 接入外部工具 | 配置 Claude Code / Codex / Qoder / WorkBuddy 等的 hook |
+| `/integrations` | 接入外部工具 | 配置 Claude Code / Codex / Qoder / TraeCode / WorkBuddy 等的 hook |
 | `/themes` | 主题中心 | 浏览 / 切换 / 编辑主题 |
 | `/preview` | 试听 | 模拟业务状态；连接设备后试听实际灯光与声音 |
 | `/settings` | 设置 | 显示（外观模式 / 灯组朝向 / 当前主题）+ 系统（开机自启 / 外部运行环境 / API 接口文档） |
@@ -174,18 +174,21 @@ UI 反馈：设备卡状态 tag 立即更新；失败显示 Toast（原因 + 重
 
 ## 5. 接入外部工具（`/integrations`）
 
-### 5.1 4 个客户端卡
+### 5.1 5 个客户端卡
 
 | 客户端 | 状态 tag（默认） | 配置文件 | 接入方式 |
 |---|---|---|---|
-| Claude Code | 已连接 / 未连接 | `~/.claude/settings.json` | Node Adapter command hook |
-| Codex | 已连接 / 未连接 | `~/.codex/hooks.json` | Node Adapter command hook；notify 仅作后续兼容降级 |
-| Qoder | 已连接 / 未连接 | `~/.qoder/settings.json` / `~/.qoder-cn/settings.json` | Node Adapter command hook；按已存在发行版管理，两者并存则同时接入 |
-| WorkBuddy | 已连接 / 未连接 | `~/.workbuddy/settings.json` | Node Adapter command hook；协议兼容 CodeBuddy，配置命名空间独立 |
+| Claude Code | 配置已写入 / 未配置 | `~/.claude/settings.json` | Node Adapter command hook |
+| Codex | 配置已写入 / 未配置 | `~/.codex/hooks.json` | Node Adapter command hook；notify 仅作后续兼容降级 |
+| Qoder | 配置已写入 / 未配置 | `~/.qoder/settings.json` / `~/.qoder-cn/settings.json` | Node Adapter command hook；按已存在发行版管理，两者并存则同时接入 |
+| TraeCode | 配置已写入 / 未配置 | `~/.trae-cn/hooks.json` | Node Adapter command hook；使用 TraeCode 原生全局 Hook，不依赖 Claude Hook 导入 |
+| WorkBuddy | 配置已写入 / 未配置 | `~/.workbuddy/settings.json` | Node Adapter command hook；协议兼容 CodeBuddy，配置命名空间独立 |
 
 ### 5.2 操作
 
 客户端卡只包含一个上下文主动作：未连接时 [连接]，已连接时 [断开]。连接前先检查运行环境（ToolchainService 强制复验）：就绪时直接写入托管 Hook；Adapter 缺失或版本不兼容时按钮分别进入「确认并安装」/「确认并升级」态，并内联展示操作说明（目标包 `@ai-light/adapter`、使用已检测的 Node.js 与 npm、不提权不改 PATH），用户确认后才执行兼容版本安装；Node/npm 未就绪时停止连接，由运行环境恢复卡提供手动选择路径或重新检测。断开只删除 AI-Light 托管 Hook。按钮执行时进入 loading（文案「正在检查运行环境」）并禁止重复触发，结果通过 Toast 反馈。
+
+Adapter 托管条目完整只证明配置文件已写入，因此状态 tag 使用「配置已写入」而不是「已连接」。写入后卡片原地展开紧凑的「下一步」区：需要目标客户端手动放行时使用 warning 语义，无额外设置时使用 success 语义；两类都以真实低风险任务产生状态变化作为最终验收，不把用户自报完成持久化为虚假的自动检测结果。
 
 ### 5.2.1 运行环境卡（ADR-0006）
 
@@ -207,9 +210,15 @@ UI 反馈：设备卡状态 tag 立即更新；失败显示 Toast（原因 + 重
 
 能力以当前本机 Codex 配置与 Adapter 检测结果为准，不再固定显示“Desktop 暂不支持”。V1 优先 lifecycle command hooks，不与 `notify` 重复发送终态。
 
+Codex 桌面端会把新 Hook 保持为禁用，直到用户信任。配置写入后，卡片必须明确引导「Codex 设置 → Hooks → 找到标记为新钩子的 AI-Light Hook → 审核命令来源后点击信任 → 运行低风险任务验证」；不得把项目/工作区信任与 Hook 信任混为一谈，也不得声称 AI-Light 能读取 Codex 内部信任状态。
+
+Claude Code 用户级 Hook 通常无需额外放行；卡片直接引导真实任务验证，并把 `/hooks` 只读检查与企业 `allowManagedHooksOnly` 限制作为补充排错信息，而非必做步骤。
+
 WorkBuddy 只使用其明确支持的 `SessionStart`、`UserPromptSubmit`、`PreToolUse`、`Stop`、`SessionEnd` 事件，分别同步空闲、工作、等待提问、完成和会话结束；协议未提供可靠失败事件，因此不推断 `ERROR`。
 
-Qoder 桌面端与 CLI 使用兼容 Hooks；国际版配置位于 `~/.qoder/settings.json`，国内版位于 `~/.qoder-cn/settings.json`。AI-Light 只管理已存在的发行版目录，两者并存则同时接入，均不存在时默认创建国际版路径；全部目标完整才显示已连接。AI-Light 映射任务开始/结束、用户提交、权限与信息请求、停止及停止失败等确定性生命周期事件；单个工具失败保持工作态，`StopFailure` 才进入出错态，子智能体事件不抢占主任务灯效。配置出现在 Qoder「设置 → 钩子」不代表 Runtime 已加载，连接后仍需用真实低风险任务验证。
+Qoder 桌面端与 CLI 使用兼容 Hooks；国际版配置位于 `~/.qoder/settings.json`，国内版位于 `~/.qoder-cn/settings.json`。AI-Light 只管理已存在的发行版目录，两者并存则同时接入，均不存在时默认创建国际版路径；全部目标完整才显示配置已写入。AI-Light 映射任务开始/结束、用户提交、权限与信息请求、停止及停止失败等确定性生命周期事件；单个工具失败保持工作态，`StopFailure` 才进入出错态，子智能体事件不抢占主任务灯效。Qoder 不要求用户开启其他设置或执行额外配置操作；连接后直接用真实低风险任务验证 Runtime 已加载配置。
+
+TraeCode 使用其原生 schema v1 全局 Hook：`SessionStart` 同步空闲，`UserPromptSubmit` / `PostToolUse` 同步工作，提问及权限、文档审阅、浏览器交互通知同步等待，`Stop` / `idle_prompt` 同步完成。配置写入后必须引导用户前往「TraeCode 设置 → Hooks」手动开启全局 Hook；不要求开启“导入 CLAUDE 中的 Hooks 配置”。默认 Agent（`solo_agent`）与自定义 Agent（`custom`）都是顶层任务且都会携带 `agent_id`；在 TraeCode 提供可靠的嵌套标记前，`agent_id` 不作为其子智能体过滤依据。其他客户端仍按 `agent_id` 过滤子智能体事件。协议未提供可靠失败事件，因此不推断 `ERROR`。若选择沙箱运行，沙箱必须允许执行已检测的 Node.js 与 Adapter 路径。
 
 ### 5.4 配置生效流程
 
@@ -778,6 +787,8 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.43 | 2026-09-05 | §5 将 Adapter 完整状态从“已连接”改为“配置已写入”，新增写入后的工具专属下一步引导：Codex 手动信任新增 Hook、TraeCode 手动开启全局 Hook、Qoder 不增加额外操作、Claude Code 直接验证并以 `/hooks` 作为排错；统一以真实低风险任务作为生效验收。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且与 ipc-contract §5 一致；§4.1 未新增 AppError.code；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
+| V1.42 | 2026-09-05 | §1/§5 新增 TraeCode 一键接入卡与 `~/.trae-cn/hooks.json` 原生全局配置；明确四态事件映射、顶层 Agent 身份边界、沙箱执行边界和不推断失败态。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且与 ipc-contract §5 一致；§4.1 未新增 AppError.code；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.41 | 2026-09-05 | Qoder 接入兼容国际版 `.qoder` 与国内版 `.qoder-cn`：存在性驱动选择路径，并存时同时管理且全部完整才显示已连接；接入卡展示全部受管路径。对齐报告：§2.1 Source Events 未变且均存在于 ipc-contract §5；§11 AppError.code 未变；蓝牙 result code 未变且与 V0.4 §3.6 一致；未新增主题字段；KAD-16 引用有效。 |
 | V1.40 | 2026-09-05 | 接入页新增 Qoder 卡片：通过 Adapter 0.1.5 幂等管理 `~/.qoder/settings.json`，覆盖桌面端与 CLI 兼容 Hooks，并明确等待、恢复、完成、失败与子智能体过滤语义。对齐报告：§2.1 Source Events 未变且均存在于 ipc-contract §5；§11 AppError.code 未变；蓝牙 result code 未变且与 V0.4 §3.6 一致；未新增主题字段；KAD-15 引用有效。 |
 | V1.39 | 2026-09-05 | 附近设备仅展示 `recognized === true` 的状态灯候选，过滤后为空时展示状态灯空态；保留记忆关系与 RSSI 排序。对齐报告：§3 IPC events、§4.1 错误码、§4.2 蓝牙 result 名称核对通过；§6~§8 主题字段未变且引用存在；ADR/KAD 引用有效。同步澄清 ipc-contract §2.3：扫描标记按广播名前缀计算，连接后服务发现与握手负责验证。 |

@@ -67,7 +67,7 @@ fn shared(app: &AppHandle) -> std::sync::Arc<SharedState> {
 // ---- Adapter CLI 集成（统一走 ToolchainService / ProcessRunner，设计方案 §4） ----
 
 fn valid_integration_tool(tool: &str) -> bool {
-    matches!(tool, "claude-code" | "codex" | "qoder" | "workbuddy")
+    matches!(tool, "claude-code" | "codex" | "qoder" | "trae" | "workbuddy")
 }
 
 /// ToolchainError → AppError（设计方案 §7 错误码表）
@@ -1206,8 +1206,9 @@ mod tests {
     use super::{prepare_theme_export, valid_integration_tool, valid_theme_name};
 
     #[test]
-    fn integration_tool_allowlist_includes_qoder() {
+    fn integration_tool_allowlist_includes_supported_tools() {
         assert!(valid_integration_tool("qoder"));
+        assert!(valid_integration_tool("trae"));
         assert!(!valid_integration_tool("unknown"));
     }
 

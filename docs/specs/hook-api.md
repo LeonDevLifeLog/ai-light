@@ -98,6 +98,7 @@ Authorization: Bearer <token>
 | `claude-code` | Claude Code 适配器 |
 | `qoder` | Qoder 适配器 |
 | `codex` | Codex CLI 或桌面端适配器 |
+| `trae` | TraeCode 适配器 |
 | `manual` | 手动调试 |
 | `_test` | 自动化测试 |
 

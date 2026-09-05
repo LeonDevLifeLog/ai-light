@@ -17,7 +17,7 @@
     ]
   },
   "productName": "AI-Light",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "identifier": "cn.wireless-tech.ai-light",
   "plugins": {
     "process": {

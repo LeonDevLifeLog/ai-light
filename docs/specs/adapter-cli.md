@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 文档版本 | V1.2 |
-| 文档状态 | Claude Code / Codex / WorkBuddy 已实现；Qoder 自 Adapter 0.1.5 起支持，待实机验收 |
-| 适用范围 | Claude Code、Codex、Qoder、WorkBuddy |
+| 文档状态 | Claude Code / Codex / WorkBuddy 已实现；Qoder 自 Adapter 0.1.5、TraeCode 自 Adapter 0.1.6 起支持，待实机验收 |
+| 适用范围 | Claude Code、Codex、Qoder、TraeCode、WorkBuddy |
 | CLI 技术栈 | Node.js 20+ / TypeScript / ESM |
 | npm 包 | `@ai-light/adapter` |
 | CLI 命令 | `ailight-adapter` |
@@ -17,7 +17,7 @@
 
 ## 1. 背景与目标
 
-AI-Light 已提供本地 Hook Server、标准五态、状态仲裁、主题编译与 BLE 下发能力，但 Claude Code、Codex、Qoder、WorkBuddy 的原始 Hook JSON 与 AI-Light `POST /hook` 请求模型不同，不能仅靠把 Hook URL 指向 AI-Light 完成可靠接入。
+AI-Light 已提供本地 Hook Server、标准五态、状态仲裁、主题编译与 BLE 下发能力，但 Claude Code、Codex、Qoder、TraeCode、WorkBuddy 的原始 Hook JSON 与 AI-Light `POST /hook` 请求模型不同，不能仅靠把 Hook URL 指向 AI-Light 完成可靠接入。
 
 Adapter CLI 是工具协议与 AI-Light 稳定协议之间的防腐层：
 
@@ -96,7 +96,7 @@ AI-Light UI ─────┐
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ Claude Code / Codex / Qoder / WorkBuddy                     │
+│ Claude Code / Codex / Qoder / TraeCode / WorkBuddy          │
 │ lifecycle hook → 启动 ailight-adapter → stdin 原始 JSON      │
 └────────────────────────────┬─────────────────────────────────┘
                              ▼
@@ -396,7 +396,7 @@ CLI 内部使用：
 
 ```ts
 export interface NormalizedEvent {
-  source: "claude-code" | "codex" | "workbuddy" | string;
+  source: "claude-code" | "codex" | "qoder" | "trae" | "workbuddy" | string;
   state: "IDLE" | "WORKING" | "WAITING" | "SUCCESS" | "ERROR" | string;
   session?: string;
   timestamp: number;
@@ -635,7 +635,7 @@ Claude Code Hook 支持 command 与 HTTP 等 handler。V1 统一使用 command h
 | `StopFailure` | — | `ERROR` | 本轮因 API/系统错误终止 |
 | `SessionEnd` | — | `IDLE` | 会话结束，释放该来源 |
 
-任何 payload 含 `agent_id` 时视为子智能体内部事件，V1 不改变主会话灯效。完整审计和全部 Hook 分类见 [Claude Code Hooks → AI-Light 状态映射研究](../research/claude-code-hooks-state-mapping.md)。
+Claude Code、Qoder 等客户端中，payload 含 `agent_id` 时视为子智能体内部事件，V1 不改变主会话灯效。TraeCode 的默认 Agent（`solo_agent`）和自定义 Agent（`custom`）作为顶层任务都会携带 `agent_id`，且当前 Hook 载荷没有可靠的嵌套标记，因此 TraeCode 暂不使用 `agent_id` 过滤事件。完整审计和全部 Hook 分类见 [Claude Code Hooks → AI-Light 状态映射研究](../research/claude-code-hooks-state-mapping.md)。
 
 ### 10.3 明确不订阅的事件
 

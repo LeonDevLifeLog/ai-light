@@ -43,9 +43,10 @@
 ## 4. 连接一个 AI 编程工具
 
 1. 在左侧选择“接入”。
-2. 在 Claude Code、Codex、Qoder 或 WorkBuddy 卡片中选择“连接”。
+2. 在 Claude Code、Codex、Qoder、TraeCode 或 WorkBuddy 卡片中选择“连接”。
 3. 等待按钮执行完成。
-4. 卡片显示“已连接”即表示 AI Light 已完成接入配置。
+4. 卡片显示“配置已写入”即表示 AI Light 已完成配置文件写入。
+5. 按卡片展开的“下一步”完成目标工具侧设置：Codex 需要在“设置 → Hooks”中信任新 Hook，TraeCode 需要在“设置 → Hooks”中开启全局 Hook；Qoder 无需其他操作。Claude Code 通常也无需额外设置。
 
 首次连接时，AI Light 可能需要通过 npm 安装配套组件。电脑必须能运行 Node.js 和 npm，并能访问 npm 软件源。AI Light 会合并必要配置，不覆盖其他 Hook。
 
@@ -54,7 +55,7 @@
 ## 5. 完成第一次真实亮灯
 
 1. 保持 AI Light 应用运行。窗口可以关闭，应用仍会驻留系统托盘。
-2. 启动刚刚连接的 Claude Code、Codex、Qoder 或 WorkBuddy。
+2. 启动刚刚连接的 Claude Code、Codex、Qoder、TraeCode 或 WorkBuddy。
 3. 发起一个真实任务。
 4. 返回 AI Light 的“状态”页面，确认状态变为“工作中”。
 5. 当工具请求确认或授权时，状态应变为“等你回复”。
@@ -68,7 +69,7 @@
 
 - “设备”页面显示已连接；
 - “试听”可以控制实体状态灯；
-- “接入”页面至少有一个工具显示已连接；
+- “接入”页面至少有一个工具显示配置已写入；
 - 真实任务开始后，“状态”页面自动变化；
 - 实体状态灯与应用状态同步。
 

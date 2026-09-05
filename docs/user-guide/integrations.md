@@ -1,6 +1,6 @@
 # 接入 AI 编程工具
 
-AI Light 当前面向最终用户提供 Claude Code、Codex、Qoder 和 WorkBuddy 的一键接入。连接成功后，工具支持的工作、等待、完成和失败状态会自动同步到 AI Light。
+AI Light 当前面向最终用户提供 Claude Code、Codex、Qoder、TraeCode 和 WorkBuddy 的接入。AI Light 完成配置写入后，部分工具还需要在自己的设置中放行 Hook；随后用一次真实任务确认状态已经开始同步。
 
 ## 开始之前
 
@@ -24,16 +24,20 @@ AI Light 当前面向最终用户提供 Claude Code、Codex、Qoder 和 WorkBudd
 1. 打开“接入”页面。
 2. 找到 Claude Code 卡片。
 3. 选择“连接”。
-4. 等待卡片显示“已连接”。
-5. 新建一次 Claude Code 任务，检查 AI Light 状态是否变化。
+4. 等待卡片显示“配置已写入”。
+5. 通常无需额外设置，直接新建一次低风险任务，检查 AI Light 状态是否变化。
+
+如果状态没有变化，可在 Claude Code 中输入 `/hooks`，确认 AI-Light Hook 已被加载。企业环境若启用了只允许受管 Hook 的策略，用户级 Hook 可能被组织策略阻止，需要联系管理员确认；普通用户无需执行这项检查。
 
 ## 连接 Codex
 
 1. 打开“接入”页面。
 2. 找到 Codex 卡片。
 3. 选择“连接”。
-4. 等待卡片显示“已连接”。
-5. 新建一次 Codex 任务，检查 AI Light 状态是否变化。
+4. 等待卡片显示“配置已写入”。
+5. 打开 Codex 桌面客户端的“设置”，进入“Hooks”。
+6. 找到标记为“新钩子”的 AI-Light Hook，检查命令来源后选择“信任”。
+7. 新建一次低风险任务，检查 AI Light 状态是否变化。
 
 实际可用能力取决于本机 Codex 版本及其 Hook 支持情况。云端运行、没有经过本机 Hook 的任务不会自动同步。
 
@@ -42,17 +46,28 @@ AI Light 当前面向最终用户提供 Claude Code、Codex、Qoder 和 WorkBudd
 1. 打开“接入”页面。
 2. 找到 Qoder 卡片。
 3. 选择“连接”。
-4. 等待卡片显示“已连接”。
-5. 在 Qoder 桌面端或 Qoder CLI 新建一次低风险任务，检查 AI Light 状态是否变化。
+4. 等待卡片显示“配置已写入”。
+5. 无需开启其他设置或执行额外配置操作，直接在 Qoder 桌面端或 Qoder CLI 新建一次低风险任务，检查 AI Light 状态是否变化。
 
 AI Light 只合并用户级配置中由自己管理的 Hook：国际版使用 `~/.qoder/settings.json`，国内版使用 `~/.qoder-cn/settings.json`；两个目录都存在时会同时接入，两个目录都不存在时默认创建国际版路径。Qoder 的“设置 → 钩子”显示配置只代表文件已写入；必须运行真实任务，才能确认 Runtime 已加载并成功执行。项目级 `.qoder/settings.json` 与 `.qoder/settings.local.json` 会继续由 Qoder 合并，AI Light 不修改它们。
+
+## 连接 TraeCode
+
+1. 打开 AI Light 的“接入”页面。
+2. 找到 TraeCode 卡片并选择“连接”。
+3. 等待卡片显示“配置已写入”。
+4. 打开 TraeCode 的“设置”，进入“Hooks”并开启全局 Hook 开关。
+5. 无需开启“导入 CLAUDE 中的 Hooks 配置”。
+6. 新建一次低风险任务，检查 AI Light 状态是否变化。
+
+AI Light 只管理 `~/.trae-cn/hooks.json` 中带有 AI-Light 标记的全局 Hook，不要求开启“导入 CLAUDE 中的 Hooks 配置”。TraeCode 当前可以同步会话开始、工作、等待交互和本轮完成；没有可靠的失败事件，因此不会根据输出或工具结果猜测“出错了”。若 TraeCode 将 Hook 设置为沙箱运行，必须确保沙箱允许执行已检测到的 Node.js 与 Adapter 路径。
 
 ## 连接 WorkBuddy
 
 1. 打开“接入”页面。
 2. 找到 WorkBuddy 卡片。
 3. 选择“连接”。
-4. 等待卡片显示“已连接”。
+4. 等待卡片显示“配置已写入”。
 5. 新建一次 WorkBuddy 任务，检查 AI Light 状态是否变化。
 
 AI Light 只修改 `~/.workbuddy/settings.json`。WorkBuddy 当前提供的 Hook 可以同步工作、等待提问、本轮完成和会话结束，但没有可靠的失败事件，因此不会根据输出内容猜测“出错了”。
@@ -81,7 +96,7 @@ AI Light 会安装或调用配套组件，并在目标工具的配置中加入�
 
 ## 如何确认同步正常
 
-不要只看“已连接”标签。完整验证应包含：
+不要只看“配置已写入”标签：它只表示 AI Light 已经写入配置，不能证明目标工具已经允许并执行 Hook。完整验证应包含：
 
 1. 发起真实任务；
 2. “状态”页面变为“工作中”；
@@ -89,4 +104,4 @@ AI Light 会安装或调用配套组件，并在目标工具的配置中加入�
 4. 任务结束时变为“已完成”或“出错了”；
 5. 已连接的实体状态灯同步变化。
 
-如果卡片显示已连接但任务状态不变化，请查看[接入已连接，但任务状态不更新](./troubleshooting.md#接入已连接但任务状态不更新)。
+如果卡片显示配置已写入但任务状态不变化，请查看[配置已写入，但任务状态不更新](./troubleshooting.md#配置已写入但任务状态不更新)。
