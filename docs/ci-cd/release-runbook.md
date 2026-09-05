@@ -58,7 +58,7 @@ git push origin v0.1.0
 
 1. 确认 `Validate release version` 成功。
 2. 确认四个平台矩阵任务均成功。
-3. 在 Draft Release 中确认各平台安装包齐全，并存在自动生成的 `update.json`；其中每个安装包都必须包含 GitHub 计算的 SHA-256、大小与官方下载地址。
+3. 在 Draft Release 中确认各平台安装包齐全，并存在自动生成的 `update.json`；生成任务通过授权 Release 列表定位尚未公开、无法由 tag API 查询的 Draft，其中每个安装包都必须包含 GitHub 计算的 SHA-256、大小与发布后稳定的 tag 下载地址。
 4. 至少在目标平台执行安装、启动和核心功能冒烟测试。
 5. 检查自动生成的 Release Notes。
 6. 验收完成后，在 GitHub 页面人工发布 Draft Release。
