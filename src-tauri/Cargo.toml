@@ -1,6 +1,6 @@
 [package]
 name = "ai-light"
-version = "0.5.0"
+version = "0.5.1"
 description = "AI-Light 智能体状态灯客户端（Tauri）"
 authors = ["Leon"]
 edition = "2021"
