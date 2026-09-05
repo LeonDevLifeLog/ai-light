@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.37 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.37，2026-09-05） |
+| 文档版本 | V1.38 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.38，2026-09-05） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -859,7 +859,9 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 - 「我的设备」位于扫描结果之前且独立于扫描；`rememberedDevice != null` 时始终展示。
 - 扫描列表只有 `snapshot.device.connected && snapshot.device.address == result.address` 时显示禁用的「已连接」；仅地址相同不得禁用。
 - 扫描到 `rememberedDevice.address` 且实际离线时显示「已记住」与可点击的「重新连接」。
-- ScanResultList 固定按「记住关系降序 → `recognized` 降序 → RSSI 降序 → address 升序」排列；未知 RSSI 低于任意已知 RSSI。
+- 扫描结果写入页面状态前仅保留 `recognized === true` 的状态灯候选；识别标记复用后端结果（当前按 `ACLight-` 广播名前缀计算），不替代连接后的服务发现与能力校验。
+- ScanResultList 固定按「记住关系降序 → RSSI 降序 → address 升序」排列；未知 RSSI 低于任意已知 RSSI。
+- 空态与列表使用同一份过滤结果：仅扫描到其它蓝牙设备时显示「未发现附近的状态灯」。
 
 ---
 
@@ -1889,6 +1891,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.38 | 2026-09-05 | 附近设备仅展示 `recognized === true` 的状态灯候选，过滤后为空时展示状态灯空态；保留记忆关系与 RSSI 排序。对齐报告：§3 IPC events、§4.1 错误码、§4.2 蓝牙 result 名称核对通过；§6~§8 主题字段未变且引用存在；ADR/KAD 引用有效。同步澄清 ipc-contract §2.3：扫描标记按广播名前缀计算，连接后服务发现与握手负责验证。 |
 | V1.37 | 2026-09-05 | 运行环境卡新增常驻接入原理说明：npm 包链接、Hook 状态流、Node/npm 依赖和首次安装确认；中性底色与错误告警区分，流程自适应换行，外链失败内联反馈。对齐报告：§3 IPC events、§4.1 错误码、§4.2 蓝牙 result 名称核对通过；§6~§8 仅增加说明区，未新增主题字段；ADR/KAD 引用有效。 |
 | V1.36 | 2026-09-05 | 运行环境恢复闭环：请求/解析异常展示失败并可重试，保留旧结果；Node/npm 内联安装指引；Adapter 安装与升级分开标识；手动文件选择收纳到详情；恢复失败持久展示、取消不报成功，配置损坏优先引导重建。对齐报告：§3 IPC Source Events 均存在（prefers-color-scheme 为浏览器媒体查询，非 IPC event）；§4.1 错误码全部存在于 ipc-contract §4；§4.2 result 名称均存在于蓝牙 V0.4 §3.6；§6~§8 仅修改工具链展示，主题字段未变；ADR/KAD 引用有效。 |
 | V1.35 | 2026-09-04 | §6.6/§7.6 移除设置页“连接安全”与“服务”分组，将 API 接口文档迁入“系统”并直接展示；系统项顺序统一为开机自启、外部运行环境、API 接口文档。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变且均存在于 ipc-contract §4；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增主题字段且与 theme-format 一致；ADR-0001~0006、KAD-01~14 引用有效。 |

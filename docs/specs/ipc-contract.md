@@ -75,7 +75,7 @@
 | `disconnect_device()` | — | `{ "ok": true }` | `DEVICE_DISCONNECT_FAILED` | P1 |
 | `forget_device()` | — | `{ "ok": true }` | `DEVICE_DISCONNECT_FAILED` / `INTERNAL` | P1 |
 
-- **识别规则**：`recognized` = 广播名 `ACLight-` 前缀 **或** 服务发现含 GB_TRANS 协议 UUID（对齐 pyPcTest）
+- **扫描筛选**：`recognized` 当前由广播名是否以 `ACLight-` 开头计算；设备页仅展示 `recognized === true` 的扫描结果。此标记用于候选列表筛选，不代表设备类型或能力已验证；连接后仍须发现 GB_TRANS 服务并完成 V0.4 握手。
 - **connect 成功后**：自动写入 `config.remembered_device` + 执行 V0.4 握手（§5）→ 重发当前业务 SCENE（APPLY_IF_CHANGED）对齐
 - **disconnect**：主动断开并取消当前连接代次的自动重连，保留 `rememberedDevice`，下次启动仍自动连接
 - **forget**：先主动断开并取消自动重连，成功后清除并持久化 `rememberedDevice`
