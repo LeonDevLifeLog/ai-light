@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.35 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.35，2026-09-04） |
+| 文档版本 | V1.37 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.37，2026-09-05） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -271,12 +271,12 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `AUTOSTART_FAILED` | OS 登录项切换失败 | Toast "开机自启设置失败：`<reason>`"；Switch 回滚 | 检查系统权限后重试 |
 | `NODE_NOT_FOUND` / `NODE_INCOMPATIBLE` | 工具链解析未发现 Node 或版本低于 20 | Integrations 运行环境恢复卡内联展示（非仅 Toast） | 安装 Node 20+ / [选择 Node] / [重新检测] |
 | `NPM_NOT_FOUND` | 已发现 Node，但无 npm 候选能通过真实命令验证 | 运行环境恢复卡内联展示失败候选及原因 | [选择 npm] / 修复 npm 安装 |
-| `TOOLCHAIN_OVERRIDE_INVALID` | 手动路径不存在或验证失败 | 字段级错误 Toast + 恢复卡保持 `invalid_override` 态 | 重新选择 / [恢复自动检测] |
+| `TOOLCHAIN_OVERRIDE_INVALID` | 手动路径不存在或验证失败 | 内联保留所选路径错误 + 强制复验后的状态 | 重新选择 / [恢复自动检测] |
 | `TOOLCHAIN_AMBIGUOUS` / `TOOLCHAIN_PERMISSION_DENIED` | 多组候选无法决策 / 权限不足 | 运行环境恢复卡内联展示 | 用户选择一组工具 / 调整权限 |
-| `TOOLCHAIN_STORE_INVALID` | `toolchain.json` 损坏、非法或 schema 不兼容 | danger tag「配置需要恢复」+ 原文件只读保护 | [恢复自动检测] 后明确重建 |
+| `TOOLCHAIN_STORE_INVALID` | `toolchain.json` 损坏、非法或 schema 不兼容 | danger tag「环境配置需要重建」+ 原文件只读保护 | [重建配置并检测] |
 | `ADAPTER_UPDATE_FAILED` | 主动检查 registry 或精确版本升级失败 | Settings 外部运行环境内保留原版本信息 + error Toast | 检查网络/registry 后重试 |
 | `EXECUTABLE_TIMEOUT` | 候选验证或 Adapter 命令超时 | Toast "执行超时" + 恢复卡 [查看详情] | 选择其他路径 / 重试 |
-| `INTERNAL` | Rust 侧异常（含 BLE 下发失败） | Toast "服务异常，请查看日志" | 打开日志目录 |
+| `INTERNAL` | Rust 侧异常（含 BLE 下发失败） | 工具链检测异常内联显示「检测失败」；其他场景 Toast "服务异常，请查看日志" | 工具链 [重新检测] / [复制诊断信息]；其他场景打开日志目录 |
 
 ### 4.2 蓝牙协议 result code → UI 反馈（V0.4 §3.6）
 
@@ -748,10 +748,11 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 
 | 类别 | 项 | 说明 |
 |---|---|---|
-| Props | `status` | `ToolchainStatus \| null`（null = 检查中占位） |
+| Props | `status` | `ToolchainStatus \| null`（仅 checking 为 true 时表示检查中占位） |
+| Props | `error` | 请求/恢复操作错误，失败保留 status 并内联展示 |
 | Props | `checking` | 重新检测 / 手动选择执行中 |
 | Emit | `onRefresh()` | [重新检测] → `get_toolchain_status(force=true)` |
-| Emit | `onReset()` | [恢复自动检测] → `reset_toolchain_overrides()`（仅 `mode === "manual"` 时出现） |
+| Emit | `onReset()` | [改用自动检测] → `reset_toolchain_overrides()`（manual 或 store_invalid；后者文案为 [重建配置并检测]） |
 | Emit | `onSelect({ kind })` | [选择 Node/npm 路径] → `select_executable(kind)`（后端原生文件选择器 + 立即验证） |
 | Invoke | `get_toolchain_status / set_toolchain_overrides / reset_toolchain_overrides / select_executable` | — |
 
@@ -759,26 +760,32 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 
 | 态 | 触发条件 | 视觉 | 可交互 |
 |---|---|---|---|
-| `checking` | `status == null` 或 `checking` | neutral tag「检查中」/ 按钮 loading | 重新检测禁用 |
+| `checking` | `checking === true` | neutral tag「检查中」/ 按钮 loading | 重新检测禁用 |
+| `failed`（展示态） | error、INTERNAL issue，或检测结束后仍无有效结果 | danger tag「检测失败」，保留上次结果和具体原因 | [重新检测] / [复制诊断信息] |
 | `ready` | `state === "ready"` | success tag「可用」+ 一行摘要 + [查看详情] [重新检测] | 全部可用 |
-| `adapter_missing` | `state === "adapter_missing"` | warning tag「Adapter 待安装」+ 摘要 | 连接卡承接安装确认 |
-| `adapter_incompatible` | `state === "adapter_incompatible"` | warning tag「Adapter 待安装」+ 不兼容说明 | 连接卡承接升级确认 |
-| `store_invalid` | 配置损坏、非法或 schema 不兼容 | danger tag「配置需要恢复」+ 恢复卡 | 仅 [恢复自动检测] |
-| `recovery` | 其余非 ready 态 | danger tag + 恢复卡（问题说明 + 搜索范围 + 恢复动作）内联展示 | [选择路径] / [恢复自动检测] |
+| `adapter_missing` | `state === "adapter_missing"` | warning tag「需要安装接入组件」+ 点击下方连接的说明 | 连接卡承接安装确认 |
+| `adapter_incompatible` | `state === "adapter_incompatible"` | warning tag「接入组件需要升级」+ 点击下方连接的说明 | 连接卡承接升级确认 |
+| `store_invalid` | 配置损坏、非法或 schema 不兼容 | danger tag「环境配置需要重建」+ 恢复卡 | 仅恢复动作 [重建配置并检测]（保留重新检测和详情） |
+| `recovery` | 其余非 ready 态 | danger tag + 恢复卡（问题说明 + 搜索范围 + 恢复动作）内联展示 | [选择路径] / [改用自动检测] |
 
 **6.7.4 联动矩阵**
 
 | Source Event | 字段 | 同步方式 |
 |---|---|---|
 | `get_toolchain_status` | `ToolchainStatus` | 摘要 / 状态 tag / 详情列表重渲染 |
-| `select_executable` | 新 ToolchainStatus | 手动选择成功即时刷新；失败 Toast 字段级错误并强制复验 |
+| `select_executable` | 新 ToolchainStatus | 手动选择成功即时刷新；失败内联持久展示具体错误并强制复验，取消不提示成功 |
 
 **6.7.5 边界条件**
-- 摘要成功时只占一行，问题存在才展开恢复卡；不使用仅 Tooltip 的路径展示
+- 状态摘要下常驻「接入是如何工作的？」说明区：中性底色、独立于异常告警；解释 `@ai-light/adapter` 配置 Hook 并向本机 AI-Light 上报任务状态，展示「AI 客户端 → 接入组件 → 本机 AI-Light → 状态灯」流程。包名链接通过系统浏览器打开 npm 页面，失败内联显示可复制 URL；补充 Node.js 20+ / npm 依赖及首次连接的兼容版本安装确认。流程可换行，包名链接保留键盘焦点与外链标识，深浅色复用现有语义色。
+- 状态摘要成功时只占一行，接入说明常驻，问题存在才展开恢复卡；不使用仅 Tooltip 的路径展示
 - 详情列表路径等宽字体、允许换行并带复制按钮；来源显示为用户语言（环境 PATH / Node 同安装族 / npm 全局目录 / 版本管理器等）
-- 文件选择取消不改变现有配置（返回当前状态）
-- `mode === "manual"`（存在 override）时提供 [恢复自动检测]
-- `state === "store_invalid"` 时，无论 mode 均提供 [恢复自动检测]；明确操作前不得覆盖原文件或执行接入写操作
+- 文件选择取消不改变现有配置（返回当前状态），不提示成功；选择/重建的结果由卡片持续展示。
+- Node/npm 提供内联安装/修复步骤和官方浏览器入口，手动选择为次要动作并说明文件类型。
+- 详情列出全部 issue 与高级文件选择；Adapter 的推荐修复路径始终由下方连接卡承接。
+- 配置损坏的 issue 优先于候选问题；[重建配置并检测] 明示清除手动路径。
+- [重新检测] 保留手动路径，[改用自动检测] 清除全部手动路径；错误不只使用 Toast。
+- `mode === "manual"`（存在 override）时提供 [改用自动检测]
+- `state === "store_invalid"` 时，无论 mode 均提供 [重建配置并检测]；明确操作前不得覆盖原文件或执行接入写操作
 - Node/npm 是 Adapter 的执行机制：选定 Node 能成功运行 npm 的版本查询和全局 prefix 查询即视为可用；`mixedInstallation` 只作诊断，不进入 recovery 态
 
 **6.7.6 无障碍**
@@ -1882,6 +1889,8 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.37 | 2026-09-05 | 运行环境卡新增常驻接入原理说明：npm 包链接、Hook 状态流、Node/npm 依赖和首次安装确认；中性底色与错误告警区分，流程自适应换行，外链失败内联反馈。对齐报告：§3 IPC events、§4.1 错误码、§4.2 蓝牙 result 名称核对通过；§6~§8 仅增加说明区，未新增主题字段；ADR/KAD 引用有效。 |
+| V1.36 | 2026-09-05 | 运行环境恢复闭环：请求/解析异常展示失败并可重试，保留旧结果；Node/npm 内联安装指引；Adapter 安装与升级分开标识；手动文件选择收纳到详情；恢复失败持久展示、取消不报成功，配置损坏优先引导重建。对齐报告：§3 IPC Source Events 均存在（prefers-color-scheme 为浏览器媒体查询，非 IPC event）；§4.1 错误码全部存在于 ipc-contract §4；§4.2 result 名称均存在于蓝牙 V0.4 §3.6；§6~§8 仅修改工具链展示，主题字段未变；ADR/KAD 引用有效。 |
 | V1.35 | 2026-09-04 | §6.6/§7.6 移除设置页“连接安全”与“服务”分组，将 API 接口文档迁入“系统”并直接展示；系统项顺序统一为开机自启、外部运行环境、API 接口文档。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变且均存在于 ipc-contract §4；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增主题字段且与 theme-format 一致；ADR-0001~0006、KAD-01~14 引用有效。 |
 | V1.34 | 2026-09-04 | §6.5 新增 WorkBuddy IntegrationCard，沿用既有连接、确认安装、断开及无障碍契约；配置路径为 `~/.workbuddy/settings.json`。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~14 引用有效。 |
 | V1.33 | 2026-09-04 | §6.3 补充 Dashboard DeviceCard 长名称边界：名称最多两行并提供全文提示，连接状态与电量拆为独立元信息行，电量和导航箭头保持可见。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD 引用有效。 |

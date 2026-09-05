@@ -10,7 +10,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "node --test tests/battery-status.test.ts",
+    "test": "node --test tests/*.test.ts",
     "check": "ultracite check",
     "fix": "ultracite fix",
     "prepare": "husky",

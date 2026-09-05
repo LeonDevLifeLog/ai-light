@@ -12,6 +12,7 @@ import {
   RuntimeEnvironmentCard,
   toolchainStateCopy,
 } from "@/features/toolchain/runtime-environment";
+import { runtimeFailure } from "@/features/toolchain/runtime-state";
 import {
   api,
   asAppError,
@@ -157,6 +158,7 @@ export function IntegrationsPage() {
   >({});
   const [busy, setBusy] = useState<ToolId | null>(null);
   const [toolchain, setToolchain] = useState<ToolchainStatus | null>(null);
+  const [toolchainError, setToolchainError] = useState<string | null>(null);
   const [toolchainChecking, setToolchainChecking] = useState(true);
   // Adapter 缺失时：连接按钮变为「确认安装」前的内联确认态（设计方案 §8.2.4）
   const [confirmingTool, setConfirmingTool] = useState<ToolId | null>(null);
@@ -167,9 +169,10 @@ export function IntegrationsPage() {
       try {
         const status = await api.getToolchainStatus(force);
         setToolchain(status);
+        setToolchainError(null);
       } catch (error) {
         // 刷新失败不得吞掉错误伪装成"未连接"（设计方案 §12.2）
-        setToolchain(null);
+        setToolchainError(asAppError(error).message);
         notify({
           tone: "error",
           title: "无法获取运行环境状态",
@@ -217,6 +220,7 @@ export function IntegrationsPage() {
       // 连接前先检查运行环境（设计方案 §8.2.2）
       const status = await api.getToolchainStatus(true);
       setToolchain(status);
+      setToolchainError(null);
       if (
         status.state === "adapter_missing" ||
         status.state === "adapter_incompatible"
@@ -298,14 +302,13 @@ export function IntegrationsPage() {
     try {
       // 后端打开原生文件选择器并立即验证（设计方案 §7 / §8.2.7）
       const status = await api.selectExecutable(kind);
-      setToolchain(status);
-      notify({
-        tone: "success",
-        title: "运行环境已更新",
-        message: status.summary,
-      });
+      if (JSON.stringify(status) !== JSON.stringify(toolchain)) {
+        setToolchain(status);
+        setToolchainError(null);
+      }
+      // 取消选择返回当前状态：不发送可能误报的成功 Toast，结果由卡片持续展示。
     } catch (error) {
-      // 字段级验证错误即时提示，恢复卡保持内联（设计方案 §8.2.7）
+      setToolchainError(`所选路径不可用：${asAppError(error).message}`);
       notify({
         tone: "error",
         title: "所选路径不可用",
@@ -325,10 +328,12 @@ export function IntegrationsPage() {
     setToolchainChecking(true);
     try {
       setToolchain(await api.resetToolchainOverrides());
+      setToolchainError(null);
     } catch (error) {
+      setToolchainError(`改用自动检测失败：${asAppError(error).message}`);
       notify({
         tone: "error",
-        title: "恢复自动检测失败",
+        title: "改用自动检测失败",
         message: asAppError(error).message,
       });
     } finally {
@@ -336,6 +341,17 @@ export function IntegrationsPage() {
     }
   };
 
+  let environmentAnnouncement = "正在检查运行环境";
+  if (toolchain) {
+    environmentAnnouncement = `运行环境${toolchainStateCopy(toolchain.state).label}：${toolchain.summary}`;
+  }
+  const failure = runtimeFailure(toolchain, toolchainChecking, toolchainError);
+  if (failure) {
+    environmentAnnouncement = `运行环境操作失败：${failure}`;
+  }
+  if (toolchainChecking) {
+    environmentAnnouncement = "正在检查运行环境";
+  }
   const environmentReady = toolchain?.state === "ready";
 
   return (
@@ -345,12 +361,11 @@ export function IntegrationsPage() {
         title="接入外部工具"
       />
       <div aria-live="polite" className="visually-hidden">
-        {toolchain
-          ? `运行环境${toolchainStateCopy(toolchain.state).label}：${toolchain.summary}`
-          : "正在检查运行环境"}
+        {environmentAnnouncement}
       </div>
       <RuntimeEnvironmentCard
         checking={toolchainChecking}
+        error={toolchainError}
         onRefresh={() => runAsync(refreshToolchain(true))}
         onReset={() => runAsync(resetOverrides())}
         onSelect={({ kind }) => runAsync(selectExecutable(kind))}
