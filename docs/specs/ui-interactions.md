@@ -43,7 +43,7 @@
 
 | Event | Payload | 受影响的 UI | 实现状态 |
 |---|---|---|---|
-| `business-state-changed` | `{ state, source, session, sinceTs, theme }` | Dashboard 红绿灯徽章 + 状态名 + 副标题 | ✅ Rust 已 emit |
+| `business-state-changed` | `{ state, source, session, sinceTs, theme }` | Dashboard 主题灯效模拟 + 状态名 + 副标题 | ✅ Rust 已 emit |
 | `device-connection-changed` | `{ connected, address, name, reason?, reconnecting? }` | Dashboard 设备卡 + Sidebar 底部「已连接」状态 + Devices 页重连中卡 | ✅ 连接 / 断连 / 主动断开 / 忘记 / 重连放弃均已 emit（断连时清空电源字段） |
 | `device-power-changed` | `{ capabilityBits, batteryMv, batteryPercent, powerSource, chargeState, powerFlags }` | Dashboard 与 Devices 设备卡电量格 | ✅ 握手 GET_POWER_STATUS + POWER_CHANGED 主动事件均已 emit |
 | `device-fault` | `{ source, code, context }` | Devices 页告警卡 | ✅ FAULT_EVENT 已接线并 emit |
@@ -70,23 +70,14 @@
 
 ## 3. 状态总览（`/`）
 
-### 3.1 红绿灯徽章
+### 3.1 主题灯效模拟
 
-- **业务状态 → 灯位** 映射（V0.4 §7 + ADR-0002）：
-  | 状态 | 灯位 + 动画 |
-  |---|---|
-  | `IDLE` | 全灭 |
-  | `WORKING` | 绿灯 呼吸（2s 周期，ease-in-out）|
-  | `WAITING` | 黄灯 常亮 |
-  | `SUCCESS` | 绿灯 常亮 |
-  | `ERROR` | 红灯 闪烁（1Hz，0/49%-50/100%））|
-  | 自定义状态 | 主题映射；未映射 → 全灭（fallback IDLE）|
-
-- **朝向**（来自用户设置 `badgeOrientation`，默认 `horizontal`）：
-  - `horizontal`：3 灯位横排，灯心距 `var(--space-7)`（32px），灯径 40px
-  - `vertical`：3 灯位竖排，灯心距 `var(--space-5)`（20px），灯径 28px（紧凑）
-- **无障碍**：`prefers-reduced-motion: reduce` 时关闭呼吸/闪烁动画（仅颜色与文字标识）。
-- **色盲友好**：状态名 + 源标签永远可见（颜色不是唯一信号）。
+- Dashboard 读取当前 `activeTheme`，以 `business-state-changed.state` 查找 `states` 映射并渲染对应 SCENE；自定义状态未映射时使用 `IDLE`，`IDLE` 也不存在时全灭。
+- 三灯模拟与设备使用相同主题字段：`curve / low / high / brightness / period_ms / phase_deg / duty_percent / repeat / end_level / transition_ms`；有限重复结束后固定在 `OFF / LOW / HIGH`。
+- 三灯排列继续遵循 `badgeOrientation` 的横向 / 纵向设置；排列只改变软件布局，不改变设备 SCENE。
+- `hold_ms` 不由前端重复计时；Rust 仲裁到期回落 `IDLE` 后 emit `business-state-changed`，模拟灯与设备同时跟随，保持 Rust 唯一事实源（KAD-03）。
+- 设备未连接时软件模拟仍正常运行；该区域表达当前业务灯效，不伪装设备连接状态。
+- **无障碍**：`prefers-reduced-motion: reduce` 时停止逐帧动画并展示目标静态帧；状态名与来源标签永远可见（颜色不是唯一信号）。
 
 ### 3.2 状态名 + 副标题
 
@@ -294,7 +285,7 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 - 标题栏：仅放主题名称输入；专家入口不与主题身份混排
 - 标题栏字段命名为「主题标识」，说明其用于保存和导入，避免误解为可输入任意自然语言的展示名
 - 内置主题始终另存为用户主题，且不得与内置主题同名
-- 右侧始终有**软件动画预览**：按草稿真实曲线 / 周期 / 相位 / 亮度模拟三灯 + 蜂鸣，不依赖设备
+- 右侧始终有**软件动画预览**：与 Dashboard 复用同一模拟器，按草稿真实曲线 / 周期 / 相位 / 亮度 / 有限重复 / 终态 / 过渡模拟三灯；不播放声音，仅标注是否配置提示音，不依赖设备
 
 ### 7.2 一屏一状态
 
@@ -464,7 +455,7 @@ L1 hook_server
   ↓ emit business-state-changed
   ↓
 前端 Dashboard：
-  - 红绿灯徽章切换
+  - 主题灯效模拟切换到同一状态 SCENE
   - 状态名 + 副标题更新
   ↓
 设备端：
@@ -595,7 +586,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | U-05 | 托盘图标三平台差异 | P1（托盘实装后） |
 | U-08 | 开机自启三平台实机（mac LaunchAgent / win Run key / linux XDG） | P1（自启实装后） |
 | V2-2 | 接入密码 UI 重新评估 | V2 |
-| V2-3 | 主题编辑器加入波形实时动画预览 | V2 |
+| V2-3 | 主题编辑器波形实时动画预览 | ✅ 已实现（2026-09-08，与 Dashboard 复用协议模拟器） |
 | V2-4 | 设备详情页（电量历史 / 固件升级）| V2 |
 | V2-5 | 日志查看面板（应用内）| V2 |
 | V2-6 | 主题导入支持 URL / 分享码 | V2 |
@@ -624,19 +615,15 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 ---
 
-### A.2 §3.1 扩展：红绿灯徽章微交互
+### A.2 §3.1 扩展：主题灯效模拟微交互
 
 **朝向切换**：CSS transition 250ms ease-out（横→纵、纵→横过渡平滑）。
 
-**状态切换动画**：
-- 颜色变化：fade 200ms
-- 呼吸（WORKING）：2s 周期 ease-in-out infinite
-- 闪烁（ERROR）：1Hz 0/49%-50/100%）
-- 切换生效：`prefers-reduced-motion: reduce` 时关闭呼吸/闪烁动画（仅颜色与文字标识）
+**状态切换动画**：按当前状态映射的 `transition_ms` 从切换瞬间的 RGB 线性过渡；过渡后按每条灯轨自己的曲线、周期、相位、重复次数与结束电平运行。
 
-**离线态**：设备断开时，3 灯全暗 + opacity 0.4 + 文字提示 "设备离线"。
+**离线态**：设备断开不影响软件模拟；连接状态由设备卡表达。
 
-**联动**：`business-state-changed` → 立即更新；`device-connection-changed` → 切换离线态。
+**联动**：`business-state-changed` → 立即更新状态 SCENE；`theme-changed` → 重读主题并更新同一业务状态的 SCENE。
 
 ---
 
@@ -790,6 +777,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.45 | 2026-09-08 | §3.1 将固定业务色徽章替换为当前主题 SCENE 的实时三灯模拟；§7.1 主题编辑器复用同一模拟器，覆盖曲线、颜色、亮度、周期、相位、占空比、有限重复、结束电平与状态过渡，不播放音效；`hold_ms` 继续由 Rust 仲裁并通过状态事件驱动。同步关闭 V2-3。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Event `business-state-changed` 存在于 ipc-contract §5；§4.1 AppError.code 未变；§4.2 蓝牙 result code 未变；§6~§8 使用的主题字段均存在于 theme-format；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.44 | 2026-09-05 | §9/§11 新增低成本应用更新检测：6 小时缓存、启动静默检查、用户主动检查、GitHub API 与国内镜像容错、下载源探测及 Release 页面兜底；不自动安装、不引入 Tauri Updater 签名。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且与 ipc-contract §5 一致；§4.1 新增 `UPDATE_CHECK_FAILED` 并已同步 ipc-contract §4；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.43 | 2026-09-05 | §5 将 Adapter 完整状态从“已连接”改为“配置已写入”，新增写入后的工具专属下一步引导：Codex 手动信任新增 Hook、TraeCode 手动开启全局 Hook、Qoder 不增加额外操作、Claude Code 直接验证并以 `/hooks` 作为排错；统一以真实低风险任务作为生效验收。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且与 ipc-contract §5 一致；§4.1 未新增 AppError.code；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.42 | 2026-09-05 | §1/§5 新增 TraeCode 一键接入卡与 `~/.trae-cn/hooks.json` 原生全局配置；明确四态事件映射、顶层 Agent 身份边界、沙箱执行边界和不推断失败态。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且与 ipc-contract §5 一致；§4.1 未新增 AppError.code；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |

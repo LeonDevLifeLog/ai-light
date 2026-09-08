@@ -134,7 +134,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 | Source Event | 目标组件 | 同步字段 | 同步方式 |
 |---|---|---|---|
-| `business-state-changed` | `TrafficBadge` | `currentState` / `currentOrient` | patch |
+| `business-state-changed` | `StatusHero.SceneLightPreview` | `currentState` → 当前主题 SCENE | patch |
 | `business-state-changed` | `StatusHero.stateName` | `state.text` / `state.color` | patch |
 | `business-state-changed` | `StatusHero.stateSubtitle` | `state.subtitle` | patch |
 | `business-state-changed` | `Dashboard.DeviceCard.realtimeTag` | `source` / `sinceTs` | patch |
@@ -215,7 +215,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 | 配置变更 | 目标组件 | 同步字段 | 同步方式 |
 |---|---|---|---|
-| `badgeOrientation: 'horizontal'\|'vertical'` | `TrafficBadge.layout` | — | patch |
+| `badgeOrientation: 'horizontal'\|'vertical'` | `SceneLightPreview.orientation` | — | patch |
 | `badgeOrientation` 变更 | `Sidebar.trayMenu` 单选 | — | patch |
 | `autostart` 变更 | `Settings.autostartSwitch` | — | patch（先 OS 后 config，失败 `AUTOSTART_FAILED` 回滚） |
 | `themeMode` 变更 | `html[data-theme]` + `Settings.themeModeCards` 选中卡片 | — | patch（亮/暗/跟随系统；system 实时响应 `prefers-color-scheme`） |
@@ -414,7 +414,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 ```
 
 **UI 联动**：
-- 状态切换 → 立即触发 `business-state-changed` → TrafficBadge + StatusHero 联动（§3.1）
+- 状态切换 → 立即触发 `business-state-changed` → SceneLightPreview + StatusHero 联动（§3.1）
 - SUCCESS/ERROR 的 `hold_ms` 倒计时由后端管理，前端**不展示倒计时进度**（V2 评估）
 
 ### 5.4 主题编辑器模式
@@ -493,38 +493,39 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 ### 6.2 `StatusHero`
 
 **6.2.1 用途**
-Dashboard 顶部大卡：3 灯红绿灯徽章 + 状态名（大号 32px）+ 副标题（一行中文）。
+Dashboard 顶部大卡：当前主题三灯实时模拟 + 状态名（大号 32px）+ 副标题（一行中文）。
 
 **6.2.2 对外契约**
 
 | 类别 | 项 | 说明 |
 |---|---|---|
 | Props | `currentState` | `BusinessState`（IDLE/WORKING/WAITING/SUCCESS/ERROR/自定义） |
-| Props | `currentOrient` | `'horizontal' \| 'vertical'` |
+| 数据 | `activeTheme` | 读取完整主题并解析当前状态映射与 SCENE |
 | Props | `sinceTs` | number（毫秒时间戳） |
 | 订阅 | `business-state-changed` | 全部字段 |
-| 订阅 | `update_config.badgeOrientation` | `currentOrient` |
+| 订阅 | `theme-changed` | 重新读取当前主题 |
 
 **6.2.3 视觉态全集**
 
 | 态 | 触发条件 | 视觉 | 可交互 |
 |---|---|---|---|
-| `default` | 任意状态 | 3 灯按业务状态亮 / 灭 / 呼吸 / 闪烁 | 无 |
-| `disconnected` | 设备未连接 | 3 灯全暗 + opacity 0.4 + 文字 "设备离线" | 无 |
-| `reduced-motion` | 系统偏好 | 仅颜色变化，无呼吸/闪烁动画 | 无 |
+| `default` | 任意状态 | 3 灯按当前主题 SCENE 的曲线、周期、相位与亮度运行 | 无 |
+| `finite-ended` | `repeat > 0` 且周期用尽 | 固定在 `end_level` 对应的 OFF / LOW / HIGH | 无 |
+| `disconnected` | 设备未连接 | 软件模拟保持运行；设备连接状态由 DeviceCard 独立表达 | 无 |
+| `reduced-motion` | 系统偏好 | 停止逐帧动画，展示目标静态帧 | 无 |
 
 **6.2.4 联动矩阵**
 
 | Source Event | 字段 | 同步方式 |
 |---|---|---|
 | `business-state-changed` | `currentState` | patch |
-| `device-connection-changed` | `disconnected` 态切换 | toggle |
-| `update_config.badgeOrientation` | `currentOrient` | patch |
+| `theme-changed` | `activeTheme` / SCENE | full |
 
 **6.2.5 边界条件**
 - `currentState` 未在主题中映射 → 走 fallback IDLE（V0.4 §3）+ Toast（仅 /preview 触发时弹）
 - 自定义状态名长度 > 16 字符 → 截断 + tooltip
-- 朝向切换 250ms transition（CSS）
+- 状态切换按映射 `transition_ms` 从切换瞬间的当前 RGB 线性过渡到新轨道；`hold_ms` 仅跟随 Rust 仲裁回落事件，不在前端独立计时
+- 灯轨模拟字段为 `curve / low / high / brightness / period_ms / phase_deg / duty_percent / repeat / end_level`；声音不播放
 
 **6.2.6 无障碍**
 - 状态名 = `<h1>` + `aria-live="polite"`（业务状态变化时朗读）
@@ -940,7 +941,7 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 ```
 
 **联动**：
-- StandardStateButtonGroup 点击 → `trigger_state` → `business-state-changed` → TrafficBadge 联动（Dashboard 也会变）
+- StandardStateButtonGroup 点击 → `trigger_state` → `business-state-changed` → SceneLightPreview 联动（Dashboard 也会变）
 - CustomStateInput Enter 键 → 同点击 [触发]
 - CustomStateQuickList 点击 → 同上 + 同时把名字加入最近列表（FIFO）
 - DevicePreviewAction → `preview_scene`；设备未连接时禁用并由页面说明原因
@@ -1017,36 +1018,37 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 
 ---
 
-### 8.2 `TrafficBadge`（3 灯组合徽章 + 朝向）
+### 8.2 `SceneLightPreview`（主题三灯模拟 + 朝向）
 
 **8.2.1 用途**
-Dashboard StatusHero 内的红绿灯徽章；支持横排 / 竖排。
+Dashboard StatusHero 与 ThemeEditor 共用的主题 SCENE 模拟；Dashboard 支持横排 / 竖排，编辑器固定纵排。
 
 **8.2.2 对外契约**
 
 | 类别 | 项 | 说明 |
 |---|---|---|
-| Props | `state` | `BusinessState` |
-| Props | `orient` | `'horizontal' \| 'vertical'` |
-| 订阅 | `business-state-changed` | `state` |
-| 订阅 | `update_config.badgeOrientation` | `orient` |
+| Props | `scene` | 当前主题状态映射引用的 SCENE |
+| Props | `transitionMs` | 状态映射的 `transition_ms` |
+| Props | `orientation` | `'horizontal' \| 'vertical'` |
 
 **8.2.3 视觉态全集**
 
 | 态 | 触发条件 | 视觉 |
 |---|---|---|
-| `horizontal` | `orient == 'horizontal'` | 3 灯横排，灯心距 32px |
-| `vertical` | `orient == 'vertical'` | 3 灯竖排，灯心距 20px |
-| `disconnected` | 设备未连接 | 3 灯全 off + opacity 0.4 |
+| `horizontal` | `orientation == 'horizontal'` | 3 灯横排 |
+| `vertical` | `orientation == 'vertical'` | 3 灯竖排 |
+| `animated` | 持续或有限灯轨运行中 | 按 V0.4 §7.1~§7.4 逐帧采样 |
+| `finite-ended` | 有限灯轨周期耗尽 | 固定在 `end_level` |
 
 **8.2.4 联动矩阵**：见 §3.1
 
 **8.2.5 边界条件**
-- 朝向切换：CSS transition 250ms ease-out
+- `scene == null`：三灯暗；有限重复默认终态为 `OFF`
+- `prefers-reduced-motion: reduce`：停止逐帧动画并展示目标静态帧
 
 **8.2.6 无障碍**
-- 父 `<div role="status" aria-live="polite">`
-- 内部 3 灯 = 3 个 LightDot（各自 aria-label）
+- 父 `<div role="img" aria-label="当前主题三灯模拟">`
+- 顶 / 中 / 底标签与业务状态标题共同提供非颜色语义
 
 ---
 
@@ -1900,6 +1902,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.44 | 2026-09-08 | §3.1/§6.2 将 Dashboard 固定 `TrafficBadge` 替换为随 `business-state-changed` 和 `theme-changed` 更新的 `SceneLightPreview`；与主题编辑器共享 V0.4 曲线模拟，覆盖有限重复、结束电平和 `transition_ms`，声音仅作配置标记；`hold_ms` 保持 Rust 唯一事实源。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变且与 ipc-contract §4 一致；§4.2 result code 未变且与 V0.4 §3.6 一致；§6~§8 使用字段均存在于 theme-format；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.43 | 2026-09-05 | §6.6/§7.6 新增应用更新 SettingRow：启动延迟与缓存检查、手动检查、多元数据源竞争、国内镜像下载探测、Release 页面兜底；不自动安装。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 新增 `UPDATE_CHECK_FAILED` 并已同步 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.42 | 2026-09-05 | §6.5 将 IntegrationCard 的完整托管状态文案改为“配置已写入”，新增 `manual-step` / `ready-to-verify` 两类下一步区域：Codex 信任 Hook、TraeCode 开启全局 Hook、Qoder 无额外操作、Claude Code 直接验证；禁止把不可观测的第三方设置伪装为自动完成。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.41 | 2026-09-05 | §6.5 新增 TraeCode IntegrationCard，沿用既有连接、确认安装、断开及无障碍契约；配置路径为 `~/.trae-cn/hooks.json`，不依赖 Claude Hook 导入。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |

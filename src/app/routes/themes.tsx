@@ -19,7 +19,6 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
-  useRef,
   useState,
 } from "react";
 import { useAppState } from "@/app/app-context";
@@ -33,6 +32,7 @@ import {
   StatusTag,
   TrafficBadge,
 } from "@/components/app-ui";
+import { SceneLightPreview } from "@/components/scene-light-preview";
 import {
   api,
   asAppError,
@@ -138,7 +138,6 @@ const stateLabels: Record<
 };
 
 const customAccent = "#a78bfa";
-
 const HEX_COLOR_RE = /^#?([0-9a-f]{6})$/i;
 
 function speedTierOf(periodMs: number): "slow" | "medium" | "fast" {
@@ -149,73 +148,6 @@ function speedTierOf(periodMs: number): "slow" | "medium" | "fast" {
     return "medium";
   }
   return "fast";
-}
-
-function renderLightEl(
-  el: HTMLDivElement,
-  track: LedTrack | null,
-  now: number
-) {
-  if (!track) {
-    el.style.backgroundColor = "transparent";
-    el.style.boxShadow = "none";
-    el.style.opacity = "0.1";
-    return;
-  }
-  const rgb = trackRgbAt(track, now, 0) ?? [0, 0, 0];
-  const color = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-  el.style.backgroundColor = color;
-  el.style.boxShadow = `0 0 ${Math.max(8, (track.brightness ?? 0) * 0.45)}px ${color}`;
-  el.style.opacity = "1";
-}
-
-function renderBuzzEl(
-  el: HTMLDivElement,
-  buzzer: ThemeFile["scenes"][string]["buzzer"],
-  now: number
-) {
-  let active = false;
-  if (buzzer?.segments.length) {
-    const total = buzzer.segments.reduce(
-      (sum, segment) => sum + segment.duration_ms,
-      0
-    );
-    const loop =
-      buzzer.repeat && buzzer.repeat > 0 ? total * buzzer.repeat : total;
-    const at = now % (loop || total);
-    let cursor = 0;
-    for (const segment of buzzer.segments) {
-      if (at >= cursor && at < cursor + segment.duration_ms) {
-        active = segment.frequency_hz > 0;
-        break;
-      }
-      cursor += segment.duration_ms;
-    }
-  }
-  el.style.opacity = active ? "1" : "0.2";
-  el.style.transform = active ? "scaleY(1)" : "scaleY(0.35)";
-}
-
-/** 按协议 §7.2 的曲线函数计算 0~1 波形值（不含 SINE，V0.4 未实现）。 */
-function curveValue(
-  curve: LedTrack["curve"],
-  t: number,
-  dutyPercent: number
-): number {
-  switch (curve) {
-    case "CONSTANT":
-      return 1;
-    case "SQUARE":
-      return t < dutyPercent / 100 ? 1 : 0;
-    case "TRIANGLE":
-      return t < 0.5 ? 2 * t : 2 - 2 * t;
-    case "SAW_UP":
-      return t;
-    case "SAW_DOWN":
-      return 1 - t;
-    default:
-      return 1;
-  }
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -241,111 +173,6 @@ function rgbToHex(rgb: [number, number, number]): string {
 function darkenHex(hex: string, factor: number): string {
   const [r, g, b] = hexToRgb(hex);
   return rgbToHex([r * factor, g * factor, b * factor]);
-}
-
-/** 计算单条灯轨在某一时刻应显示的实际 RGB（协议 §7.1 的模拟实现）。 */
-function trackRgbAt(
-  track: LedTrack | null,
-  elapsedMs: number,
-  epochMs = 0
-): [number, number, number] | null {
-  if (!track) {
-    return null;
-  }
-  const high = hexToRgb(track.high);
-  const low = hexToRgb(track.low ?? "#000000");
-  const brightness = (track.brightness ?? 0) / 100;
-  if (track.curve === "CONSTANT" || !track.period_ms) {
-    return high.map((channel) => Math.round(channel * brightness)) as [
-      number,
-      number,
-      number,
-    ];
-  }
-  const period = track.period_ms;
-  const phaseMs = (period * (track.phase_deg ?? 0)) / 360;
-  const sceneTime = elapsedMs - epochMs;
-  const position = ((sceneTime + phaseMs) % period) / period;
-  const value = curveValue(track.curve, position, track.duty_percent ?? 50);
-  return [0, 1, 2].map((index) =>
-    Math.round(low[index] + (high[index] - low[index]) * value * brightness)
-  ) as [number, number, number];
-}
-
-/** 在软件端即时模拟三灯 + 蜂鸣动画，让"看得见"先行于"连设备"。 */
-function LivePreview({ scene }: { scene: ThemeFile["scenes"][string] | null }) {
-  const lightRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const buzzRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const reduceMotion = window.matchMedia?.(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-    const renderFrame = (now: number) => {
-      scene?.leds.forEach((track, index) => {
-        const el = lightRefs.current[index];
-        if (el) {
-          renderLightEl(el, track, now);
-        }
-      });
-      const buzzEl = buzzRef.current;
-      if (buzzEl) {
-        renderBuzzEl(buzzEl, scene?.buzzer, now);
-      }
-    };
-
-    const tick = (now: number) => {
-      renderFrame(now);
-      raf = requestAnimationFrame(tick);
-    };
-
-    let raf = 0;
-    if (reduceMotion) {
-      renderFrame(0);
-    } else {
-      raf = requestAnimationFrame(tick);
-    }
-    return () => cancelAnimationFrame(raf);
-  }, [scene]);
-
-  return (
-    <div className="te-preview">
-      <div
-        aria-label="三灯与蜂鸣预览"
-        className="te-preview__device"
-        role="img"
-      >
-        {["顶灯", "中灯", "底灯"].map((label, index) => {
-          const track = scene?.leds[index] ?? null;
-          return (
-            <div className="te-preview__light-wrap" key={label}>
-              <span className="te-preview__label">{label}</span>
-              <div
-                className="te-preview__light"
-                ref={(node) => {
-                  lightRefs.current[index] = node;
-                }}
-                style={{
-                  backgroundColor: track ? track.high : "transparent",
-                  opacity: track
-                    ? Math.max(0.08, (track.brightness ?? 70) / 100)
-                    : 0.1,
-                }}
-              />
-            </div>
-          );
-        })}
-      </div>
-      <div className="te-preview__buzz">
-        <div className="te-preview__buzz-bars" ref={buzzRef}>
-          <i />
-          <i />
-          <i />
-        </div>
-        <span>{scene?.buzzer?.segments.length ? "提示音已开启" : "无声"}</span>
-      </div>
-    </div>
-  );
 }
 
 function MotionGlyph({
@@ -1539,7 +1366,15 @@ function ThemeEditor({
                 {stateLabels[selectedState]?.title ?? selectedState}
               </strong>
             </div>
-            <LivePreview scene={scene} />
+            <div className="te-preview">
+              <SceneLightPreview
+                scene={scene}
+                transitionMs={mapping?.transition_ms}
+              />
+              <div className="te-preview__sound-note">
+                {scene?.buzzer?.segments.length ? "已配置提示音" : "无提示音"}
+              </div>
+            </div>
             {sceneReferences.length > 1 ? (
               <div className="te-shared te-shared--stage">
                 <span>{sceneReferences.length} 个状态共用</span>

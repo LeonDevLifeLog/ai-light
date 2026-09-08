@@ -1,4 +1,5 @@
 import { ArrowRight, Palette, Radio, Timer } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useAppState } from "@/app/app-context";
 import {
@@ -7,12 +8,15 @@ import {
   Skeleton,
   StatusTag,
   stateCopy,
-  TrafficBadge,
   themeDisplayName,
 } from "@/components/app-ui";
+import { SceneLightPreview } from "@/components/scene-light-preview";
+import { api, type ThemeFile } from "@/lib/ailight";
+import { runAsync } from "@/lib/utils";
 
 export function DashboardPage() {
   const { snapshot, config, loading } = useAppState();
+  const [theme, setTheme] = useState<ThemeFile | null>(null);
   const business = snapshot?.business;
   const copy = stateCopy(business?.state ?? "IDLE");
   const since = business?.sinceTs
@@ -21,6 +25,29 @@ export function DashboardPage() {
         minute: "2-digit",
       })
     : "—";
+
+  useEffect(() => {
+    if (!snapshot?.activeTheme) {
+      setTheme(null);
+      return;
+    }
+    setTheme(null);
+    let active = true;
+    runAsync(
+      api.getTheme(snapshot.activeTheme).then((json) => {
+        if (active) {
+          setTheme(JSON.parse(json) as ThemeFile);
+        }
+      })
+    );
+    return () => {
+      active = false;
+    };
+  }, [snapshot?.activeTheme]);
+
+  const mapping =
+    theme?.states[business?.state ?? "IDLE"] ?? theme?.states.IDLE;
+  const scene = mapping ? (theme?.scenes[mapping.scene] ?? null) : null;
 
   if (loading || !snapshot) {
     return (
@@ -41,9 +68,11 @@ export function DashboardPage() {
         <StatusTag tone="success">
           <span className="live-pip" /> 实时
         </StatusTag>
-        <TrafficBadge
-          orientation={config?.badgeOrientation ?? "horizontal"}
-          state={business?.state ?? "IDLE"}
+        <SceneLightPreview
+          className="status-hero__light-preview"
+          orientation={config?.badgeOrientation}
+          scene={scene}
+          transitionMs={mapping?.transition_ms}
         />
         <h1>{copy.title}</h1>
         <p>{copy.subtitle}</p>
