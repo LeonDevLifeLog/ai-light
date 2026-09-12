@@ -99,6 +99,7 @@ export function DashboardPage() {
             device={snapshot.device}
             name={snapshot.device.name}
             reconnecting={snapshot.device.reconnecting}
+            waitingForDevice={snapshot.device.waitingForDevice}
           />
         </Link>
         <Link

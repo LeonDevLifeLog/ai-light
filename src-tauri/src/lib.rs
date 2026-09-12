@@ -19,6 +19,7 @@ use ailight_core::{logging, theme};
 
 /// 应用级共享状态（KAD-03：Rust 唯一事实源）
 pub struct AppState {
+    pub _logging_guard: logging::LoggingGuard,
     pub shared: Arc<SharedState>,
     pub engine: Engine,
     pub device_io: Arc<DeviceIo>,
@@ -37,6 +38,26 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+fn cleanup_logs(log_dir: &std::path::Path, reason: &'static str) {
+    match logging::cleanup_retention(log_dir) {
+        Ok(report) => tracing::info!(
+            event = "log_retention_cleanup_completed",
+            reason,
+            scanned_files = report.scanned_files,
+            removed_files = report.removed_files,
+            removed_bytes = report.removed_bytes,
+            remaining_bytes = report.remaining_bytes,
+            "日志保留清理完成"
+        ),
+        Err(error) => tracing::warn!(
+            event = "log_retention_cleanup_failed",
+            reason,
+            %error,
+            "日志保留清理失败，不影响应用继续运行"
+        ),
+    }
 }
 
 pub fn run() {
@@ -66,7 +87,27 @@ pub fn run() {
 
             // 日志（KAD-05）
             let log_dir = storage::logs_dir().ok();
-            let _ = logging::init(log_dir.as_deref(), "info");
+            let log_level = if cfg!(debug_assertions) { "debug" } else { "info" };
+            let logging_guard = logging::init(log_dir.as_deref(), log_level)
+                .map_err(std::io::Error::other)?;
+            tracing::info!(
+                event = "app_starting",
+                version = env!("CARGO_PKG_VERSION"),
+                log_level,
+                file_logging = log_dir.is_some(),
+                launch_mode = if std::env::args().any(|arg| arg == "--autostart") { "autostart" } else { "manual" },
+                "AI-Light 启动"
+            );
+            if let Some(dir) = &log_dir {
+                cleanup_logs(dir, "startup");
+                let periodic_log_dir = dir.clone();
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(6 * 60 * 60)).await;
+                        cleanup_logs(&periodic_log_dir, "periodic");
+                    }
+                });
+            }
 
             // 配置加载（KAD-04）
             let legacy_config_dir = app.path().app_config_dir()?;
@@ -81,14 +122,16 @@ pub fn run() {
                 (AppConfig::default(), None)
             };
             if let Some(w) = warn {
-                eprintln!("config: {w}");
+                tracing::warn!(event = "config_load_degraded", warning = %w, "配置加载降级");
             }
+            tracing::info!(event = "config_loaded", active_theme = %config.active_theme, autostart = config.autostart, has_remembered_device = config.remembered_device.is_some(), "配置加载完成");
 
             // 共享状态 + 主题
             let shared = SharedState::new(env!("CARGO_PKG_VERSION"), now_ms);
             let theme = theme::load_builtin(&config.active_theme)
                 .or_else(|| theme::load_builtin("default"))
                 .expect("内置 default 主题必须合法");
+            tracing::info!(event = "theme_loaded", requested_theme = %config.active_theme, active_theme = %theme.theme.name, "启动主题加载完成");
             *shared.theme.write().unwrap() = Some(theme);
             *shared.theme_name.write().unwrap() = config.active_theme.clone();
             let runtime_token = if config.token.is_empty() {
@@ -140,11 +183,12 @@ pub fn run() {
                         config.autostart = os_enabled;
                     }
                 }
-                Err(e) => eprintln!("autostart 校准失败（保留本地缓存）: {e}"),
+                Err(e) => tracing::warn!(event = "autostart_reconcile_failed", error = %e, "开机自启校准失败，保留本地缓存"),
             }
 
             let preferred_port = DEFAULT_PORT;
             app.manage(AppState {
+                _logging_guard: logging_guard,
                 shared,
                 engine,
                 device_io,
@@ -188,12 +232,13 @@ pub fn run() {
                         }
                         tracing::info!("hook server 127.0.0.1:{port}");
                     }
-                    Err(e) => eprintln!("hook server 启动失败: {e}"),
+                    Err(e) => tracing::error!(event = "hook_server_start_failed", error = %e, "Hook Server 启动失败"),
                 }
             });
 
             // 托盘常驻（KAD-06）：图标 + 菜单 + 动态状态文字
             let tray_state = tray::init(app.handle())?;
+            tracing::info!(event = "tray_initialized", "托盘初始化完成");
             app.manage(tray_state);
             {
                 let app_state = app.state::<AppState>();
@@ -235,11 +280,12 @@ pub fn run() {
                                 serde_json::json!({
                                     "connected": false,
                                     "reconnecting": true,
+                                    "waitingForDevice": false,
                                     "address": dev.address.clone(),
                                     "name": dev.name.clone(),
                                 }),
                             );
-                            commands::spawn_reconnect(
+                            commands::spawn_startup_recovery(
                                 auto_handle,
                                 dev.address,
                                 dev.name,
@@ -251,11 +297,13 @@ pub fn run() {
                 }
             });
 
+            tracing::info!(event = "app_started", "AI-Light 初始化完成");
             Ok(())
         })
         .on_window_event(|window, event| {
             // 关窗 = 隐藏（KAD-06；托盘"退出"才是真退出）
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                tracing::info!(event = "window_hidden", window = %window.label(), reason = "close_requested", "窗口已隐藏到托盘");
                 api.prevent_close();
                 let _ = window.hide();
             }
@@ -294,12 +342,14 @@ pub fn run() {
         .run(|app, event| {
             // 启动即显示主窗口（产品形态：打开程序时窗口同时打开）
             if let tauri::RunEvent::Ready = event {
+                tracing::info!(event = "app_ready", "应用主循环就绪");
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.set_focus();
                 }
             }
             if let tauri::RunEvent::Exit = event {
+                tracing::info!(event = "app_exiting", "AI-Light 正在退出");
                 storage::remove_runtime();
             }
         });

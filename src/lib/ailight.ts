@@ -30,6 +30,8 @@ export interface DeviceState {
   powerSource: number | null;
   /** 断连后是否处于自动重连中（device-connection-changed 事件字段） */
   reconnecting: boolean;
+  /** 启动恢复是否已进入长期低频等待 */
+  waitingForDevice: boolean;
 }
 
 export interface BusinessState {
@@ -216,6 +218,7 @@ const mockSnapshot: AppSnapshot = {
     powerSource: null,
     chargeState: null,
     reconnecting: false,
+    waitingForDevice: false,
   },
   business: {
     state: "IDLE",

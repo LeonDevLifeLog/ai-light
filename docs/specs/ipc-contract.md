@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.3 |
-| 文档状态 | 生效；已增加应用更新多源网络命令（2026-09-05） |
+| 文档版本 | V1.4 |
+| 文档状态 | 生效；已增加启动期长期设备恢复状态（2026-09-12） |
 | 适用范围 | Rust Core ↔ 前端（React）的接口面；以及 config.json 存储格式 |
 | 架构依据 | KAD-03（Rust 唯一事实源 + events 推送）、ADR-0001/0002、hook-api V1.0、theme-format V1.0 |
 | 生效日期 | 2026-08-19 |
@@ -31,7 +31,7 @@
 {
   "service": { "version": "0.1.0", "port": 25679, "tokenEnabled": false },
   "device": {
-    "connected": false, "reconnecting": false,
+    "connected": false, "reconnecting": false, "waitingForDevice": false,
     "address": null, "name": null,
     "fwVersion": null, "hardwareVariant": null,
     "capabilityBits": null, "powerFlags": null,
@@ -47,7 +47,7 @@
 }
 ```
 
-> `device` 字段按能力位可缺省（无电池版无 battery 字段）；未连接时相关字段为 null。`reconnecting` 属于客户端连接生命周期快照，用于前端错过瞬时 event 后通过 `get_app_state` 自愈。
+> `device` 字段按能力位可缺省（无电池版无 battery 字段）；未连接时相关字段为 null。`reconnecting` 表示有限快速重连，`waitingForDevice` 表示启动恢复已进入长期低频等待；两者都属于 Rust 侧连接生命周期快照，且不得同时为 true。
 
 ### 2.2 主题域
 
@@ -201,7 +201,7 @@
 | 事件名 | 触发时机 | payload | 实现状态（2026-08-21） |
 |---|---|---|---|
 | `business-state-changed` | 仲裁结果变化（含 hold 回落） | `{ state, source, session, sinceTs, theme }`（`reset_outputs` 复位时仅携带 `state`，其余字段保持前端现值） | ✅ 已 emit |
-| `device-connection-changed` | 连接/断开（含断连宽限开始） | `{ connected, address, name, reason?, reconnecting? }`（`reason`：`link_lost` / `reconnect_failed` / `manual_disconnect` / `forgotten`） | ✅ 连接、断连、主动断开、忘记、重连放弃均已 emit |
+| `device-connection-changed` | 连接/断开/恢复阶段变化 | `{ connected, address, name, reason?, reconnecting?, waitingForDevice? }`（`reason`：`link_lost` / `reconnect_failed` / `startup_waiting` / `manual_disconnect` / `forgotten`） | ✅ 全部已 emit |
 | `device-power-changed` | POWER_CHANGED / 握手后首次查询 | `{ capabilityBits, batteryMv, batteryPercent, powerSource, chargeState, powerFlags }` | ✅ 握手 + 主动事件均已 emit |
 | `device-fault` | FAULT_EVENT | `{ source, code, context }` | ✅ 已 emit |
 | `theme-changed` | 主题切换生效 | `{ name }` | ✅ 已 emit |

@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.44 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.44，2026-09-05） |
+| 文档版本 | V1.47 |
+| 文档状态 | 生效；已增加启动期已记住设备长期恢复契约（V1.47，2026-09-12） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -44,7 +44,7 @@
 | Event | Payload | 受影响的 UI | 实现状态 |
 |---|---|---|---|
 | `business-state-changed` | `{ state, source, session, sinceTs, theme }` | Dashboard 主题灯效模拟 + 状态名 + 副标题 | ✅ Rust 已 emit |
-| `device-connection-changed` | `{ connected, address, name, reason?, reconnecting? }` | Dashboard 设备卡 + Sidebar 底部「已连接」状态 + Devices 页重连中卡 | ✅ 连接 / 断连 / 主动断开 / 忘记 / 重连放弃均已 emit（断连时清空电源字段） |
+| `device-connection-changed` | `{ connected, address, name, reason?, reconnecting?, waitingForDevice? }` | Dashboard 设备卡 + Sidebar 底部「已连接」状态 + Devices 页恢复状态 | ✅ 连接 / 断连 / 主动断开 / 忘记 / 重连放弃 / 启动长期等待均已 emit |
 | `device-power-changed` | `{ capabilityBits, batteryMv, batteryPercent, powerSource, chargeState, powerFlags }` | Dashboard 与 Devices 设备卡电量格 | ✅ 握手 GET_POWER_STATUS + POWER_CHANGED 主动事件均已 emit |
 | `device-fault` | `{ source, code, context }` | Devices 页告警卡 | ✅ FAULT_EVENT 已接线并 emit |
 | `theme-changed` | `{ name }` | Dashboard 主题卡 + Sidebar 底部「当前主题」 | ✅ Rust 已 emit |
@@ -152,6 +152,14 @@ UI 反馈：设备卡状态 tag 立即更新；失败显示 Toast（原因 + 重
 - 自动重连中显示 [停止重连] 与 [忘记设备]；旧退避任务通过连接代次校验退出，不得在用户操作后重新连回。
 - 成功分别 Toast「设备已断开」/「已忘记设备」；失败保留可恢复状态并显示原因。
 
+### 4.3.1 启动期已记住设备恢复
+
+- 应用启动时有 `rememberedDevice` 但设备不可用，先执行首次连接及 5 次快速退避重连。
+- 快速阶段失败后进入长期恢复：每 60～75 秒扫描并尝试一次，直到成功或用户主动取消。
+- 长期阶段的「我的设备」卡显示「等待设备上线」，不显示持续 spinner；保留 [停止等待] / [忘记设备]。
+- 进入长期阶段只显示一次中性 Toast「未发现设备，将在后台继续等待」；后续失败仅写日志，不反复打扰。
+- 用户主动断开、停止等待、忘记设备或连接另一设备后，旧恢复任务不得重新抢连。
+
 ### 4.4 故障告警
 
 > ✅ 实现状态：FAULT_EVENT (0xEF) 已接线，Rust 收到后 emit `device-fault`，Devices 页告警卡即可出现。
@@ -232,6 +240,8 @@ UI 事件流：business-state-changed → Dashboard 红绿灯变化
 - 6 张内置主题卡（默认 / 极简 / 专注 / 自然 / 极光 / 霓虹）
 - 主题卡含：主题名 + 中文描述 + 缩略图（3 灯条色块）+ [使用此主题] / [正在使用] 按钮；用户主题额外显示 [导出]、[删除]
 - 当前激活主题有外发光边框 + `当前使用` tag
+- 主题网格按可用容器宽度自动增减列数，卡片宽度以 280px 为基准；全屏不限制为固定三列，窄窗口退化为单列且不产生横向滚动
+- 用户主题操作区固定为两层：[使用此主题] 独占首行，[导出] / [删除] 在次行等分；所有操作始终收纳在卡片边界内
 
 ### 6.2 切换主题
 
@@ -667,6 +677,8 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 **断连宽限期**（V0.4 §13）：✅ 客户端链路已实现（断连监听 → `device-connection-changed{false, reason:"link_lost", reconnecting:true}` → 5 次退避重连，约 75s 窗口，期间已手动连接则放弃；放弃时 emit `reason:"reconnect_failed"`）；前端 `Reconnecting` 视觉态与断连/重连 Toast 已实装（2026-08-21）。
 
+**启动可用性恢复**（ADR-0007 / KAD-20）：启动快速阶段失败后 emit `device-connection-changed{connected:false, reconnecting:false, waitingForDevice:true, reason:"startup_waiting"}`，随后低频等待设备上线；这不延长运行中断线宽限期。
+
 | 时间窗口 | 设备侧行为 | UI 反馈 |
 |---|---|---|
 | 断开瞬间 | 当前 SCENE 继续运行 | Toast "设备已断开" + 设备卡 `Reconnecting` 态 |
@@ -777,6 +789,8 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.47 | 2026-09-12 | §4.3.1/A.4 新增启动期已记住设备长期恢复：首次连接与 5 次快速退避后转 60～75 秒低频等待，并与 V0.4 断连宽限期分离。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Event `device-connection-changed` 存在于 ipc-contract §5，新增 `waitingForDevice` / `startup_waiting` 已同步；§4.1 AppError.code 未变；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6～§8 未新增主题字段；ADR-0007、KAD-20 引用有效。 |
+| V1.46 | 2026-09-12 | §6.1 将主题中心从固定三列改为按容器宽度自适应网格；用户主题操作区改为主操作独占首行、导出与删除等分次行，避免窄卡片按钮越界。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且均存在于 ipc-contract §5；§4.1 AppError.code 未变且均存在于 ipc-contract §4；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增或修改主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.45 | 2026-09-08 | §3.1 将固定业务色徽章替换为当前主题 SCENE 的实时三灯模拟；§7.1 主题编辑器复用同一模拟器，覆盖曲线、颜色、亮度、周期、相位、占空比、有限重复、结束电平与状态过渡，不播放音效；`hold_ms` 继续由 Rust 仲裁并通过状态事件驱动。同步关闭 V2-3。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Event `business-state-changed` 存在于 ipc-contract §5；§4.1 AppError.code 未变；§4.2 蓝牙 result code 未变；§6~§8 使用的主题字段均存在于 theme-format；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.44 | 2026-09-05 | §9/§11 新增低成本应用更新检测：6 小时缓存、启动静默检查、用户主动检查、GitHub API 与国内镜像容错、下载源探测及 Release 页面兜底；不自动安装、不引入 Tauri Updater 签名。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且与 ipc-contract §5 一致；§4.1 新增 `UPDATE_CHECK_FAILED` 并已同步 ipc-contract §4；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.43 | 2026-09-05 | §5 将 Adapter 完整状态从“已连接”改为“配置已写入”，新增写入后的工具专属下一步引导：Codex 手动信任新增 Hook、TraeCode 手动开启全局 Hook、Qoder 不增加额外操作、Claude Code 直接验证并以 `/hooks` 作为排错；统一以真实低风险任务作为生效验收。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且与 ipc-contract §5 一致；§4.1 未新增 AppError.code；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |

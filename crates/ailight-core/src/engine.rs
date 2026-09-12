@@ -11,10 +11,11 @@
 use std::sync::Arc;
 
 use crate::arbiter::{ApplyOutcome, HookEvent};
-use crate::hook_server::SharedState;
+use crate::hook_server::{OutboundScene, SharedState};
 use crate::protocol::{self, OutputScene};
 use crate::theme;
 use crate::transport::{Transport, TransportError};
+use tracing::Instrument;
 
 /// outbound 通道容量（背压上限，KAD-07）
 const _OUTBOUND_CAPACITY: usize = 64;
@@ -49,7 +50,22 @@ pub fn process_event(
     session: Option<&str>,
     ts: Option<u64>,
 ) -> Result<bool, EngineError> {
+    process_event_with_signal(shared, source, state, session, ts, None)
+}
+
+/// 与 [`process_event`] 相同，但允许接入层传入已经生成的关联 ID。
+pub fn process_event_with_signal(
+    shared: &SharedState,
+    source: &str,
+    state: &str,
+    session: Option<&str>,
+    ts: Option<u64>,
+    signal_id: Option<&str>,
+) -> Result<bool, EngineError> {
     let now = (shared.now_ms)();
+    let signal_id = signal_id
+        .map(String::from)
+        .unwrap_or_else(|| shared.next_signal_id());
     // hold_ms 从主题查（ADR-0001 Q2）
     let hold_ms = {
         let guard = shared
@@ -66,15 +82,37 @@ pub fn process_event(
         session: session.map(String::from),
         ts_ms: ts.unwrap_or(now),
     };
-    let outcome = shared
+    let mut arbiter = shared
         .arbiter
         .write()
-        .map_err(|_| EngineError::State("arbiter 锁失败".into()))?
-        .apply(&ev, hold_ms, now);
+        .map_err(|_| EngineError::State("arbiter 锁失败".into()))?;
+    let previous = arbiter.current().clone();
+    let outcome = arbiter.apply(&ev, hold_ms, now);
     let applied = matches!(outcome, ApplyOutcome::Applied(_));
+    let current = arbiter.current().clone();
+    drop(arbiter);
     if applied {
         let scene = compile_current(shared)?;
-        shared.send_outbound(scene).map_err(EngineError::State)?;
+        tracing::info!(
+            event = "business_state_transition",
+            %signal_id,
+            source,
+            from_state = %previous.state,
+            to_state = %current.state,
+            hold_ms = hold_ms.unwrap_or(0),
+            reason = "signal",
+            "业务状态已切换"
+        );
+        tracing::debug!(event = "scene_compiled", %signal_id, state, "状态已映射为 SCENE");
+        shared
+            .send_outbound(OutboundScene {
+                scene,
+                signal_id,
+                state: state.to_string(),
+            })
+            .map_err(EngineError::State)?;
+    } else {
+        tracing::debug!(event = "business_state_unchanged", %signal_id, source, state, reason = "idempotent", "业务状态未变化");
     }
     Ok(applied)
 }
@@ -99,7 +137,15 @@ pub fn compile_current(shared: &SharedState) -> Result<OutputScene, EngineError>
     match theme {
         Some(t) => match theme::compile_state(&t, &state) {
             Ok(scene) => Ok(scene),
-            Err(theme::ThemeError::StateNotFound(_)) => Ok(OutputScene::none()),
+            Err(theme::ThemeError::StateNotFound(_)) => {
+                tracing::warn!(
+                    event = "theme_state_unmapped",
+                    state,
+                    fallback = "outputs_off",
+                    "主题未映射当前状态"
+                );
+                Ok(OutputScene::none())
+            }
             Err(e) => Err(EngineError::Theme(e)),
         },
         None => Ok(OutputScene::none()),
@@ -132,10 +178,21 @@ impl Engine {
         let task_transport = transport.clone();
         let mut rx = shared.outbound_rx();
         tokio::spawn(async move {
-            while let Some(scene) = rx.recv().await {
+            while let Some(outbound) = rx.recv().await {
                 // 单 writer 队列内串行下发（协议 §15.6）
-                if let Err(e) = transport_set_scene(&task_transport, &scene).await {
-                    tracing::error!("SCENE 下发失败: {e}");
+                tracing::debug!(event = "scene_dispatch_started", signal_id = %outbound.signal_id, state = %outbound.state, "开始下发 SCENE");
+                let span = tracing::info_span!(
+                    "scene_dispatch",
+                    signal_id = %outbound.signal_id,
+                    state = %outbound.state
+                );
+                if let Err(e) = transport_set_scene(&task_transport, &outbound.scene)
+                    .instrument(span)
+                    .await
+                {
+                    tracing::error!(event = "scene_dispatch_failed", signal_id = %outbound.signal_id, state = %outbound.state, error = %e, "SCENE 下发失败");
+                } else {
+                    tracing::info!(event = "scene_dispatch_completed", signal_id = %outbound.signal_id, state = %outbound.state, "SCENE 下发完成");
                 }
             }
         });
@@ -144,13 +201,27 @@ impl Engine {
 
     /// 断线重连对齐：重发当前业务 SCENE（APPLY_IF_CHANGED 幂等，协议 §15.5）
     pub async fn resync(&self) -> Result<(), EngineError> {
+        tracing::info!(
+            event = "device_scene_resync_started",
+            "开始对齐设备当前灯效"
+        );
         let scene = compile_current(&self.shared)?;
         transport_set_scene(&self.transport, &scene).await?;
+        tracing::info!(
+            event = "device_scene_resync_completed",
+            "设备当前灯效对齐完成"
+        );
         Ok(())
     }
 
     /// 试听：RESTART_SCENE 语义强制重播指定状态的 SCENE（不改变业务状态，ipc-contract §2.4）
     pub async fn preview(&self, state: &str, _theme_name: Option<&str>) -> Result<(), EngineError> {
+        tracing::info!(
+            event = "scene_preview_started",
+            state,
+            draft = false,
+            "开始试听灯效"
+        );
         let theme = {
             let guard = self
                 .shared
@@ -163,6 +234,12 @@ impl Engine {
         let mut scene = theme::compile_state(&t, state).map_err(EngineError::Theme)?;
         scene.apply_mode = protocol::RESTART_SCENE;
         transport_set_scene(&self.transport, &scene).await?;
+        tracing::info!(
+            event = "scene_preview_completed",
+            state,
+            draft = false,
+            "灯效试听完成"
+        );
         Ok(())
     }
 
@@ -172,26 +249,49 @@ impl Engine {
         draft: &theme::ThemeFile,
         state: &str,
     ) -> Result<(), EngineError> {
+        tracing::info!(
+            event = "scene_preview_started",
+            state,
+            draft = true,
+            "开始试听主题草稿"
+        );
         theme::validate(draft).map_err(EngineError::Theme)?;
         let mut scene = theme::compile_state(draft, state).map_err(EngineError::Theme)?;
         scene.apply_mode = protocol::RESTART_SCENE;
         transport_set_scene(&self.transport, &scene).await?;
+        tracing::info!(
+            event = "scene_preview_completed",
+            state,
+            draft = true,
+            "主题草稿试听完成"
+        );
         Ok(())
     }
 
     /// 复位：RESET_OUTPUTS + 业务状态回 IDLE（ipc-contract §2.4 联动）
     pub async fn reset(&self) -> Result<(), EngineError> {
         let now = (self.shared.now_ms)();
-        self.shared
-            .arbiter
-            .write()
-            .map_err(|_| EngineError::State("arbiter 锁失败".into()))?
-            .reset(now);
+        let previous = {
+            let mut arbiter = self
+                .shared
+                .arbiter
+                .write()
+                .map_err(|_| EngineError::State("arbiter 锁失败".into()))?;
+            let previous = arbiter.current().clone();
+            arbiter.reset(now);
+            previous
+        };
+        tracing::info!(event = "outputs_reset_started", from_state = %previous.state, to_state = "IDLE", reason = "manual_reset", "开始复位设备输出");
         self.transport
             .reset_outputs()
             .await
-            .map(|_| ())
-            .map_err(EngineError::Transport)
+            .map_err(EngineError::Transport)?;
+        tracing::info!(
+            event = "outputs_reset_completed",
+            to_state = "IDLE",
+            "设备输出复位完成"
+        );
+        Ok(())
     }
 }
 
@@ -220,7 +320,7 @@ async fn transport_set_scene(
     let rc = protocol::parse_set_scene_response(&frame.data);
     if let Ok((rc, _)) = rc {
         if rc != protocol::ResultCode::Ok {
-            tracing::warn!(?wire_scene, "SET_SCENE 被设备拒绝: {rc}");
+            tracing::warn!(event = "scene_rejected", result_code = %rc, "SET_SCENE 被设备拒绝");
         }
     }
     Ok(())

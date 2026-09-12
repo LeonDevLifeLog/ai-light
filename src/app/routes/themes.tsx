@@ -1669,7 +1669,9 @@ export function ThemesPage() {
     );
   } else {
     themeContent = (
-      <div className="theme-layout">
+      <div
+        className={`theme-layout ${selectedTheme ? "theme-layout--with-detail" : ""}`}
+      >
         <div className="theme-grid">
           {themes.map((theme, index) => (
             <ThemeCardItem
@@ -1717,7 +1719,7 @@ export function ThemesPage() {
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack page-stack--themes">
       <PageHeader
         actions={
           <>

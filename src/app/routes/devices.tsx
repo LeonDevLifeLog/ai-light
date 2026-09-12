@@ -71,7 +71,8 @@ function sortNearbyDevices(
 function connectionStatus(
   connected: boolean,
   connecting: boolean,
-  reconnecting: boolean
+  reconnecting: boolean,
+  waitingForDevice: boolean
 ) {
   if (connected) {
     return { label: "连接正常", tone: "success" as const };
@@ -81,6 +82,9 @@ function connectionStatus(
   }
   if (reconnecting) {
     return { label: "正在重连", tone: "warning" as const };
+  }
+  if (waitingForDevice) {
+    return { label: "等待设备上线", tone: "neutral" as const };
   }
   return { label: "未连接", tone: "neutral" as const };
 }
@@ -102,6 +106,7 @@ function ManagedDeviceCard({
   onDisconnect,
   onForget,
   reconnecting,
+  waitingForDevice,
 }: {
   connected: boolean;
   connecting: boolean;
@@ -112,10 +117,23 @@ function ManagedDeviceCard({
   onDisconnect: () => void;
   onForget: () => void;
   reconnecting: boolean;
+  waitingForDevice: boolean;
 }) {
-  const status = connectionStatus(connected, connecting, reconnecting);
+  const status = connectionStatus(
+    connected,
+    connecting,
+    reconnecting,
+    waitingForDevice
+  );
   const detail = (value: string | number | null) =>
     connected ? (value ?? "—") : "—";
+  let disconnectLabel = "断开连接";
+  if (reconnecting) {
+    disconnectLabel = "停止重连";
+  }
+  if (waitingForDevice) {
+    disconnectLabel = "停止等待";
+  }
 
   return (
     <section aria-labelledby="my-device-title">
@@ -173,14 +191,14 @@ function ManagedDeviceCard({
             </div>
           </dl>
           <div className="device-actions">
-            {connected || reconnecting ? (
+            {connected || reconnecting || waitingForDevice ? (
               <ActionButton
                 busy={deviceAction === "disconnect"}
                 disabled={deviceAction !== null || connecting}
                 onClick={onDisconnect}
               >
                 <Unplug aria-hidden="true" size={16} />
-                {reconnecting ? "停止重连" : "断开连接"}
+                {disconnectLabel}
               </ActionButton>
             ) : (
               <ActionButton
@@ -427,6 +445,7 @@ export function DevicesPage() {
           onDisconnect={() => runAsync(disconnect())}
           onForget={() => setConfirmForget(true)}
           reconnecting={snapshot.device.reconnecting}
+          waitingForDevice={snapshot.device.waitingForDevice}
         />
       ) : null}
 
