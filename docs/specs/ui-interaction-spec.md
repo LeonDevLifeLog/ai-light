@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.43 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.43，2026-09-05） |
+| 文档版本 | V1.45 |
+| 文档状态 | 生效；已按代码实现状态对账（V1.45，2026-09-12） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -641,6 +641,8 @@ Dashboard 主题卡 + Themes 页主题网格卡：3 灯条色块缩略 + 主题�
 - 内置主题不渲染删除控件，后端仍强制返回 `THEME_BUILTIN`
 - 删除当前用户主题 → Dialog 明示自动切换 `default`；成功后关闭对应详情
 - `previewColors` 缺失 → 显示默认 3 灰块
+- ThemeGrid 使用以 280px 卡片宽度为基准的自适应列数；全屏不固定为三列，容器不足时逐级减少到单列且不得横向溢出
+- 用户主题操作区中应用按钮独占首行，导出与删除按钮在次行等分；按钮文字、loading 态及禁用态均不得突破卡片边界
 
 **6.4.6 无障碍**
 - 卡片 = `<button>`（整卡可点）+ `aria-pressed="isActive"`
@@ -883,7 +885,7 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 │ 标题 + [编辑当前主题]    │
 │ 标题 + [导入新主题]      │
 ├─────────────────────────┤
-│       ThemeGrid         │ 3 列网格
+│       ThemeGrid         │ 按容器宽度自适应列数
 ├─────────────────────────┤
 │    ThemeDetailPanel     │ （V2）选中主题时展开
 ├─────────────────────────┤
@@ -1902,6 +1904,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.45 | 2026-09-12 | §6.4/§7.3 将 ThemeGrid 从固定三列改为以 280px 卡片宽度为基准的自适应列数；用户主题操作区改为应用按钮独占首行、导出与删除等分次行，保证按钮在卡片内。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且均存在于 ipc-contract §5；§4.1 AppError.code 未变且均存在于 ipc-contract §4；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增或修改主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.44 | 2026-09-08 | §3.1/§6.2 将 Dashboard 固定 `TrafficBadge` 替换为随 `business-state-changed` 和 `theme-changed` 更新的 `SceneLightPreview`；与主题编辑器共享 V0.4 曲线模拟，覆盖有限重复、结束电平和 `transition_ms`，声音仅作配置标记；`hold_ms` 保持 Rust 唯一事实源。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变且与 ipc-contract §4 一致；§4.2 result code 未变且与 V0.4 §3.6 一致；§6~§8 使用字段均存在于 theme-format；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.43 | 2026-09-05 | §6.6/§7.6 新增应用更新 SettingRow：启动延迟与缓存检查、手动检查、多元数据源竞争、国内镜像下载探测、Release 页面兜底；不自动安装。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 新增 `UPDATE_CHECK_FAILED` 并已同步 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.42 | 2026-09-05 | §6.5 将 IntegrationCard 的完整托管状态文案改为“配置已写入”，新增 `manual-step` / `ready-to-verify` 两类下一步区域：Codex 信任 Hook、TraeCode 开启全局 Hook、Qoder 无额外操作、Claude Code 直接验证；禁止把不可观测的第三方设置伪装为自动完成。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
