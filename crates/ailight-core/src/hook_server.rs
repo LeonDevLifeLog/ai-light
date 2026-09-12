@@ -6,6 +6,7 @@
 //! - 仅监听 127.0.0.1；默认端口 25679，启动占用时向后退避；可选 Bearer token
 
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 
 use axum::extract::State;
@@ -129,9 +130,18 @@ pub struct SharedState {
     pub token: RwLock<Option<String>>,
     pub port: RwLock<u16>,
     pub now_ms: Box<dyn Fn() -> u64 + Send + Sync>,
+    signal_sequence: AtomicU64,
     /// 编译后的 SCENE 出站队列（Engine 后台任务消费下发）
-    outbound: mpsc::UnboundedSender<OutputScene>,
-    outbound_rx_slot: RwLock<Option<mpsc::UnboundedReceiver<OutputScene>>>,
+    outbound: mpsc::UnboundedSender<OutboundScene>,
+    outbound_rx_slot: RwLock<Option<mpsc::UnboundedReceiver<OutboundScene>>>,
+}
+
+/// 已完成仲裁和主题编译、等待设备下发的场景。
+#[derive(Debug)]
+pub struct OutboundScene {
+    pub scene: OutputScene,
+    pub signal_id: String,
+    pub state: String,
 }
 
 impl SharedState {
@@ -147,13 +157,14 @@ impl SharedState {
             token: RwLock::new(None),
             port: RwLock::new(DEFAULT_PORT),
             now_ms: Box::new(now_ms),
+            signal_sequence: AtomicU64::new(0),
             outbound: outbound_tx,
             outbound_rx_slot: RwLock::new(Some(outbound_rx)),
         })
     }
 
     /// 取出 outbound 消费端（仅一次；由 Engine 调用）
-    pub fn outbound_rx(&self) -> mpsc::UnboundedReceiver<OutputScene> {
+    pub fn outbound_rx(&self) -> mpsc::UnboundedReceiver<OutboundScene> {
         self.outbound_rx_slot
             .write()
             .ok()
@@ -162,16 +173,32 @@ impl SharedState {
     }
 
     /// 投递一个编译后的 SCENE 到出站队列
-    pub fn send_outbound(&self, scene: OutputScene) -> Result<(), String> {
+    pub fn send_outbound(&self, outbound: OutboundScene) -> Result<(), String> {
         self.outbound
-            .send(scene)
+            .send(outbound)
             .map_err(|_| "outbound 队列已关闭".into())
+    }
+
+    pub fn next_signal_id(&self) -> String {
+        let sequence = self.signal_sequence.fetch_add(1, Ordering::Relaxed) + 1;
+        format!("sig-{:x}-{sequence:x}", (self.now_ms)())
     }
 
     /// 由调用方驱动驻留回落（tick），返回是否发生了回落
     pub fn tick(&self) -> Option<crate::arbiter::BusinessState> {
         let now = (self.now_ms)();
-        self.arbiter.write().ok()?.tick(now)
+        let mut arbiter = self.arbiter.write().ok()?;
+        let previous = arbiter.current().clone();
+        let current = arbiter.tick(now)?;
+        tracing::info!(
+            event = "business_state_transition",
+            from_state = %previous.state,
+            to_state = %current.state,
+            source = previous.source.as_deref().unwrap_or("none"),
+            reason = "hold_expired",
+            "业务状态驻留到期"
+        );
+        Some(current)
     }
 }
 
@@ -349,6 +376,17 @@ async fn hook_handler(
     headers: HeaderMap,
     Json(req): Json<HookRequest>,
 ) -> Result<Json<HookResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let signal_id = state.next_signal_id();
+    tracing::info!(
+        event = "hook_signal_received",
+        %signal_id,
+        source = %req.source,
+        signal_event = %req.event,
+        state = %req.state,
+        has_session = req.session.is_some(),
+        client_ts_ms = req.ts,
+        "收到 Hook 信号"
+    );
     // token 校验（hook-api §7）
     if let Some(expected) = state.token.read().map(|t| t.clone()).unwrap_or(None) {
         let provided = headers
@@ -357,6 +395,7 @@ async fn hook_handler(
             .and_then(|v| v.strip_prefix("Bearer "))
             .unwrap_or("");
         if provided != expected {
+            tracing::warn!(event = "hook_signal_rejected", %signal_id, reason = "unauthorized", "Hook 信号被拒绝");
             return Err((
                 StatusCode::UNAUTHORIZED,
                 Json(ErrorResponse {
@@ -370,12 +409,14 @@ async fn hook_handler(
 
     // 事件类型：当前仅 state_change（hook-api §3.1，V2 扩展 direct_scene）
     if req.event != "state_change" {
+        tracing::warn!(event = "hook_signal_rejected", %signal_id, reason = "unsupported_event", signal_event = %req.event, "Hook 信号被拒绝");
         return Err(err(
             "INVALID_REQUEST",
             format!("event 不支持: {}", req.event),
         ));
     }
     if !valid_name(&req.source) || !valid_name(&req.state) {
+        tracing::warn!(event = "hook_signal_rejected", %signal_id, reason = "invalid_name", "Hook 信号被拒绝");
         return Err(err(
             "INVALID_REQUEST",
             "source/state 命名非法（允许字母数字_-，≤64）",
@@ -383,14 +424,20 @@ async fn hook_handler(
     }
 
     // 仲裁 + 编译 + 入出站队列（engine 后台任务下发）
-    let applied = engine::process_event(
+    let applied = engine::process_event_with_signal(
         &state,
         &req.source,
         &req.state,
         req.session.as_deref(),
         req.ts,
+        Some(&signal_id),
     )
-    .map_err(|e| err("INTERNAL_ERROR", e.to_string()))?;
+    .map_err(|e| {
+        tracing::error!(event = "hook_signal_failed", %signal_id, error = %e, "Hook 信号处理失败");
+        err("INTERNAL_ERROR", e.to_string())
+    })?;
+
+    tracing::info!(event = "hook_signal_accepted", %signal_id, applied, "Hook 信号处理完成");
 
     Ok(Json(HookResponse {
         ok: true,
@@ -483,10 +530,15 @@ pub async fn serve_on(state: Arc<SharedState>, port: u16) -> Result<HookServer, 
         .map_err(|e| format!("端口 {port} 无法使用: {e}"))?;
     let handle = tokio::spawn(async move {
         if let Err(e) = axum::serve(listener, app).await {
-            tracing::error!("hook server 异常退出: {e}");
+            tracing::error!(event = "hook_server_failed", port, error = %e, "Hook Server 异常退出");
         }
     });
-    tracing::info!("hook server 监听 127.0.0.1:{port}");
+    tracing::info!(
+        event = "hook_server_started",
+        port,
+        bind = "127.0.0.1",
+        "Hook Server 开始监听"
+    );
     Ok(HookServer { port, handle })
 }
 
@@ -496,7 +548,9 @@ pub async fn serve(state: Arc<SharedState>, preferred: u16) -> Result<HookServer
     for port in preferred..=last {
         match serve_on(state.clone(), port).await {
             Ok(server) => return Ok(server),
-            Err(e) => tracing::warn!("{e}，尝试下一端口"),
+            Err(e) => {
+                tracing::warn!(event = "hook_server_port_fallback", port, error = %e, "端口不可用，尝试下一端口")
+            }
         }
     }
     Err(format!("端口 {preferred}~{last} 全部被占用"))

@@ -135,6 +135,14 @@ async fn execute_transaction(
     let mut retries: u8 = 0;
     loop {
         let frame = protocol::build_frame(out.cmd, seq, &out.data);
+        tracing::debug!(
+            event = "ble_command_sent",
+            cmd = format_args!("0x{:02X}", out.cmd),
+            seq,
+            attempt = retries + 1,
+            payload_len = out.data.len(),
+            "发送 BLE 命令"
+        );
         io.write(frame).await.map_err(TransportError::Io)?;
 
         match timeout(
@@ -143,19 +151,39 @@ async fn execute_transaction(
         )
         .await
         {
-            Ok(Ok(frame)) => return Ok(frame),
+            Ok(Ok(frame)) => {
+                tracing::debug!(
+                    event = "ble_command_acknowledged",
+                    cmd = format_args!("0x{:02X}", out.cmd),
+                    seq,
+                    retries,
+                    "收到 BLE 命令应答"
+                );
+                return Ok(frame);
+            }
             Ok(Err(e)) => return Err(e),
             Err(_) => {
                 // 超时：保持原序列号重发（协议 §3.5）
                 if retries >= protocol::MAX_RETRIES {
-                    tracing::warn!("命令 0x{:02X} seq={seq} 应答超时，重试耗尽", out.cmd);
+                    tracing::warn!(
+                        event = "ble_command_failed",
+                        cmd = format_args!("0x{:02X}", out.cmd),
+                        seq,
+                        retries,
+                        reason = "timeout",
+                        "BLE 命令重试耗尽"
+                    );
                     return Err(TransportError::Timeout);
                 }
                 retries += 1;
                 tracing::warn!(
-                    "命令 0x{:02X} seq={seq} 应答超时，第 {retries}/{} 次重发",
-                    out.cmd,
-                    protocol::MAX_RETRIES
+                    event = "ble_command_retry",
+                    cmd = format_args!("0x{:02X}", out.cmd),
+                    seq,
+                    retries,
+                    max_retries = protocol::MAX_RETRIES,
+                    reason = "timeout",
+                    "BLE 命令应答超时，准备重发"
                 );
             }
         }

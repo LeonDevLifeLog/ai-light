@@ -602,6 +602,12 @@ pub fn get_theme(app: AppHandle, name: String) -> CmdResult<String> {
 #[tauri::command]
 pub fn set_active_theme(app: AppHandle, name: String) -> CmdResult<()> {
     let s = shared(&app);
+    let previous = s
+        .theme_name
+        .read()
+        .map(|value| value.clone())
+        .unwrap_or_default();
+    tracing::info!(event = "theme_change_requested", from_theme = %previous, to_theme = %name, "请求切换主题");
     // 校验主题存在且合法
     let theme = resolve_theme(&app, &name).map_err(|e| err("THEME_INVALID", e))?;
     *s.theme.write().map_err(|_| internal("theme 锁"))? = Some(theme);
@@ -612,6 +618,7 @@ pub fn set_active_theme(app: AppHandle, name: String) -> CmdResult<()> {
     persist_active_theme(&app, &name)?;
     let _ = app.emit("theme-changed", serde_json::json!({ "name": name }));
     crate::tray::update_theme(&app, &name);
+    tracing::info!(event = "theme_changed", from_theme = %previous, to_theme = %name, "主题切换完成");
     // 当前业务非 IDLE → 用新主题重放（幂等对齐，ipc-contract §2.2 副作用）
     let state_now = s
         .arbiter
@@ -621,8 +628,20 @@ pub fn set_active_theme(app: AppHandle, name: String) -> CmdResult<()> {
     if state_now != ST_IDLE {
         let s2 = s.clone();
         tauri::async_runtime::spawn(async move {
-            let _ = engine::compile_current(&s2)
-                .and_then(|scene| s2.send_outbound(scene).map_err(EngineError::State));
+            let signal_id = s2.next_signal_id();
+            let state = s2
+                .arbiter
+                .read()
+                .map(|guard| guard.current().state.clone())
+                .unwrap_or_else(|_| "UNKNOWN".into());
+            let _ = engine::compile_current(&s2).and_then(|scene| {
+                s2.send_outbound(ailight_core::hook_server::OutboundScene {
+                    scene,
+                    signal_id,
+                    state,
+                })
+                .map_err(EngineError::State)
+            });
         });
     }
     Ok(())
@@ -639,6 +658,7 @@ pub fn import_theme(app: AppHandle, content: String) -> CmdResult<String> {
     let dir = user_theme_dir(&app).map_err(internal)?;
     std::fs::create_dir_all(&dir).map_err(internal)?;
     std::fs::write(dir.join(format!("{name}.ailight-theme.json")), content).map_err(internal)?;
+    tracing::info!(event = "theme_imported", theme = %name, "用户主题导入完成");
     Ok(name)
 }
 
@@ -735,6 +755,7 @@ pub fn delete_theme(app: AppHandle, name: String) -> CmdResult<serde_json::Value
         }
         return Err(internal(error));
     }
+    tracing::info!(event = "theme_deleted", theme = %name, was_active = is_active, "用户主题删除完成");
     Ok(serde_json::json!({ "ok": true }))
 }
 
@@ -742,9 +763,21 @@ pub fn delete_theme(app: AppHandle, name: String) -> CmdResult<serde_json::Value
 
 #[tauri::command]
 pub async fn scan_devices(_app: AppHandle) -> CmdResult<Vec<BleDeviceInfo>> {
+    tracing::info!(
+        event = "ble_scan_started",
+        duration_seconds = 5,
+        "开始扫描状态灯"
+    );
     let adapter = ble::default_adapter().await.map_err(internal)?;
     // recognized（广播名前缀，协议 §2.1）由 ble::scan 计算；服务 UUID 识别在连接后
-    ble::scan(&adapter, 5).await.map_err(internal)
+    let devices = ble::scan(&adapter, 5).await.map_err(internal)?;
+    tracing::info!(
+        event = "ble_scan_completed",
+        discovered = devices.len(),
+        recognized = devices.iter().filter(|device| device.recognized).count(),
+        "状态灯扫描完成"
+    );
+    Ok(devices)
 }
 
 /// 连接设备（供 command 与启动自动连接共用）
@@ -876,6 +909,17 @@ pub(crate) async fn attach_device(
     *state.active_ble.lock().await = Some(ble_io);
     // 重连对齐：重发当前业务 SCENE（协议 §15.5）
     state.engine.resync().await.map_err(|e| e.to_string())?;
+
+    tracing::info!(
+        event = "device_connected",
+        address = %address,
+        device_name = %name,
+        generation,
+        firmware = ?handshake.device_info.fw,
+        hardware_variant = handshake.device_info.hardware_variant,
+        capability_bits = handshake.capabilities.capability_bits,
+        "设备连接与状态对齐完成"
+    );
 
     if let Some(rx) = events_rx {
         spawn_device_event_loop(app.clone(), rx, address, name, generation);
@@ -1085,13 +1129,24 @@ fn emit_disconnected(app: &AppHandle, reason: &str) {
 
 #[tauri::command]
 pub async fn disconnect_device(app: AppHandle) -> CmdResult<serde_json::Value> {
+    tracing::info!(
+        event = "device_disconnect_requested",
+        reason = "manual_disconnect",
+        "请求断开设备"
+    );
     disconnect_current(&app).await?;
     emit_disconnected(&app, "manual_disconnect");
+    tracing::info!(
+        event = "device_disconnected",
+        reason = "manual_disconnect",
+        "设备已主动断开"
+    );
     Ok(serde_json::json!({ "ok": true }))
 }
 
 #[tauri::command]
 pub async fn forget_device(app: AppHandle) -> CmdResult<serde_json::Value> {
+    tracing::info!(event = "device_forget_requested", "请求忘记设备");
     disconnect_current(&app).await?;
     let state = app.state::<AppState>();
     let mut candidate = state
@@ -1107,6 +1162,7 @@ pub async fn forget_device(app: AppHandle) -> CmdResult<serde_json::Value> {
     *state.config.write().map_err(|_| internal("config 锁"))? = candidate.clone();
     let _ = app.emit("config-changed", &candidate);
     emit_disconnected(&app, "forgotten");
+    tracing::info!(event = "device_forgotten", "设备记录已清除");
     Ok(serde_json::json!({ "ok": true }))
 }
 
@@ -1183,6 +1239,14 @@ pub struct ConfigPatch {
 pub async fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppConfig> {
     let s = shared(&app);
     let state = app.state::<AppState>();
+    tracing::info!(
+        event = "config_update_requested",
+        changes_token = patch.token.is_some(),
+        changes_autostart = patch.autostart.is_some(),
+        changes_orientation = patch.badge_orientation.is_some(),
+        changes_theme_mode = patch.theme_mode.is_some(),
+        "请求更新配置"
+    );
 
     if patch.port_preference.is_some() {
         return Err(err("BAD_REQUEST", "服务端口由 AI-Light 自动管理"));
@@ -1246,6 +1310,7 @@ pub async fn update_config(app: AppHandle, patch: ConfigPatch) -> CmdResult<AppC
     }
     persist_config(&app, &cfg)?;
     let _ = app.emit("config-changed", &*cfg);
+    tracing::info!(event = "config_updated", "配置更新完成");
     Ok(cfg.clone())
 }
 
