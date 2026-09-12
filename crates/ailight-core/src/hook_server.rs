@@ -43,6 +43,9 @@ pub struct DeviceSnapshot {
     /// 断连后是否正在执行客户端自动重连。
     #[schema(example = false)]
     pub reconnecting: bool,
+    /// 启动恢复是否已进入长期低频等待。
+    #[schema(example = false)]
+    pub waiting_for_device: bool,
     /// 设备的系统蓝牙地址；未连接时为 null。
     #[schema(example = "AA:BB:CC:DD:EE:FF")]
     pub address: Option<String>,

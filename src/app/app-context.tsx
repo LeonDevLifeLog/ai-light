@@ -39,6 +39,27 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+function connectionToast(
+  device: Partial<AppSnapshot["device"]> & { reason?: string }
+): Omit<ToastItem, "id"> | null {
+  if (device.connected) {
+    return { tone: "success", title: "设备已连接" };
+  }
+  if (device.reconnecting) {
+    return { tone: "info", title: "设备已断开，正在重连…" };
+  }
+  if (device.reason === "startup_waiting") {
+    return { tone: "info", title: "未发现设备，将在后台继续等待" };
+  }
+  if (device.reason === "reconnect_failed") {
+    return { tone: "error", title: "重连失败，请检查设备" };
+  }
+  if (device.reason === "manual_disconnect" || device.reason === "forgotten") {
+    return null;
+  }
+  return { tone: "info", title: "设备已断开" };
+}
+
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -108,23 +129,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                       ...current.device,
                       ...device,
                       reconnecting: device.reconnecting ?? false,
+                      waitingForDevice: device.waitingForDevice ?? false,
                     },
                   }
                 : current
             );
-            if (device.connected) {
-              notify({ tone: "success", title: "设备已连接" });
-            } else if (device.reconnecting) {
-              notify({ tone: "info", title: "设备已断开，正在重连…" });
-            } else if (device.reason === "reconnect_failed") {
-              notify({ tone: "error", title: "重连失败，请检查设备" });
-            } else if (
-              device.reason === "manual_disconnect" ||
-              device.reason === "forgotten"
-            ) {
-              return;
-            } else {
-              notify({ tone: "info", title: "设备已断开" });
+            const toast = connectionToast(device);
+            if (toast) {
+              notify(toast);
             }
           }
         ),

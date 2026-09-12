@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.45 |
-| 文档状态 | 生效；已按代码实现状态对账（V1.45，2026-09-12） |
+| 文档版本 | V1.46 |
+| 文档状态 | 生效；已增加启动期已记住设备长期恢复契约（V1.46，2026-09-12） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -151,7 +151,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 | Source Event | 目标组件 | 同步字段 | 同步方式 |
 |---|---|---|---|
-| `device-connection-changed` | `Dashboard.DeviceCard` | `connected` / `address` / `name` | full |
+| `device-connection-changed` | `Dashboard.DeviceCard` | `connected` / `address` / `name` / `reconnecting` / `waitingForDevice` | full |
 | `device-connection-changed` | `Sidebar.statusDot` | `connected` | patch |
 | `device-connection-changed` | `Devices.ScanResultList` | 对应卡片的 `state` 字段 | patch |
 | `config-changed` / 初始化 config | `Devices.ManagedDeviceCard` | `rememberedDevice` 身份与是否展示 | full |
@@ -322,6 +322,22 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | 重连失败 N 次 | 退避后停止 | Toast "重连失败，请检查设备" + 设备卡保持 `Disconnected` |
 
 > ✅ 实现状态：断连监听与客户端退避重连（5 次，约 75s 窗口，期间已手动连接则放弃）已实现；前端 `Reconnecting` 视觉态（Devices 页重连中卡 + Dashboard 摘要）与断连/重连 Toast 已实装（2026-08-21）。
+
+### 4.4.1 启动期长期恢复（ADR-0007）
+
+```text
+StartupInitialConnect
+  ├─ success → Connected
+  └─ failure → FastRecovery(5 次)
+                    ├─ success → Connected
+                    └─ exhausted → WaitingForDevice(60～75s 循环)
+                                         ├─ success → Connected
+                                         └─ generation changed → Cancelled
+```
+
+- `WaitingForDevice` 由 Rust 快照字段 `waitingForDevice` 表达，与 `reconnecting` 互斥。
+- 进入该阶段时 emit `reason:"startup_waiting"`；后续每次尝试失败不重复 emit/Toast。
+- 快照初始化可恢复前端错过的阶段变化，不依赖页面持续存活。
 
 ### 4.5 主题相关失败路径
 
@@ -548,7 +564,7 @@ Dashboard 与 Devices 页共用：Dashboard 展示当前连接摘要；Devices �
 | Props | `connected` | boolean |
 | Props | `rememberedDevice` | Devices 页的持久身份；非 null 时卡片常驻 |
 | Emit | `onClickConnect(address)` | 仅 `mode = 'scan-result'` |
-| 订阅 | `device-connection-changed` | `connected` / `address` / `name` |
+| 订阅 | `device-connection-changed` | `connected` / `address` / `name` / `reconnecting` / `waitingForDevice` |
 | 订阅 | `device-power-changed` | `capabilityBits` / `batteryMv` / `batteryPercent` / `powerFlags` / `powerSource` / `chargeState` |
 | 订阅 | `device-fault` | `source` / `code` / `context` |
 
@@ -561,6 +577,7 @@ Dashboard 与 Devices 页共用：Dashboard 展示当前连接摘要；Devices �
 | `connecting` | `state == 'Connecting'` | spinner + "连接中..." | 禁用 |
 | `connected` | `connected == true` | 完整字段 + "已连接" tag（accent） | [断开连接] / [忘记设备] |
 | `reconnecting` | `state == 'Reconnecting'` | 常驻身份卡 + "重连中..." | [停止重连] / [忘记设备] |
+| `waitingForDevice` | `rememberedDevice && waitingForDevice` | 常驻身份卡 + "等待设备上线"，无 spinner | [停止等待] / [忘记设备] |
 | `charging` | `chargeState == 'CHARGING'` | 电池格 + ⚡ 充电图标 | 同 `connected` |
 | `full` | `chargeState == 'FULL'` | 电池格 100% + ✓ | 同 `connected` |
 | `lowBattery` | `batteryPercent < 20` | 电池格 warning 色 + Toast 警告 | 同 `connected` |
@@ -570,7 +587,7 @@ Dashboard 与 Devices 页共用：Dashboard 展示当前连接摘要；Devices �
 
 | Source Event | 字段 | 同步方式 |
 |---|---|---|
-| `device-connection-changed` | `connected` / `address` / `name` | full |
+| `device-connection-changed` | `connected` / `address` / `name` / `reconnecting` / `waitingForDevice` | full |
 | `device-power-changed` | `capabilityBits` / `batteryMv` / `batteryPercent` / `powerFlags` / `powerSource` / `chargeState` | patch |
 | `device-fault` | 故障指示 + Alert 追加 | append |
 | `update_config` | (none) | — |
@@ -1904,6 +1921,7 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.46 | 2026-09-12 | §3/§4.4.1/§6.3 新增启动期长期恢复和 `waitingForDevice` 视觉态，与运行中 `reconnecting` 分离。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Event `device-connection-changed` 存在于 ipc-contract §5，字段与 reason 已同步；§4.1 AppError.code 未变；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6～§8 未新增主题字段；ADR-0007、KAD-20 引用有效。 |
 | V1.45 | 2026-09-12 | §6.4/§7.3 将 ThemeGrid 从固定三列改为以 280px 卡片宽度为基准的自适应列数；用户主题操作区改为应用按钮独占首行、导出与删除等分次行，保证按钮在卡片内。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且均存在于 ipc-contract §5；§4.1 AppError.code 未变且均存在于 ipc-contract §4；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增或修改主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.44 | 2026-09-08 | §3.1/§6.2 将 Dashboard 固定 `TrafficBadge` 替换为随 `business-state-changed` 和 `theme-changed` 更新的 `SceneLightPreview`；与主题编辑器共享 V0.4 曲线模拟，覆盖有限重复、结束电平和 `transition_ms`，声音仅作配置标记；`hold_ms` 保持 Rust 唯一事实源。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变且与 ipc-contract §4 一致；§4.2 result code 未变且与 V0.4 §3.6 一致；§6~§8 使用字段均存在于 theme-format；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.43 | 2026-09-05 | §6.6/§7.6 新增应用更新 SettingRow：启动延迟与缓存检查、手动检查、多元数据源竞争、国内镜像下载探测、Release 页面兜底；不自动安装。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 新增 `UPDATE_CHECK_FAILED` 并已同步 ipc-contract §4；§4.2 蓝牙 result code 与 V0.4 §3.6 一致；§6~§8 未新增主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |

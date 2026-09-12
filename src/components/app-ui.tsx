@@ -176,11 +176,13 @@ export function DeviceSummary({
   name,
   device,
   reconnecting,
+  waitingForDevice,
 }: {
   connected: boolean;
   name?: string | null;
   device: DeviceState;
   reconnecting?: boolean;
+  waitingForDevice?: boolean;
 }) {
   let title = "尚未连接设备";
   let subtitle = "连接灯牌后即可同步状态灯效";
@@ -190,6 +192,9 @@ export function DeviceSummary({
   } else if (reconnecting) {
     title = "正在重连…";
     subtitle = "设备断开，自动重连中";
+  } else if (waitingForDevice) {
+    title = "等待设备上线";
+    subtitle = "AI-Light 将在后台自动连接";
   }
   return (
     <div className="device-summary">

@@ -280,11 +280,12 @@ pub fn run() {
                                 serde_json::json!({
                                     "connected": false,
                                     "reconnecting": true,
+                                    "waitingForDevice": false,
                                     "address": dev.address.clone(),
                                     "name": dev.name.clone(),
                                 }),
                             );
-                            commands::spawn_reconnect(
+                            commands::spawn_startup_recovery(
                                 auto_handle,
                                 dev.address,
                                 dev.name,

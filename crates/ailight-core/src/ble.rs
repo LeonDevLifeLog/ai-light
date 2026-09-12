@@ -76,6 +76,22 @@ pub fn reconnect_delay_secs(attempt: u32) -> u64 {
     u64::from(5 * attempt.max(1)).min(60)
 }
 
+/// 启动恢复的快速重连次数；运行中断连也沿用此上限。
+pub const FAST_RECOVERY_ATTEMPTS: u32 = 5;
+
+/// 启动恢复延迟：前 5 次快速退避，随后为 60～75s 长期低频等待。
+pub fn startup_recovery_delay_secs(attempt: u32, jitter: u8) -> u64 {
+    if attempt <= FAST_RECOVERY_ATTEMPTS {
+        reconnect_delay_secs(attempt)
+    } else {
+        60 + u64::from(jitter % 16)
+    }
+}
+
+pub fn startup_recovery_is_waiting(attempt: u32) -> bool {
+    attempt > FAST_RECOVERY_ATTEMPTS
+}
+
 /// 帧分流：设备主动事件 vs 请求应答
 fn classify_frame(frame: &Frame) -> bool {
     matches!(
@@ -706,6 +722,17 @@ mod tests {
         // 上限 60s
         assert_eq!(reconnect_delay_secs(12), 60);
         assert_eq!(reconnect_delay_secs(20), 60);
+    }
+
+    #[test]
+    fn startup_recovery_switches_to_bounded_low_frequency_delay() {
+        assert_eq!(startup_recovery_delay_secs(1, 15), 5);
+        assert_eq!(startup_recovery_delay_secs(5, 15), 25);
+        assert!(!startup_recovery_is_waiting(5));
+        assert!(startup_recovery_is_waiting(6));
+        assert_eq!(startup_recovery_delay_secs(6, 0), 60);
+        assert_eq!(startup_recovery_delay_secs(6, 15), 75);
+        assert_eq!(startup_recovery_delay_secs(20, 31), 75);
     }
 
     #[test]

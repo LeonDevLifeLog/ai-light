@@ -853,6 +853,7 @@ pub(crate) async fn attach_device(
         let mut dev = s.device.write().map_err(|_| "device 锁".to_string())?;
         dev.connected = true;
         dev.reconnecting = false;
+        dev.waiting_for_device = false;
         dev.address = Some(address.clone());
         dev.name = Some(name.clone());
         dev.fw_version = Some(format!(
@@ -874,6 +875,7 @@ pub(crate) async fn attach_device(
         serde_json::json!({
             "connected": true,
             "reconnecting": false,
+            "waitingForDevice": false,
             "address": address,
             "name": name,
         }),
@@ -994,6 +996,7 @@ fn spawn_device_event_loop(
                     if let Ok(mut dev) = s.device.write() {
                         dev.connected = false;
                         dev.reconnecting = true;
+                        dev.waiting_for_device = false;
                         dev.power_source = None;
                         dev.power_flags = None;
                         dev.charge_state = None;
@@ -1008,6 +1011,7 @@ fn spawn_device_event_loop(
                         serde_json::json!({
                             "connected": false,
                             "reconnecting": true,
+                            "waitingForDevice": false,
                             "reason": "link_lost",
                             "address": address,
                             "name": name,
@@ -1030,7 +1034,6 @@ pub(crate) fn spawn_reconnect(
     attempt: u32,
     generation: u64,
 ) {
-    const MAX_RECONNECT_ATTEMPTS: u32 = 5;
     if app
         .state::<AppState>()
         .connection_generation
@@ -1039,16 +1042,18 @@ pub(crate) fn spawn_reconnect(
     {
         return;
     }
-    if attempt > MAX_RECONNECT_ATTEMPTS {
+    if attempt > ble::FAST_RECOVERY_ATTEMPTS {
         tracing::warn!("设备 {name} 重连达到上限，停止自动重连");
         if let Ok(mut dev) = shared(&app).device.write() {
             dev.reconnecting = false;
+            dev.waiting_for_device = false;
         }
         let _ = app.emit(
             "device-connection-changed",
             serde_json::json!({
                 "connected": false,
                 "reconnecting": false,
+                "waitingForDevice": false,
                 "reason": "reconnect_failed",
                 "address": address,
                 "name": name,
@@ -1059,12 +1064,16 @@ pub(crate) fn spawn_reconnect(
     if let Ok(mut dev) = shared(&app).device.write() {
         dev.connected = false;
         dev.reconnecting = true;
+        dev.waiting_for_device = false;
         dev.address = Some(address.clone());
         dev.name = Some(name.clone());
     }
     tauri::async_runtime::spawn(async move {
         let delay = std::time::Duration::from_secs(ble::reconnect_delay_secs(attempt));
-        tracing::info!("{delay:?} 后尝试重连 {name}（第 {attempt}/5 次）");
+        tracing::info!(
+            "{delay:?} 后尝试重连 {name}（第 {attempt}/{} 次）",
+            ble::FAST_RECOVERY_ATTEMPTS
+        );
         tokio::time::sleep(delay).await;
         let state = app.state::<AppState>();
         if state.connection_generation.load(Ordering::SeqCst) != generation {
@@ -1078,6 +1087,99 @@ pub(crate) fn spawn_reconnect(
             Err(e) => {
                 tracing::warn!("设备 {name} 重连第 {attempt} 次失败: {e}");
                 spawn_reconnect(app, address, name, attempt + 1, generation);
+            }
+        }
+    });
+}
+
+fn recovery_jitter() -> u8 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.subsec_nanos() as u8)
+}
+
+/// 启动恢复：5 次快速退避后转为长期低频尝试，直到成功或代次失效。
+pub(crate) fn spawn_startup_recovery(
+    app: AppHandle,
+    address: String,
+    name: String,
+    attempt: u32,
+    generation: u64,
+) {
+    if app
+        .state::<AppState>()
+        .connection_generation
+        .load(Ordering::SeqCst)
+        != generation
+    {
+        return;
+    }
+
+    let waiting = ble::startup_recovery_is_waiting(attempt);
+    if let Ok(mut dev) = shared(&app).device.write() {
+        dev.connected = false;
+        dev.reconnecting = !waiting;
+        dev.waiting_for_device = waiting;
+        dev.address = Some(address.clone());
+        dev.name = Some(name.clone());
+    }
+    if attempt == ble::FAST_RECOVERY_ATTEMPTS + 1 {
+        tracing::warn!(
+            event = "startup_device_waiting",
+            address = %address,
+            generation,
+            "启动快速恢复失败，转为长期等待设备 {name}"
+        );
+        let _ = app.emit(
+            "device-connection-changed",
+            serde_json::json!({
+                "connected": false,
+                "reconnecting": false,
+                "waitingForDevice": true,
+                "reason": "startup_waiting",
+                "address": address,
+                "name": name,
+            }),
+        );
+    }
+
+    tauri::async_runtime::spawn(async move {
+        let delay_secs = ble::startup_recovery_delay_secs(attempt, recovery_jitter());
+        let delay = std::time::Duration::from_secs(delay_secs);
+        tracing::info!(
+            event = "startup_device_recovery_scheduled",
+            address = %address,
+            generation,
+            attempt,
+            waiting,
+            delay_secs,
+            "已安排启动设备恢复 {name}"
+        );
+        tokio::time::sleep(delay).await;
+        let state = app.state::<AppState>();
+        if state.connection_generation.load(Ordering::SeqCst) != generation
+            || state.device_io.is_connected().await
+        {
+            return;
+        }
+        match connect_device_internal(&app, &address, &name, generation).await {
+            Ok(()) => tracing::info!(
+                event = "startup_device_recovered",
+                address = %address,
+                generation,
+                attempt,
+                "启动设备恢复成功 {name}"
+            ),
+            Err(error) => {
+                tracing::warn!(
+                    event = "startup_device_recovery_failed",
+                    address = %address,
+                    generation,
+                    attempt,
+                    %error,
+                    "启动设备恢复失败 {name}"
+                );
+                spawn_startup_recovery(app, address, name, attempt + 1, generation);
             }
         }
     });
@@ -1119,6 +1221,7 @@ fn emit_disconnected(app: &AppHandle, reason: &str) {
         serde_json::json!({
             "connected": false,
             "reconnecting": false,
+            "waitingForDevice": false,
             "reason": reason,
             "address": null,
             "name": null,
