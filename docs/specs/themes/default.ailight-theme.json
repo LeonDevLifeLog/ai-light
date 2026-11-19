@@ -110,7 +110,11 @@
   "states": {
     "WORKING": { "scene": "breath-blue", "transition_ms": 300 },
     "WAITING": { "scene": "breath-amber", "transition_ms": 300 },
-    "SUCCESS": { "scene": "glow-green", "transition_ms": 500, "hold_ms": 0 },
+    "SUCCESS": {
+      "scene": "glow-green",
+      "transition_ms": 500,
+      "hold_ms": 5000
+    },
     "ERROR": { "scene": "alert-red", "transition_ms": 0, "hold_ms": 0 }
   }
 }

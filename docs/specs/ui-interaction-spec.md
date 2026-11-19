@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.46 |
-| 文档状态 | 生效；已增加启动期已记住设备长期恢复契约（V1.46，2026-09-12） |
+| 文档版本 | V1.48 |
+| 文档状态 | 生效。回合完成提示到期后进入等待（V1.48，2026-11-19） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -219,7 +219,6 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `badgeOrientation` 变更 | `Sidebar.trayMenu` 单选 | — | patch |
 | `autostart` 变更 | `Settings.autostartSwitch` | — | patch（先 OS 后 config，失败 `AUTOSTART_FAILED` 回滚） |
 | `themeMode` 变更 | `html[data-theme]` + `Settings.themeModeCards` 选中卡片 | — | patch（亮/暗/跟随系统；system 实时响应 `prefers-color-scheme`） |
-| `portPreference` 变更 | `Settings.portInput` + 全局 service.port | — | 精确绑定候选端口 → 持久化 → 替换旧 Hook Server → refresh 快照；失败回滚 |
 | `config-changed`（Rust 事件） | 全组件 | `config.badgeOrientation` / `themeMode` 等完整 Config | full sync |
 
 > `portPreference` 热重启历史实现见 KAD-10，现由 KAD-11 取代为自动端口发现且不开放用户修改；`autostart` 真实切换已实装（KAD-09）。
@@ -269,12 +268,16 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | `DEVICE_NOT_CONNECTED` | preview_scene 时未连接 | Toast "请先连接设备" | 跳转 `/devices` |
 | `DEVICE_DISCONNECT_FAILED` | 主动断开失败 | Toast "无法断开设备：`<reason>`" | 检查设备后重试 |
 | `AUTOSTART_FAILED` | OS 登录项切换失败 | Toast "开机自启设置失败：`<reason>`"；Switch 回滚 | 检查系统权限后重试 |
+| `ADAPTER_NOT_FOUND` | Adapter 不可执行 | 连接前进入安装确认。断开失败时显示原因 Toast | 检查运行环境后重试 |
+| `ADAPTER_COMMAND_FAILED` / `ADAPTER_INVALID_OUTPUT` | Adapter 管理命令失败或返回无效数据 | 连接或断开失败时显示原因 Toast | 查看错误详情后重试 |
+| `ADAPTER_INSTALL_FAILED` | npm 全局安装失败 | Toast「安装失败」并显示原因 | 检查 npm 后重试 |
 | `NODE_NOT_FOUND` / `NODE_INCOMPATIBLE` | 工具链解析未发现 Node 或版本低于 20 | Integrations 运行环境恢复卡内联展示（非仅 Toast） | 安装 Node 20+ / [选择 Node] / [重新检测] |
 | `NPM_NOT_FOUND` | 已发现 Node，但无 npm 候选能通过真实命令验证 | 运行环境恢复卡内联展示失败候选及原因 | [选择 npm] / 修复 npm 安装 |
 | `TOOLCHAIN_OVERRIDE_INVALID` | 手动路径不存在或验证失败 | 内联保留所选路径错误 + 强制复验后的状态 | 重新选择 / [恢复自动检测] |
 | `TOOLCHAIN_AMBIGUOUS` / `TOOLCHAIN_PERMISSION_DENIED` | 多组候选无法决策 / 权限不足 | 运行环境恢复卡内联展示 | 用户选择一组工具 / 调整权限 |
 | `TOOLCHAIN_STORE_INVALID` | `toolchain.json` 损坏、非法或 schema 不兼容 | danger tag「环境配置需要重建」+ 原文件只读保护 | [重建配置并检测] |
 | `ADAPTER_UPDATE_FAILED` | 主动检查 registry 或精确版本升级失败 | Settings 外部运行环境内保留原版本信息 + error Toast | 检查网络/registry 后重试 |
+| `UPDATE_CHECK_FAILED` | 应用更新源均不可用或返回无效数据 | 启动检查静默，主动检查显示「暂时无法检查更新」 | 稍后重试 |
 | `EXECUTABLE_TIMEOUT` | 候选验证或 Adapter 命令超时 | Toast "执行超时" + 恢复卡 [查看详情] | 选择其他路径 / 重试 |
 | `INTERNAL` | Rust 侧异常（含 BLE 下发失败） | 工具链检测异常内联显示「检测失败」；其他场景 Toast "服务异常，请查看日志" | 工具链 [重新检测] / [复制诊断信息]；其他场景打开日志目录 |
 
@@ -416,22 +419,24 @@ StartupInitialConnect
 
 > ✅ 实现状态：`Connected ↔ Disconnected` 双向已实现；记忆状态与连接状态独立，已记住设备在离线时仍保留恢复卡；`Reconnecting` 支持停止重连或忘记设备；连接代次使旧重连任务在主动操作后失效。
 
-### 5.3 业务状态（来自仲裁，[ADR-0001](../decisions/ADR-0001)）
+### 5.3 业务状态
+
+最新的非幂等状态事件接管灯效，驻留时长由主题配置。 [ADR-0005](../decisions/ADR-0005-最近活动唯一仲裁策略.md) · [KAD-21](./architecture.md#kad-21-回合完成提示到期后进入等待)
 
 ```
-[IDLE]
-    --(任意 hook 事件 WORKING/WAITING/SUCCESS/ERROR/自定义)--> [新状态]
-[任意非 IDLE]
-    --(hold_ms 到期 且 当前为终态)--> [IDLE]
 [任意]
-    --(reset_outputs)-->                                       [IDLE]
-[任意非 ERROR]
-    --(任意新状态事件)-->                                     [新状态]  // 最近活动接管
+    --(任意来源的非幂等状态事件)--> [新状态]
+[SUCCESS]
+    --(hold_ms 到期)--> [WAITING]
+[其他设置了驻留截止时间的状态]
+    --(hold_ms 到期)--> [IDLE]
+[任意]
+    --(reset_outputs)--> [IDLE]
 ```
 
-**UI 联动**：
-- 状态切换 → 立即触发 `business-state-changed` → SceneLightPreview + StatusHero 联动（§3.1）
-- SUCCESS/ERROR 的 `hold_ms` 倒计时由后端管理，前端**不展示倒计时进度**（V2 评估）
+状态切换通过 `business-state-changed` 同步到 SceneLightPreview、StatusHero 和托盘（§3.1）。
+
+Rust 管理驻留计时，并将到期后的场景通过同一出站队列下发给设备。`SUCCESS` 到期时保留来源和会话，进入持续等待。新输入进入 `WORKING`，关闭会话进入 `IDLE`。新状态接管后，旧的驻留计时随即失效。
 
 ### 5.4 主题编辑器模式
 
@@ -538,9 +543,9 @@ Dashboard 顶部大卡：当前主题三灯实时模拟 + 状态名（大号 32p
 | `theme-changed` | `activeTheme` / SCENE | full |
 
 **6.2.5 边界条件**
-- `currentState` 未在主题中映射 → 走 fallback IDLE（V0.4 §3）+ Toast（仅 /preview 触发时弹）
+- 模拟灯优先使用当前状态映射。缺少映射时使用 `IDLE`，两者均无映射时显示全灭。 [主题格式 §5](./theme-format.md)
 - 自定义状态名长度 > 16 字符 → 截断 + tooltip
-- 状态切换按映射 `transition_ms` 从切换瞬间的当前 RGB 线性过渡到新轨道；`hold_ms` 仅跟随 Rust 仲裁回落事件，不在前端独立计时
+- 模拟灯按 `transition_ms` 从当前 RGB 线性过渡到新轨道，并沿用 Rust 的 `business-state-changed` 事件展示 `hold_ms` 到期后的状态。
 - 灯轨模拟字段为 `curve / low / high / brightness / period_ms / phase_deg / duty_percent / repeat / end_level`；声音不播放
 
 **6.2.6 无障碍**
@@ -1921,6 +1926,8 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.48 | 2026-11-19 | 对齐报告。§5.3 和 §6.2 同步完成驻留到期后进入 `WAITING` 的状态流转与预览。§3 IPC 事件、§4.1 错误码、§4.2 蓝牙结果码、§6～§8 主题字段及 ADR/KAD-21 引用均已核对。 |
+| V1.47 | 2026-11-19 | 对齐报告。§3.6 移除旧端口设置，§4.1 补齐 IPC 错误码，§5.3 修复 ADR 链接并校准最近活动仲裁与驻留到期行为，§6.2 修正模拟灯的主题规范引用。§3 IPC 事件、§4.1 AppError.code、§4.2 蓝牙结果码、§6～§8 主题字段及 ADR/KAD 引用均已核对。 |
 | V1.46 | 2026-09-12 | §3/§4.4.1/§6.3 新增启动期长期恢复和 `waitingForDevice` 视觉态，与运行中 `reconnecting` 分离。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Event `device-connection-changed` 存在于 ipc-contract §5，字段与 reason 已同步；§4.1 AppError.code 未变；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6～§8 未新增主题字段；ADR-0007、KAD-20 引用有效。 |
 | V1.45 | 2026-09-12 | §6.4/§7.3 将 ThemeGrid 从固定三列改为以 280px 卡片宽度为基准的自适应列数；用户主题操作区改为应用按钮独占首行、导出与删除等分次行，保证按钮在卡片内。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且均存在于 ipc-contract §5；§4.1 AppError.code 未变且均存在于 ipc-contract §4；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增或修改主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.44 | 2026-09-08 | §3.1/§6.2 将 Dashboard 固定 `TrafficBadge` 替换为随 `business-state-changed` 和 `theme-changed` 更新的 `SceneLightPreview`；与主题编辑器共享 V0.4 曲线模拟，覆盖有限重复、结束电平和 `transition_ms`，声音仅作配置标记；`hold_ms` 保持 Rust 唯一事实源。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 与 ipc-contract §5 一致；§4.1 AppError.code 未变且与 ipc-contract §4 一致；§4.2 result code 未变且与 V0.4 §3.6 一致；§6~§8 使用字段均存在于 theme-format；ADR-0001~0006、KAD-01~17 引用有效。 |

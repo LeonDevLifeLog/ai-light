@@ -85,7 +85,7 @@ export function StatusTag({
 const labels: Record<string, { title: string; subtitle: string }> = {
   IDLE: { title: "空闲", subtitle: "一切就绪，等待任务" },
   WORKING: { title: "工作中", subtitle: "AI 正在处理任务" },
-  WAITING: { title: "等待中", subtitle: "需要你的输入或授权" },
+  WAITING: { title: "等待中", subtitle: "等待输入或授权" },
   SUCCESS: { title: "已完成", subtitle: "任务已顺利完成" },
   ERROR: { title: "出错了", subtitle: "任务遇到问题，请检查详情" },
 };

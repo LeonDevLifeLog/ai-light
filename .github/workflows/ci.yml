@@ -105,7 +105,7 @@ jobs:
         timeout-minutes: 30
         uses: awalsh128/cache-apt-pkgs-action@v1.6.3
         with:
-          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libdbus-1-dev patchelf xdg-utils
           version: 1.0
       - uses: pnpm/action-setup@v6.0.9
       - uses: actions/setup-node@v6

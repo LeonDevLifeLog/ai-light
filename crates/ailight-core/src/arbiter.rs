@@ -2,7 +2,7 @@
 //!
 //! 规则：
 //! - 最近活跃：任何非幂等事件都生效，最后上报的工具接管灯效
-//! - 终态驻留（hold_ms）：进入 SUCCESS/ERROR 且配置了 hold_ms>0 时，到期自动回落 IDLE
+//! - 状态驻留（hold_ms）：SUCCESS 到期进入 WAITING，其他状态到期进入 IDLE
 
 use serde::Serialize;
 
@@ -100,7 +100,7 @@ impl Arbiter {
     pub fn apply(&mut self, ev: &HookEvent, hold_ms: Option<u64>, now_ms: u64) -> ApplyOutcome {
         self.event_count += 1;
         let hold = hold_ms.unwrap_or(0);
-        let hold_until = if hold > 0 { Some(now_ms + hold) } else { None };
+        let hold_until = (hold > 0).then(|| now_ms.saturating_add(hold));
 
         // 相同 source + state 且未驻留中 → 幂等不重复（hook-api §3.2）
         if self.current.state == ev.state
@@ -119,15 +119,19 @@ impl Arbiter {
         ApplyOutcome::Applied(self.current.clone())
     }
 
-    /// 驻留到期回落检查：hold_until 到期 → 回落 IDLE
+    /// 完成驻留到期后，保留来源和会话并进入持续等待。
     pub fn tick(&mut self, now_ms: u64) -> Option<BusinessState> {
-        if let Some(until) = self.current.hold_until_ms {
-            if now_ms >= until {
-                self.current = BusinessState::idle(now_ms);
-                return Some(self.current.clone());
-            }
+        if now_ms < self.current.hold_until_ms? {
+            return None;
         }
-        None
+        if self.current.state == ST_SUCCESS {
+            self.current.state = ST_WAITING.to_string();
+            self.current.since_ms = now_ms;
+            self.current.hold_until_ms = None;
+        } else {
+            self.current = BusinessState::idle(now_ms);
+        }
+        Some(self.current.clone())
     }
 
     /// 手动复位（reset_outputs 联动，ipc-contract §2.4）
@@ -186,11 +190,10 @@ mod tests {
     }
 
     #[test]
-    fn hold_rollback_to_idle() {
+    fn error_hold_expires_to_idle() {
         let mut a = Arbiter::new(0);
-        // SUCCESS hold 5000ms
         assert!(applied(&a.apply(
-            &ev("cc", ST_SUCCESS, 1000),
+            &ev("cc", ST_ERROR, 1000),
             Some(5000),
             1000
         )));
@@ -203,15 +206,33 @@ mod tests {
     }
 
     #[test]
+    fn new_input_or_session_end_cancels_success_hold() {
+        for next_state in [ST_WORKING, ST_IDLE] {
+            let mut arbiter = Arbiter::new(0);
+            arbiter.apply(&ev("codex", ST_SUCCESS, 1000), Some(5000), 1000);
+            arbiter.apply(&ev("codex", next_state, 5999), None, 5999);
+            assert!(arbiter.tick(6000).is_none());
+            assert_eq!(arbiter.current().state, next_state);
+        }
+    }
+
+    #[test]
     fn hold_zero_means_stay_until_next_event() {
-        let mut a = Arbiter::new(0);
-        // ERROR hold 0 → 驻留到下一事件（无 hold_until）
-        assert!(applied(&a.apply(&ev("cc", ST_ERROR, 1), Some(0), 1)));
-        assert_eq!(a.current().hold_until_ms, None);
-        // tick 不会回落
-        assert!(a.tick(999_999).is_none());
-        // 下一事件（IDLE）清除
-        assert!(applied(&a.apply(&ev("cc", ST_IDLE, 2), None, 2)));
+        for (state, hold) in [
+            (ST_ERROR, Some(0)),
+            (ST_SUCCESS, Some(0)),
+            (ST_SUCCESS, None),
+        ] {
+            let mut arbiter = Arbiter::new(0);
+            assert!(applied(&arbiter.apply(&ev("cc", state, 1), hold, 1)));
+            assert!(arbiter.tick(999_999).is_none());
+            assert_eq!(arbiter.current().state, state);
+            assert!(applied(&arbiter.apply(
+                &ev("cc", ST_IDLE, 1_000_000),
+                None,
+                1_000_000
+            )));
+        }
     }
 
     #[test]

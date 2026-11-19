@@ -727,12 +727,12 @@ mod tests {
             assert_eq!(led.end_level, END_HIGH);
         }
         assert_eq!(scene.buzzer.segments.len(), 1);
-        // SUCCESS：CONSTANT 绿，持续到下一状态
+        // SUCCESS：CONSTANT 绿，驻留 5 秒后进入等待
         let scene = compile_state(&theme, "SUCCESS").unwrap();
         assert_eq!(scene.leds[0].curve, CURVE_CONSTANT);
         assert_eq!(scene.leds[0].high, Rgb(0x00, 0xE6, 0x76));
         assert_eq!(scene.leds[0].brightness, 80);
-        assert_eq!(theme.states["SUCCESS"].hold_ms, Some(0));
+        assert_eq!(theme.states["SUCCESS"].hold_ms, Some(5000));
     }
 
     #[test]

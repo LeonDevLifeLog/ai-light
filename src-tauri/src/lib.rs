@@ -14,7 +14,7 @@ use tauri_plugin_autostart::ManagerExt;
 use ailight_core::ble::DeviceIo;
 use ailight_core::config::{AppConfig, DEFAULT_PORT};
 use ailight_core::engine::Engine;
-use ailight_core::hook_server::SharedState;
+use ailight_core::hook_server::{BusinessSnapshot, SharedState};
 use ailight_core::{logging, theme};
 
 /// 应用级共享状态（KAD-03：Rust 唯一事实源）
@@ -151,20 +151,26 @@ pub fn run() {
                 Engine::new(shared.clone(), device_io.clone())
             };
 
-            // events 桥接：轮询仲裁状态（含 hold 回落）→ 前端 emit
+            // 驱动驻留到期并将最新仲裁状态同步给前端和托盘。
             let handle = app.handle().clone();
             let ev_shared = shared.clone();
             tauri::async_runtime::spawn(async move {
                 let mut last: Option<ailight_core::arbiter::BusinessState> = None;
                 loop {
                     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                    let _ = ev_shared.tick(); // hold 回落
+                    let _ = ev_shared.tick();
                     let cur = ev_shared.arbiter.read().map(|g| g.current().clone()).ok();
-                    if cur.is_some() && cur != last {
-                        let c = cur.clone().unwrap();
-                        let _ = handle.emit("business-state-changed", &c);
-                        crate::tray::update_status(&handle, &c.state);
-                        last = cur;
+                    if let Some(current) = cur.filter(|state| Some(state) != last.as_ref()) {
+                        let business = BusinessSnapshot {
+                            state: current.state.clone(),
+                            source: current.source.clone(),
+                            session: current.session.clone(),
+                            since_ts: current.since_ms,
+                            theme: ev_shared.theme_name.read().map(|t| t.clone()).unwrap_or_default(),
+                        };
+                        let _ = handle.emit("business-state-changed", &business);
+                        crate::tray::update_status(&handle, &current.state);
+                        last = Some(current);
                     }
                 }
             });

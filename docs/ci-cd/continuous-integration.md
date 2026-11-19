@@ -46,7 +46,7 @@ pnpm --dir packages/ailight-adapter test
 
 CI 使用 `--no-bundle` 校验前端与原生应用编译链路，不生成安装包；跨平台安装包由 Release 工作流统一生成。该策略让 PR 保留低成本的完整 Linux 编译门禁，并在代码进入主干后补充 macOS、Windows 兼容性反馈。
 
-Linux 构建前会安装 WebKitGTK 等系统依赖。APT 设置 30 秒网络超时、3 次重试，安装步骤最多运行 8 分钟，避免镜像或网络异常导致 Job 长时间无结果。
+CI 和 Release 的 Linux 构建一律通过 `awalsh128/cache-apt-pkgs-action` 安装 WebKitGTK 等系统开发包。两份清单都包含 `libdbus-1-dev`，它为核心测试和桌面构建中的 BLE 依赖提供 `dbus-1.pc`。该安装步骤的超时为 30 分钟。
 
 三平台矩阵设置 `fail-fast: false`，一个平台失败不会取消其他平台，便于横向定位平台差异。
 
