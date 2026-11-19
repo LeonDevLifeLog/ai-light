@@ -132,9 +132,11 @@ test("writes Codex command hooks using the official string command shape", async
             commandWindows?: string;
             timeout?: number;
           }>;
+          matcher?: string;
         }>
       >;
     };
+    assert.equal(config.hooks.SessionStart?.[0]?.matcher, "startup|resume");
     const handler = config.hooks.Stop?.[0]?.hooks[0];
     assert.equal(handler?.args, undefined);
     assert.match(handler?.command ?? "", POSIX_SCRIPT_PATTERN);
