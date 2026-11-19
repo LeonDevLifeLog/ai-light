@@ -132,7 +132,7 @@ const stateLabels: Record<
 > = {
   IDLE: { title: "空闲", tagline: "等待任务", accent: "#94a3b8" },
   WORKING: { title: "工作中", tagline: "正在处理", accent: "#22c55e" },
-  WAITING: { title: "等待中", tagline: "需要输入", accent: "#f59e0b" },
+  WAITING: { title: "等待中", tagline: "等待输入", accent: "#f59e0b" },
   SUCCESS: { title: "已完成", tagline: "已顺利完成", accent: "#4ade80" },
   ERROR: { title: "出错了", tagline: "遇到问题", accent: "#ef4444" },
 };
@@ -1228,7 +1228,10 @@ function ThemeEditor({
                       type="number"
                       value={mapping.hold_ms ?? 0}
                     />
-                    <small>亮起后停留多久再回落空闲；0 表示不自动回落。</small>
+                    <small>
+                      完成驻留到期后进入等待，错误驻留到期后回到空闲。0
+                      表示保持到下一次状态变化。
+                    </small>
                   </div>
                 </div>
 

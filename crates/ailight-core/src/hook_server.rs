@@ -187,20 +187,30 @@ impl SharedState {
         format!("sig-{:x}-{sequence:x}", (self.now_ms)())
     }
 
-    /// 由调用方驱动驻留回落（tick），返回是否发生了回落
+    /// 由调用方驱动驻留到期，同时将新状态的场景加入出站队列。
     pub fn tick(&self) -> Option<crate::arbiter::BusinessState> {
-        let now = (self.now_ms)();
         let mut arbiter = self.arbiter.write().ok()?;
         let previous = arbiter.current().clone();
-        let current = arbiter.tick(now)?;
+        let current = arbiter.tick((self.now_ms)())?;
+        let signal_id = self.next_signal_id();
         tracing::info!(
             event = "business_state_transition",
+            %signal_id,
             from_state = %previous.state,
             to_state = %current.state,
             source = previous.source.as_deref().unwrap_or("none"),
             reason = "hold_expired",
             "业务状态驻留到期"
         );
+        if let Err(error) = engine::enqueue_state_scene(self, &current.state, &signal_id) {
+            tracing::error!(
+                event = "scene_enqueue_failed",
+                %signal_id,
+                state = %current.state,
+                %error,
+                "驻留到期场景入队失败"
+            );
+        }
         Some(current)
     }
 }

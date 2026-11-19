@@ -193,7 +193,7 @@
 | `IDLE` | 灭 | 灭 | 灭 | 全灭 |
 | `WORKING` | 灭 | 灭 | **绿 呼吸（2s 周期，ease-in-out）** | 表达"进行中" |
 | `WAITING` | 灭 | **黄 常亮** | 灭 | 等待用户输入 / 权限 |
-| `SUCCESS` | 灭 | 灭 | **绿 常亮** | 持续到下一事件或 `hold_ms` 回落 |
+| `SUCCESS` | 灭 | 灭 | **绿 常亮** | 保持到下一事件，或在 `hold_ms` 到期后进入 `WAITING` |
 | `ERROR` | **红 闪烁 1Hz** | 灭 | 灭 | 持续到下一事件或 `hold_ms` 回落 |
 | 自定义状态 | 按主题 SCENE 映射 | | | 未映射 → 全灭（fallback IDLE） |
 
@@ -417,16 +417,7 @@ UI: Toast 提示"设备已断开"（不阻塞）
 
 ### 7.3 业务状态（来自仲裁）✅
 
-```
-[IDLE]
-    --(任意 hook 事件 WORKING/WAITING/SUCCESS/ERROR/自定义)--> [新状态]
-[任意非 IDLE]
-    --(hold_ms 到期 且 当前为终态)--> [IDLE]
-[任意]
-    --(reset_outputs)-->                                       [IDLE]
-[任意非 ERROR]
-    --(任意新状态事件)-->                                     [新状态]  // 最近活动接管
-```
+回合完成提示按主题驻留后切换到 `WAITING`。下一条输入进入 `WORKING`，会话关闭进入 `IDLE`。 [交互组件契约 §5.3](./ui-interaction-spec.md#53-业务状态)
 
 ### 7.4 主题朝向偏好 ✅
 

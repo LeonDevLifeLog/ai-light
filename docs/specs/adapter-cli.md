@@ -689,9 +689,9 @@ Codex V1 优先使用 lifecycle command hooks。当前官方配置支持 `hooks.
 - 若无法安全合并，报告 `NEEDS_MANUAL_ACTION`，而不是静默替换。
 - Desktop 与 CLI 不得对“Codex Desktop 永远不支持”作固定断言，能力以当前官方配置和本机检测为准。
 
-### 11.4 WAITING 局限
+### 11.4 WAITING 触发时机
 
-Codex 若仅提供权限请求而没有稳定的“等待一般输入”事件，则 `WAITING` 只覆盖权限等待。Adapter 不应通过读取对话文本或猜测回复内容推断等待状态。
+Codex Adapter 在 `PermissionRequest` 时直接上报 `WAITING`。`Stop` 上报 `SUCCESS` 后，Desktop 按主题的 `hold_ms` 计时，到期切换至 `WAITING`。下一条 `UserPromptSubmit` 进入 `WORKING`，`SessionEnd` 进入 `IDLE`。Adapter 依据 Hook 生命周期事件映射状态。
 
 ### 11.5 WorkBuddy Adapter
 

@@ -155,7 +155,7 @@ Hook 状态事件 → 状态仲裁 → states 查找 → scenes 编译 → 设�
 |---|---|---|
 | `scene` | 必填，合法名称 | 必须引用当前文件 `scenes` 中存在的场景 |
 | `transition_ms` | 0–2500 | 进入状态时的过渡时长 |
-| `hold_ms` | 非负整数 | 终态驻留后回落 `IDLE`；0 表示不自动回落 |
+| `hold_ms` | 非负整数 | 驻留时长（毫秒）。`SUCCESS` 到期进入 `WAITING`，其他状态到期进入 `IDLE`。0 或省略表示保持到下一次状态变化 |
 
 标准状态为 `IDLE / WORKING / WAITING / SUCCESS / ERROR`，也可以增加自定义状态。未映射的状态按 `IDLE` 呈现并写入日志；若 `IDLE` 也未映射，则输出熄灭场景。
 

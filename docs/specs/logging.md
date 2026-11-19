@@ -63,7 +63,7 @@ V1 不提供日志上传、远程遥测、应用内日志查看或指标数据�
 
 受理后：`business_state_transition | business_state_unchanged` → `scene_compiled` → `scene_dispatch_started` → `scene_dispatch_completed | scene_dispatch_failed`。
 
-终态驻留到期以 `business_state_transition reason="hold_expired"` 记录。手动触发也生成 `signal_id`，沿用同一后半链路。
+终态驻留到期以 `business_state_transition reason="hold_expired"` 记录，并生成 `signal_id` 关联场景编译和下发。入队失败时以 `scene_enqueue_failed` 记录。手动触发同样沿用这条场景下发链路。
 
 ### 5.3 主题与输出
 
@@ -114,5 +114,6 @@ rg 'event="ble_command_failed"|event="scene_rejected"' ~/.ailight/logs
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| V1.2 | 2026-11-19 | 将驻留到期时的状态迁移与场景下发通过 `signal_id` 关联。 |
 | V1.1 | 2026-09-12 | 增加 14 天保留期、100 MiB 目录软上限、最新文件保护、启动与周期清理以及失败开放语义。 |
 | V1.0 | 2026-09-12 | 建立 Desktop/core 结构化日志字段、事件目录、信号关联链、级别、隐私及排障规范。 |

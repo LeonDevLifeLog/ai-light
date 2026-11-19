@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use crate::arbiter::{ApplyOutcome, HookEvent};
+use crate::arbiter::{ApplyOutcome, HookEvent, ST_IDLE};
 use crate::hook_server::{OutboundScene, SharedState};
 use crate::protocol::{self, OutputScene};
 use crate::theme;
@@ -62,10 +62,15 @@ pub fn process_event_with_signal(
     ts: Option<u64>,
     signal_id: Option<&str>,
 ) -> Result<bool, EngineError> {
-    let now = (shared.now_ms)();
     let signal_id = signal_id
         .map(String::from)
         .unwrap_or_else(|| shared.next_signal_id());
+    // 仲裁与场景入队共用这个锁，保证 Hook 更新与到期迁移的下发顺序。
+    let mut arbiter = shared
+        .arbiter
+        .write()
+        .map_err(|_| EngineError::State("arbiter 锁失败".into()))?;
+    let now = (shared.now_ms)();
     // hold_ms 从主题查（ADR-0001 Q2）
     let hold_ms = {
         let guard = shared
@@ -82,72 +87,73 @@ pub fn process_event_with_signal(
         session: session.map(String::from),
         ts_ms: ts.unwrap_or(now),
     };
-    let mut arbiter = shared
-        .arbiter
-        .write()
-        .map_err(|_| EngineError::State("arbiter 锁失败".into()))?;
-    let previous = arbiter.current().clone();
-    let outcome = arbiter.apply(&ev, hold_ms, now);
-    let applied = matches!(outcome, ApplyOutcome::Applied(_));
-    let current = arbiter.current().clone();
-    drop(arbiter);
-    if applied {
-        let scene = compile_current(shared)?;
+    let previous = arbiter.current().state.clone();
+    if let ApplyOutcome::Applied(current) = arbiter.apply(&ev, hold_ms, now) {
         tracing::info!(
             event = "business_state_transition",
             %signal_id,
             source,
-            from_state = %previous.state,
+            from_state = %previous,
             to_state = %current.state,
             hold_ms = hold_ms.unwrap_or(0),
             reason = "signal",
             "业务状态已切换"
         );
-        tracing::debug!(event = "scene_compiled", %signal_id, state, "状态已映射为 SCENE");
-        shared
-            .send_outbound(OutboundScene {
-                scene,
-                signal_id,
-                state: state.to_string(),
-            })
-            .map_err(EngineError::State)?;
-    } else {
-        tracing::debug!(event = "business_state_unchanged", %signal_id, source, state, reason = "idempotent", "业务状态未变化");
+        enqueue_state_scene(shared, &current.state, &signal_id)?;
+        return Ok(true);
     }
-    Ok(applied)
+    tracing::debug!(event = "business_state_unchanged", %signal_id, source, state, reason = "idempotent", "业务状态未变化");
+    Ok(false)
 }
 
-/// 编译当前业务状态为 SCENE；未映射状态 → 全灭（theme-format §3 兜底）
+/// 将已仲裁的状态编译入队。调用方持有仲裁锁以保持下发顺序。
+pub(crate) fn enqueue_state_scene(
+    shared: &SharedState,
+    state: &str,
+    signal_id: &str,
+) -> Result<(), EngineError> {
+    let scene = compile_business_scene(shared, state)?;
+    tracing::debug!(event = "scene_compiled", %signal_id, state, "状态已映射为 SCENE");
+    shared
+        .send_outbound(OutboundScene {
+            scene,
+            signal_id: signal_id.to_string(),
+            state: state.to_string(),
+        })
+        .map_err(EngineError::State)
+}
+
+/// 编译当前业务状态为 SCENE。
 pub fn compile_current(shared: &SharedState) -> Result<OutputScene, EngineError> {
-    let (state, theme) = {
-        let state = shared
-            .arbiter
-            .read()
-            .map_err(|_| EngineError::State("arbiter 锁失败".into()))?
-            .current()
-            .state
-            .clone();
-        let theme = shared
-            .theme
-            .read()
-            .map_err(|_| EngineError::State("theme 锁失败".into()))?
-            .clone();
-        (state, theme)
+    let arbiter = shared
+        .arbiter
+        .read()
+        .map_err(|_| EngineError::State("arbiter 锁失败".into()))?;
+    compile_business_scene(shared, &arbiter.current().state)
+}
+
+fn compile_business_scene(shared: &SharedState, state: &str) -> Result<OutputScene, EngineError> {
+    let theme = shared
+        .theme
+        .read()
+        .map_err(|_| EngineError::State("theme 锁失败".into()))?;
+    let Some(theme) = theme.as_ref() else {
+        return Ok(OutputScene::none());
     };
-    match theme {
-        Some(t) => match theme::compile_state(&t, &state) {
-            Ok(scene) => Ok(scene),
-            Err(theme::ThemeError::StateNotFound(_)) => {
-                tracing::warn!(
-                    event = "theme_state_unmapped",
-                    state,
-                    fallback = "outputs_off",
-                    "主题未映射当前状态"
-                );
-                Ok(OutputScene::none())
-            }
-            Err(e) => Err(EngineError::Theme(e)),
-        },
+    // 与 Dashboard 一样，缺失状态先尝试主题的 IDLE 场景（theme-format §5）。
+    let mapped_state = [state, ST_IDLE]
+        .into_iter()
+        .find(|name| theme.states.contains_key(*name));
+    if mapped_state != Some(state) {
+        tracing::warn!(
+            event = "theme_state_unmapped",
+            state,
+            fallback = mapped_state.unwrap_or("outputs_off"),
+            "主题未映射当前状态"
+        );
+    }
+    match mapped_state {
+        Some(name) => theme::compile_state(theme, name).map_err(EngineError::Theme),
         None => Ok(OutputScene::none()),
     }
 }
@@ -331,7 +337,9 @@ mod tests {
     use super::*;
     use crate::protocol::{Frame, OutputScene};
     use crate::theme::{self, ThemeFile};
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
+    use std::time::Duration;
     use tokio::sync::mpsc as tmpsc;
 
     struct MockIo {
@@ -440,6 +448,64 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn finished_turn_waits_for_input_and_dispatches_waiting_scene() {
+        let clock = Arc::new(AtomicU64::new(1000));
+        let test_clock = clock.clone();
+        let shared = SharedState::new("test", move || test_clock.load(Ordering::Relaxed));
+        *shared.theme.write().unwrap() = Some(theme::load_builtin("neon").unwrap());
+        let io = MockIo::new();
+        let _engine = Engine::new(shared.clone(), io.clone());
+
+        for state in ["WORKING", "SUCCESS"] {
+            assert!(process_event(&shared, "codex", state, Some("chat-1"), None).unwrap());
+        }
+        clock.store(5999, Ordering::Relaxed);
+        assert!(shared.tick().is_none());
+
+        clock.store(6000, Ordering::Relaxed);
+        let waiting = shared.tick().expect("完成状态到期应进入等待");
+        assert_eq!(waiting.state, "WAITING");
+        assert_eq!(waiting.source.as_deref(), Some("codex"));
+        assert_eq!(waiting.session.as_deref(), Some("chat-1"));
+        assert_eq!(waiting.since_ms, 6000);
+        assert!(waiting.hold_until_ms.is_none());
+
+        clock.store(60_000, Ordering::Relaxed);
+        assert!(shared.tick().is_none());
+        assert!(process_event(&shared, "codex", "WORKING", Some("chat-1"), None).unwrap());
+        assert_eq!(shared.arbiter.read().unwrap().current().state, "WORKING");
+        assert!(process_event(&shared, "codex", "IDLE", Some("chat-1"), None).unwrap());
+        assert_eq!(shared.arbiter.read().unwrap().current().state, "IDLE");
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while io.writes().len() < 5 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("设备应收到包含等待灯效的五次场景切换");
+        let colors: Vec<_> = io
+            .writes()
+            .iter()
+            .map(|bytes| {
+                let (frame, _) = protocol::parse_frame(bytes).unwrap();
+                assert_eq!(frame.cmd, protocol::CMD_SET_SCENE);
+                OutputScene::decode_data(&frame.data).unwrap().leds[0].high
+            })
+            .collect();
+        assert_eq!(
+            colors,
+            [
+                protocol::Rgb(0, 255, 255),
+                protocol::Rgb(57, 255, 20),
+                protocol::Rgb(255, 0, 255),
+                protocol::Rgb(0, 255, 255),
+                protocol::Rgb(0, 0, 0),
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn reset_clears_business_and_device() {
         let (shared, io, engine) = setup();
         process_event(&shared, "cc", "ERROR", None, None).unwrap();
@@ -479,6 +545,22 @@ mod tests {
             .iter()
             .all(|led| led.high == protocol::Rgb(0, 0, 0) && led.brightness == 1));
         assert!(scene.buzzer.segments.is_empty());
+    }
+
+    #[test]
+    fn missing_waiting_scene_uses_the_themes_idle_mapping() {
+        let shared = SharedState::new("test", || 1000);
+        let mut active_theme = load_default_theme();
+        let idle = active_theme.states.remove("WAITING").unwrap();
+        active_theme.states.insert(ST_IDLE.to_string(), idle);
+        let idle_scene = theme::compile_state(&active_theme, ST_IDLE).unwrap();
+        *shared.theme.write().unwrap() = Some(active_theme);
+        let mut outbound = shared.outbound_rx();
+
+        assert!(process_event(&shared, "codex", "WAITING", None, None).unwrap());
+        let dispatched = outbound.try_recv().unwrap();
+        assert_eq!(dispatched.state, "WAITING");
+        assert_eq!(dispatched.scene, idle_scene);
     }
 
     #[tokio::test]

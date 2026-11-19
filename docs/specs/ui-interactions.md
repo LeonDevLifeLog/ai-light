@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.47 |
-| 文档状态 | 生效；已增加启动期已记住设备长期恢复契约（V1.47，2026-09-12） |
+| 文档版本 | V1.49 |
+| 文档状态 | 生效。回合完成提示到期后进入等待（V1.49，2026-11-19） |
 | 范围 | L5 展示层所有用户可感知的交互 |
 | 上游 | [docs/specs/ui-design.md](./ui-design.md)、[docs/specs/ipc-contract.md](./ipc-contract.md)、[docs/specs/theme-format.md](./theme-format.md) |
 | 配套原型 | [docs/design/ui-preview.html](../design/ui-preview.html) |
@@ -75,7 +75,7 @@
 - Dashboard 读取当前 `activeTheme`，以 `business-state-changed.state` 查找 `states` 映射并渲染对应 SCENE；自定义状态未映射时使用 `IDLE`，`IDLE` 也不存在时全灭。
 - 三灯模拟与设备使用相同主题字段：`curve / low / high / brightness / period_ms / phase_deg / duty_percent / repeat / end_level / transition_ms`；有限重复结束后固定在 `OFF / LOW / HIGH`。
 - 三灯排列继续遵循 `badgeOrientation` 的横向 / 纵向设置；排列只改变软件布局，不改变设备 SCENE。
-- `hold_ms` 不由前端重复计时；Rust 仲裁到期回落 `IDLE` 后 emit `business-state-changed`，模拟灯与设备同时跟随，保持 Rust 唯一事实源（KAD-03）。
+- Rust 管理 `hold_ms`。本轮完成提示到期后进入 `WAITING`，保留当前工具和会话。Rust 将等待场景加入设备下发队列，并通过 `business-state-changed` 更新模拟灯与托盘。下一条输入进入 `WORKING`，会话关闭进入 `IDLE`（KAD-21）。
 - 设备未连接时软件模拟仍正常运行；该区域表达当前业务灯效，不伪装设备连接状态。
 - **无障碍**：`prefers-reduced-motion: reduce` 时停止逐帧动画并展示目标静态帧；状态名与来源标签永远可见（颜色不是唯一信号）。
 
@@ -87,7 +87,7 @@
   |---|---|
   | IDLE | 一切就绪，等待任务 |
   | WORKING | AI 正在思考和执行 |
-  | WAITING | 需要你确认或输入 |
+  | WAITING | 等待输入或授权 |
   | SUCCESS | 这次任务顺利收尾 |
   | ERROR | 任务没跑通，看一眼 |
 
@@ -517,7 +517,6 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 | 设备扫描失败（蓝牙权限 / 系统错误）| 红色告警条 + 重试按钮 |
 | 设备连接失败 | Toast（含原因）+ 保留在 /devices |
 | 主动断开失败 | Toast（含原因）+ 保留连接与记忆设备 |
-| 端口热重启失败 | Toast（端口与失败原因）+ 输入回滚，旧 Hook Server 继续运行 |
 | API 文档打开失败 | Toast「无法打开 API 文档」+ 系统或浏览器返回的具体原因 |
 | 未连接设备试听 | Toast「请先连接设备后再试听灯效」（`DEVICE_NOT_CONNECTED`） |
 | 设备断连 | Toast「设备已断开」+ 设备卡显示「未连接」|
@@ -608,7 +607,7 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 > 本附录是 ui-interactions.md 的中粒度补充章节，对原 §2~§13 中颗粒不足处做扩展。
 > 完整组件级行为契约见姊妹文档 [ui-interaction-spec.md](./ui-interaction-spec.md)（L4 组件层 + L5 关键控件 + 联动矩阵 + 失败路径）。
 
-### A.1 §2.3 扩展：组件视觉态全集（8 态）
+### A.1 组件视觉态全集（8 态）
 
 | 态 | 触发条件 | 视觉（由 ui-design.md 代币落地） |
 |---|---|---|
@@ -789,6 +788,8 @@ Dialog 打开，默认 [简单] + [空闲 [tab]] 选中
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.49 | 2026-11-19 | 对齐报告。§3.1 和 §3.2 同步回合完成后等待下一条输入的行为及文案。组件契约 §3 IPC 事件、§4.1 错误码、§4.2 蓝牙结果码、§6～§8 主题字段和 ADR/KAD 引用均已核对。 |
+| V1.48 | 2026-11-19 | 对齐报告。§3.1 记录 V0.5.7 驻留到期时软件状态与设备场景的同步缺口。§11 移除已被 KAD-11 取代的端口热重启条目，A.1 修正章节引用。已复核组件契约 §3 IPC 事件、§4.1 错误码、§4.2 蓝牙结果码、§6～§8 主题字段及 ADR/KAD 引用，两份文档的 8 个视觉态一致。 |
 | V1.47 | 2026-09-12 | §4.3.1/A.4 新增启动期已记住设备长期恢复：首次连接与 5 次快速退避后转 60～75 秒低频等待，并与 V0.4 断连宽限期分离。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Event `device-connection-changed` 存在于 ipc-contract §5，新增 `waitingForDevice` / `startup_waiting` 已同步；§4.1 AppError.code 未变；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6～§8 未新增主题字段；ADR-0007、KAD-20 引用有效。 |
 | V1.46 | 2026-09-12 | §6.1 将主题中心从固定三列改为按容器宽度自适应网格；用户主题操作区改为主操作独占首行、导出与删除等分次行，避免窄卡片按钮越界。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Events 未变且均存在于 ipc-contract §5；§4.1 AppError.code 未变且均存在于 ipc-contract §4；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6~§8 未新增或修改主题字段；ADR-0001~0006、KAD-01~17 引用有效。 |
 | V1.45 | 2026-09-08 | §3.1 将固定业务色徽章替换为当前主题 SCENE 的实时三灯模拟；§7.1 主题编辑器复用同一模拟器，覆盖曲线、颜色、亮度、周期、相位、占空比、有限重复、结束电平与状态过渡，不播放音效；`hold_ms` 继续由 Rust 仲裁并通过状态事件驱动。同步关闭 V2-3。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Event `business-state-changed` 存在于 ipc-contract §5；§4.1 AppError.code 未变；§4.2 蓝牙 result code 未变；§6~§8 使用的主题字段均存在于 theme-format；ADR-0001~0006、KAD-01~17 引用有效。 |

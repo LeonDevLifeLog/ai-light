@@ -78,14 +78,18 @@ test("ignores nested agent events and non-boundary hooks", () => {
 });
 
 test("maps Codex lifecycle events and ignores unknown events", () => {
-  assert.equal(
-    translate("codex", { hook_event_name: "PermissionRequest" })[0]?.state,
-    "WAITING"
-  );
-  assert.equal(
-    translate("codex", { hook_event_name: "Stop" })[0]?.state,
-    "SUCCESS"
-  );
+  const cases = [
+    ["UserPromptSubmit", "WORKING"],
+    ["PermissionRequest", "WAITING"],
+    ["Stop", "SUCCESS"],
+    ["SessionEnd", "IDLE"],
+  ];
+  for (const [event, state] of cases) {
+    assert.equal(
+      translate("codex", { hook_event_name: event })[0]?.state,
+      state
+    );
+  }
   assert.deepEqual(translate("codex", { hook_event_name: "PostToolUse" }), []);
 });
 
