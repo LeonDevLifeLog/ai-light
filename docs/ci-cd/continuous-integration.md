@@ -48,6 +48,8 @@ CI 使用 `--no-bundle` 校验前端与原生应用编译链路，不生成安�
 
 CI 和 Release 的 Linux 构建一律通过 `awalsh128/cache-apt-pkgs-action` 安装 WebKitGTK 等系统开发包。两份清单都包含 `libdbus-1-dev`，它为核心测试和桌面构建中的 BLE 依赖提供 `dbus-1.pc`。该安装步骤的超时为 30 分钟。
 
+Linux runner 先将 Azure 和 `mirror+file` 的 Ubuntu 源指向 Ubuntu 官方归档并刷新索引。安装后用 `pkg-config` 校验 D-Bus 和 WebKitGTK 开发库，再开始 Rust 测试或编译。
+
 三平台矩阵设置 `fail-fast: false`，一个平台失败不会取消其他平台，便于横向定位平台差异。
 
 ## 权限与依赖
