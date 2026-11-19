@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { deliver } from "./runtime.js";
+import { deliver, shouldSuppressCodexHook } from "./runtime.js";
 
 test("delivers a normalized event using the runtime descriptor", async () => {
   const root = await mkdtemp(join(tmpdir(), "ailight-runtime-"));
@@ -50,6 +50,60 @@ test("delivers a normalized event using the runtime descriptor", async () => {
       server.close((error) => (error ? reject(error) : resolve()))
     );
     process.env.AILIGHT_HOME = previousHome;
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("suppresses unregistered ephemeral Codex hooks", async () => {
+  const root = await mkdtemp(join(tmpdir(), "ailight-codex-background-"));
+  const previousHome = process.env.AILIGHT_HOME;
+  process.env.AILIGHT_HOME = root;
+  const sample = { session_id: "background-fork", transcript_path: null };
+  const main = { session_id: "main", transcript_path: "/session.jsonl" };
+  const temporary = { session_id: "explicit-ephemeral", transcript_path: null };
+  try {
+    assert.equal(
+      await shouldSuppressCodexHook({
+        ...main,
+        hook_event_name: "SessionStart",
+        source: "fork",
+      }),
+      false
+    );
+    assert.equal(
+      await shouldSuppressCodexHook({
+        ...temporary,
+        hook_event_name: "SessionStart",
+        source: "startup",
+      }),
+      true
+    );
+    for (const hook_event_name of [
+      "UserPromptSubmit",
+      "PermissionRequest",
+      "Stop",
+      "SessionEnd",
+    ]) {
+      assert.equal(
+        await shouldSuppressCodexHook({ ...sample, hook_event_name }),
+        true
+      );
+      assert.equal(
+        await shouldSuppressCodexHook({ ...main, hook_event_name }),
+        false
+      );
+      assert.equal(
+        await shouldSuppressCodexHook({ ...temporary, hook_event_name }),
+        false
+      );
+    }
+    assert.deepEqual(await readdir(join(root, "codex-ephemeral-sessions")), []);
+  } finally {
+    if (previousHome === undefined) {
+      Reflect.deleteProperty(process.env, "AILIGHT_HOME");
+    } else {
+      process.env.AILIGHT_HOME = previousHome;
+    }
     await rm(root, { force: true, recursive: true });
   }
 });

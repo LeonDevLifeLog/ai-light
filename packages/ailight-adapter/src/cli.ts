@@ -4,7 +4,12 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type ToolId, translate } from "./adapters.js";
 import { detect, install, uninstall } from "./integrations.js";
-import { aiLightHome, deliver, readRuntime } from "./runtime.js";
+import {
+  aiLightHome,
+  deliver,
+  readRuntime,
+  shouldSuppressCodexHook,
+} from "./runtime.js";
 
 const packageVersion = (
   JSON.parse(
@@ -56,7 +61,15 @@ async function main() {
     throw new Error("TOOL_NOT_SUPPORTED");
   }
   if (command === "hook" || command === "translate") {
-    const events = translate(toolArg, await stdinJson());
+    const payload = await stdinJson();
+    if (
+      command === "hook" &&
+      toolArg === "codex" &&
+      (await shouldSuppressCodexHook(payload))
+    ) {
+      return;
+    }
+    const events = translate(toolArg, payload);
     if (command === "translate") {
       output(events);
       return;

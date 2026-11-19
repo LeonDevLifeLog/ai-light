@@ -1,6 +1,6 @@
 {
   "name": "@ai-light/adapter",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Claude Code, Codex, Qoder, TraeCode, and WorkBuddy adapter for AI-Light",
   "repository": {
     "type": "git",

@@ -53,6 +53,7 @@ const EVENTS: Record<ToolId, Array<{ event: string; matcher?: string }>> = {
     { event: "SessionEnd" },
   ],
   codex: [
+    { event: "SessionStart", matcher: "startup|resume" },
     { event: "UserPromptSubmit" },
     { event: "PermissionRequest" },
     { event: "Stop" },
