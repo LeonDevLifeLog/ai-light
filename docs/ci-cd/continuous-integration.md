@@ -61,7 +61,7 @@ Linux runner 先将 Azure 和 `mirror+file` 的 Ubuntu 源指向 Ubuntu 官方�
 - Rust 使用 stable 工具链
 - 前端依赖必须与 `pnpm-lock.yaml` 一致
 - Rust 依赖必须保留并提交 `src-tauri/Cargo.lock`
-- Release 将仓库变量 `AILIGHT_USB_VID` 和 `AILIGHT_USB_PID` 传给编译器。发布支持 USB 的构建时同时设置两项获授权的十六进制标识。
+- Release 将仓库变量 `AILIGHT_USB_VID` 和 `AILIGHT_USB_PID` 传给编译器。发布支持 USB 的构建时，两项都须配置为目标固件的十六进制标识。开发板版本在发布说明中注明适用设备，量产版本登记获授权的产品标识。
 
 ## 分支保护建议
 
