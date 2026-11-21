@@ -113,11 +113,11 @@ jobs:
         timeout-minutes: 30
         uses: awalsh128/cache-apt-pkgs-action@v1.6.3
         with:
-          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libdbus-1-dev patchelf xdg-utils
+          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libdbus-1-dev libudev-dev patchelf xdg-utils
           version: 1.1
       - name: Verify Linux development libraries
         if: runner.os == 'Linux'
-        run: pkg-config --print-errors --exists dbus-1 webkit2gtk-4.1
+        run: pkg-config --print-errors --exists dbus-1 libudev webkit2gtk-4.1
       - uses: pnpm/action-setup@v6.0.9
       - uses: actions/setup-node@v6
         with:

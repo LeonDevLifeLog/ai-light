@@ -11,9 +11,12 @@
 pub mod arbiter;
 pub mod ble;
 pub mod config;
+pub mod device;
 pub mod engine;
 pub mod hook_server;
 pub mod logging;
 pub mod protocol;
 pub mod theme;
 pub mod transport;
+pub mod usb;
+mod usb_protocol;

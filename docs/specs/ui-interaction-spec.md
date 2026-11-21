@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.48 |
-| 文档状态 | 生效。回合完成提示到期后进入等待（V1.48，2026-11-19） |
+| 文档版本 | V1.51 |
+| 文档状态 | 生效。含 USB 运行状态与故障反馈（2026-11-21） |
 | 范围 | L5 展示层**组件级**行为契约（中粒度） |
 | 上游 | [ui-design.md](./ui-design.md) / [ui-interactions.md](./ui-interactions.md) / [ipc-contract.md](./ipc-contract.md) / [theme-format.md](./theme-format.md) / 蓝牙硬件 V0.4 |
 | 下游 | `ui-ux-pro-max` 技能 / 前端组件开发 |
@@ -151,7 +151,7 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 | Source Event | 目标组件 | 同步字段 | 同步方式 |
 |---|---|---|---|
-| `device-connection-changed` | `Dashboard.DeviceCard` | `connected` / `address` / `name` / `reconnecting` / `waitingForDevice` | full |
+| `device-connection-changed` | `Dashboard.DeviceCard` | 完整设备快照，含 `transport`、`address`、`usbUid`、`usbFaultFlags`、`connected`、`reconnecting` 和 `waitingForDevice` | full |
 | `device-connection-changed` | `Sidebar.statusDot` | `connected` | patch |
 | `device-connection-changed` | `Devices.ScanResultList` | 对应卡片的 `state` 字段 | patch |
 | `config-changed` / 初始化 config | `Devices.ManagedDeviceCard` | `rememberedDevice` 身份与是否展示 | full |
@@ -160,10 +160,10 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 **Payload**：
 ```typescript
-{ connected: boolean, address: string|null, name: string|null, reconnecting?: boolean, reason?: string }
+type DeviceConnectionEvent = DeviceSnapshot & { reason?: string }
 ```
 
-> ✅ 实现状态：连接成功与链路断连、主动断开、忘记、重连放弃均已 emit。`reason` 值域为 `link_lost` / `reconnect_failed` / `manual_disconnect` / `forgotten`。
+> 连接成功、链路断连、重连放弃、启动长期等待、主动断开和忘记设备均推送事件。`reason` 值域为 `link_lost` / `reconnect_failed` / `startup_waiting` / `manual_disconnect` / `forgotten`。
 
 ### 3.3 设备电源层（`device-power-changed`）
 
@@ -185,16 +185,17 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 | Source Event | 目标组件 | 同步字段 | 同步方式 |
 |---|---|---|---|
-| `device-fault` | `Dashboard.FaultAlert` | `source` / `code` / `context` | append |
-| `device-fault` | `Devices.FaultAlert` | `source` / `code` / `context` | append |
-| `device-fault` | `DeviceCard.faultIndicator` | 故障源图标 + tooltip | patch |
+| `device-fault` | `Devices.FaultAlert` | 蓝牙 `source` / `code` / `context`；USB `usbUid` / `faultFlags` | patch |
+| `device-fault` | 全局 Toast | 蓝牙 `code`；USB `raised` 的故障说明 | emit |
 
 **Payload**：
 ```typescript
-{ source: 'LED'|'BUZZER'|'POWER'|'PROTOCOL', code: number, context: number }
+type DeviceFault =
+    { source: number; code: number; context: number }
+  | { usbUid: string; faultFlags: number; raised: number }
 ```
 
-> ✅ 实现状态：FAULT_EVENT 已接线并 emit `device-fault`。
+蓝牙接收 `FAULT_EVENT`。USB 首次连接和运行中均读取故障位，告警只跟随当前 `usbUid`。故障位归零或连接解除时清除告警。`raised` 非零才为 USB 显示 Toast。见 KAD-23。
 
 ### 3.5 主题层（`theme-changed`）
 
@@ -260,12 +261,12 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 
 | 错误码 | 触发场景 | UI 反馈 | 用户操作 |
 |---|---|---|---|
-| `NOT_FOUND` | 主题名不存在 / 设备地址找不到 | Toast `<对象> 不存在` | 重试 / 返回 |
+| `NOT_FOUND` | 主题名不存在或设备已拔出 | Toast `<对象> 不存在` | 重试 / 返回 |
 | `THEME_INVALID` | 导入 / 编辑主题校验失败 | Dialog "主题校验失败" + `<details>`（缺失字段 / 非法值 / SCENE 引用缺失） | 修改 / 取消 |
-| `CONFLICT` | 导入主题与内置同名 | Dialog "导入失败：与内置主题 `<name>` 同名" | 重命名 / 取消 |
+| `CONFLICT` | 导入主题与内置同名或 USB 会话被占用 | 显示重名提示或设备占用 Toast | 重命名主题，或断开原控制端后重试 |
 | `THEME_BUILTIN` | 尝试导出或删除内置主题 | Toast / Dialog "内置主题不可导出或删除" | 关闭 |
-| `BAD_REQUEST` | 参数非法（如 trigger_state 状态名含非法字符） | Toast "请求参数非法：`<reason>`" | 修正输入 |
-| `DEVICE_NOT_CONNECTED` | preview_scene 时未连接 | Toast "请先连接设备" | 跳转 `/devices` |
+| `BAD_REQUEST` | 参数非法，或场景超出 USB 设备能力 | 显示无效参数或场景字段 | 修正输入 |
+| `DEVICE_NOT_CONNECTED` | 试听或读回时所需设备未连接 | 显示连接提示 | 跳转 `/devices` |
 | `DEVICE_DISCONNECT_FAILED` | 主动断开失败 | Toast "无法断开设备：`<reason>`" | 检查设备后重试 |
 | `AUTOSTART_FAILED` | OS 登录项切换失败 | Toast "开机自启设置失败：`<reason>`"；Switch 回滚 | 检查系统权限后重试 |
 | `ADAPTER_NOT_FOUND` | Adapter 不可执行 | 连接前进入安装确认。断开失败时显示原因 Toast | 检查运行环境后重试 |
@@ -302,17 +303,21 @@ L6 状态层        每个 L4/L5 组件的 8 个视觉态
 | 阶段 | 后端动作 | 失败 UI 反馈 |
 |---|---|---|
 | 1. BLE 连接 | `btleplug.connect` | Toast "连接失败：`<reason>`"（超时 / 权限被拒 / 距离过远） |
-| 2. DIS 读取 | `read DIS 0x2A26` | 日志（不弹 UI；继续握手） |
+| 2. DIS 读取 | 协议定义 `read DIS 0x2A26`，当前固件版本经阶段 5 获取 | — |
 | 3. CCC 使能 | `subscribe TX CCC` | Toast "无法使能通知通道" + 断开 |
 | 4. DEVICE_READY | 等设备主动事件 | 超时 3s → Toast "设备无应答" + 断开 |
 | 5. GET_DEVICE_INFO | `0x02` | Toast "读取设备信息失败" + 断开 |
 | 6. GET_CAPABILITIES | `0x04` | Toast "读取设备能力失败" + 断开 |
-| 7. BAS 订阅（条件） | `subscribe BAS 0x2A19/0x2BED` | 日志（不弹 UI；无电池版本无 BAS） |
-| 8. GET_POWER_STATUS | `0x50` | Toast "读取电源状态失败" + 断开 |
+| 7. BAS 订阅（条件） | 协议定义 `subscribe BAS 0x2A19/0x2BED`，当前电量经阶段 8 及运行期事件获取 | — |
+| 8. GET_POWER_STATUS（按能力位） | `0x50` | 读写或解析异常走连接失败。设备返回非 OK 时记录日志，继续连接 |
 
-**任一阶段失败 → 设备卡回滚到 `Disconnected` + 触发 `device-connection-changed{connected: false, reason}`**
+客户端已实现阶段 1、3～6 和 8。手动连接握手失败由 `connect_device` 返回错误，前端结束连接中状态并显示失败 Toast。启动时连接失败进入 §4.4.1 的恢复流程。
 
-> ✅ 实现状态：阶段 1~8 已实现。握手失败走连接命令错误路径（前端 Toast），不额外 emit `device-connection-changed{false}`；运行中断连才触发 false 事件与退避重连。
+### 4.3.1 USB HID 连接与状态读回
+
+- 设备枚举、信息校验和 `OPEN_SESSION` 期间显示「正在连接」。收到匹配应答并完成状态读回后显示「连接正常」。手动连接失败显示错误原因。
+- 运行中 USB 会话失效后进入重连，按同一 UID 建立新会话。快速尝试耗尽后显示「等待设备上线」。见 KAD-22。
+- [读取硬件状态] 失败时在设备卡显示原因。成功时显示固件报告的场景状态、三灯 RGB、蜂鸣状态、剩余租期和故障。蜂鸣播放时显示当前频率和驱动强度。
 
 ### 4.4 蓝牙断连与宽限期（V0.4 §13）
 
@@ -339,7 +344,7 @@ StartupInitialConnect
 ```
 
 - `WaitingForDevice` 由 Rust 快照字段 `waitingForDevice` 表达，与 `reconnecting` 互斥。
-- 进入该阶段时 emit `reason:"startup_waiting"`；后续每次尝试失败不重复 emit/Toast。
+- 进入该阶段时 emit `reason:"startup_waiting"`。USB 运行中重连也可进入该阶段。后续重试失败记录日志。
 - 快照初始化可恢复前端错过的阶段变化，不依赖页面持续存活。
 
 ### 4.5 主题相关失败路径
@@ -389,7 +394,7 @@ StartupInitialConnect
                           │ invoke connect_device(addr)
                           ▼
                    ┌──────────────┐
-                   │ Connecting   │ 进入 V0.4 §5 握手 7 阶段
+                   │ Connecting   │ 进入蓝牙或 USB 握手
                    └──────┬───────┘
               握手失败 ↓  ↓ 成功
               ┌────────┘  └────────┐
@@ -416,6 +421,7 @@ StartupInitialConnect
 | `Connecting` | spinner + "连接中..." | "连接中"（warn） | 禁用 |
 | `Connected` | 完整字段 | "已连接"（accent） | [断开连接] / [忘记设备] |
 | `Reconnecting` | 常驻身份卡 + spinner | "重连中"（warn） | [停止重连] / [忘记设备] |
+| `WaitingForDevice`（§4.4.1） | 常驻身份卡 | "等待设备上线" | [停止等待] / [忘记设备] |
 
 > ✅ 实现状态：`Connected ↔ Disconnected` 双向已实现；记忆状态与连接状态独立，已记住设备在离线时仍保留恢复卡；`Reconnecting` 支持停止重连或忘记设备；连接代次使旧重连任务在主动操作后失效。
 
@@ -568,17 +574,17 @@ Dashboard 与 Devices 页共用：Dashboard 展示当前连接摘要；Devices �
 | Props | `mode` | `'dashboard' \| 'scan-result' \| 'detail'` |
 | Props | `connected` | boolean |
 | Props | `rememberedDevice` | Devices 页的持久身份；非 null 时卡片常驻 |
-| Emit | `onClickConnect(address)` | 仅 `mode = 'scan-result'` |
-| 订阅 | `device-connection-changed` | `connected` / `address` / `name` / `reconnecting` / `waitingForDevice` |
+| Emit | `onClickConnect(device)` | 使用蓝牙地址或 USB UID |
+| 订阅 | `device-connection-changed` | 完整设备快照，含当前连接类型 |
 | 订阅 | `device-power-changed` | `capabilityBits` / `batteryMv` / `batteryPercent` / `powerFlags` / `powerSource` / `chargeState` |
-| 订阅 | `device-fault` | `source` / `code` / `context` |
+| 订阅 | `device-fault` | 设备页告警数据见 §3.4 |
 
 **6.3.3 视觉态全集**
 
 | 态 | 触发条件 | 视觉 | 可交互 |
 |---|---|---|---|
 | `disconnected` | `!connected && !rememberedDevice` | 占位卡 + 虚线边框 + "未连接" tag | hover → [去连接] |
-| `rememberedOffline` | `rememberedDevice && !connected && !reconnecting` | 常驻身份卡 + "未连接" tag，实时字段 `—` | [重新连接] / [忘记设备] |
+| `rememberedOffline` | 有记忆设备且处于 `Disconnected` | 常驻身份卡 + "未连接" tag，实时字段 `—` | [重新连接] / [忘记设备] |
 | `connecting` | `state == 'Connecting'` | spinner + "连接中..." | 禁用 |
 | `connected` | `connected == true` | 完整字段 + "已连接" tag（accent） | [断开连接] / [忘记设备] |
 | `reconnecting` | `state == 'Reconnecting'` | 常驻身份卡 + "重连中..." | [停止重连] / [忘记设备] |
@@ -586,7 +592,7 @@ Dashboard 与 Devices 页共用：Dashboard 展示当前连接摘要；Devices �
 | `charging` | `chargeState == 'CHARGING'` | 电池格 + ⚡ 充电图标 | 同 `connected` |
 | `full` | `chargeState == 'FULL'` | 电池格 100% + ✓ | 同 `connected` |
 | `lowBattery` | `batteryPercent < 20` | 电池格 warning 色 + Toast 警告 | 同 `connected` |
-| `fault` | 收到 `device-fault` | 红色故障指示条 + tooltip 显示 source/code | 同 `connected` |
+| `fault` | 已连接蓝牙收到 `device-fault`，或当前 USB 的 `usbFaultFlags` 非零 | 设备页显示故障告警 | 同 `connected` |
 
 **6.3.4 联动矩阵**
 
@@ -594,11 +600,12 @@ Dashboard 与 Devices 页共用：Dashboard 展示当前连接摘要；Devices �
 |---|---|---|
 | `device-connection-changed` | `connected` / `address` / `name` / `reconnecting` / `waitingForDevice` | full |
 | `device-power-changed` | `capabilityBits` / `batteryMv` / `batteryPercent` / `powerFlags` / `powerSource` / `chargeState` | patch |
-| `device-fault` | 故障指示 + Alert 追加 | append |
+| `device-fault` | 设备页告警 | patch |
 | `update_config` | (none) | — |
 | 初始化 config / `config-changed` | `rememberedDevice` | full |
 
 **6.3.5 边界条件**
+- USB 设备卡展示 USB 供电、固件和硬件版本，连接后提供 [读取硬件状态]。随固件能力显示蜂鸣读回或「未配备蜂鸣」。电量和 RSSI 适用于蓝牙。
 - Dashboard 摘要的设备名最多显示两行，超出后省略并提供全文提示；连接状态与电量位于独立元信息行，电量和导航箭头保持可见且不参与名称宽度竞争
 - `powerFlags.Bit0 = 0`，或无运行时快照且 `capabilityBits.Bit4 = 0` → 电量格显示 "无电池"
 - `powerFlags.Bit0 = 1 && batteryPercent = null` → 显示 "电量未标定"；`batteryMv` 可用时追加显示原始 mV
@@ -872,11 +879,11 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 ├─────────────────────────┤
 │     ScanProgress        │ ← 扫描中显示
 ├─────────────────────────┤
+│      FaultAlert         │ ← 有设备故障时显示
+├─────────────────────────┤
+│    DeviceDetailCard     │ ← 我的设备
+├─────────────────────────┤
 │   ScanResultList        │ ← 卡片列表
-├─────────────────────────┤
-│    DeviceDetailCard     │ ← 已连接设备
-├─────────────────────────┤
-│     FaultAlert × N      │ ← 故障列表
 └─────────────────────────┘
 ```
 
@@ -886,16 +893,13 @@ Integrations 页顶部的运行环境卡（Node.js / npm / Adapter 工具链状�
 - FaultAlert 独立
 
 **边界条件**：
-- 扫描超时（5s 无结果）→ ScanProgress 隐藏 + ScanResultList 显示空态
+- 两种发现完成后隐藏 ScanProgress。两类候选均为空时显示空态。
 - 扫描进行态至少展示 400ms；页头与空态重试按钮统一为「重新查找设备」
-- 蓝牙权限被拒 → 顶部红色 Alert + [重试] 按钮
-- 扫描中点击 [重新查找] → 取消当前扫描 + 重新发起
+- 蓝牙和 USB 并行发现，每种结果返回后即可操作。访问失败分别在页面显示，查找期间重试按钮禁用。
 - 「我的设备」位于扫描结果之前且独立于扫描；`rememberedDevice != null` 时始终展示。
-- 扫描列表只有 `snapshot.device.connected && snapshot.device.address == result.address` 时显示禁用的「已连接」；仅地址相同不得禁用。
-- 扫描到 `rememberedDevice.address` 且实际离线时显示「已记住」与可点击的「重新连接」。
-- 扫描结果写入页面状态前仅保留 `recognized === true` 的状态灯候选；识别标记复用后端结果（当前按 `ACLight-` 广播名前缀计算），不替代连接后的服务发现与能力校验。
-- ScanResultList 固定按「记住关系降序 → RSSI 降序 → address 升序」排列；未知 RSSI 低于任意已知 RSSI。
-- 空态与列表使用同一份过滤结果：仅扫描到其它蓝牙设备时显示「未发现附近的状态灯」。
+- 扫描项在 `snapshot.device.connected` 为真且身份相同时显示禁用的「已连接」。已记住且离线的蓝牙地址或 USB UID 显示「已记住」和「重新连接」。
+- 蓝牙保留 `recognized === true` 的候选，USB 使用 `scan_usb_devices` 返回的候选。
+- 排序依次比较记住关系、USB 优先、RSSI 和稳定设备标识。两类候选均为空时显示「未发现状态灯」。
 
 ---
 
@@ -1653,12 +1657,12 @@ Dashboard StatusHero 与 ThemeEditor 共用的主题 SCENE 模拟；Dashboard �
 
 | Source Event | 字段 | 同步方式 |
 |---|---|---|
-| `device-fault` | 追加 Alert | append |
+| `device-fault` | 更新设备页故障 Alert | patch |
 | 用户点 × | 移除 | remove |
 
 **8.18.5 边界条件**
 - 多个 Alert 堆叠：最多 3 个同时显示
-- 设备故障 Alert **不自动消失**（V2 加 dismiss）
+- 设备故障 Alert 随连接解除清除。USB 的故障位归零时也会清除。
 
 **8.18.6 无障碍**
 - `role="alert"` + `aria-live="assertive"`
@@ -1926,6 +1930,9 @@ Toast 组件（Sonner）自带 lifecycle 管理：
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.51 | 2026-11-21 | 对齐报告。§3.2、§3.4、§4.3.1、§6.3、§7.2 和 §8.18 同步 USB 故障、蜂鸣读回和独立发现。已核对 §3 IPC 事件、§4.1 错误码、§4.2 蓝牙结果码、§6～§8 主题字段和 ADR/KAD 引用。 |
+| V1.50 | 2026-11-21 | 对齐报告。§3.2、§4.1、§4.3.1、§5.2、§6.3 和 §7.2 同步 USB 快照、连接、状态读回及设备列表。核对 §3 IPC 事件、§4.1 错误码、§4.2 蓝牙结果码、§6～§8 主题字段和 ADR/KAD 引用。 |
+| V1.49 | 2026-11-21 | 对齐报告。§3.2 补齐启动恢复的 IPC 字段及原因值。§4.3 校准蓝牙握手已实现步骤和手动连接失败反馈，§5.2 和 §6.3 补齐等待设备的展示条件。已核对 §3 IPC 事件、§4.1 错误码、§4.2 蓝牙结果码、§6～§8 主题字段及 ADR/KAD 引用。 |
 | V1.48 | 2026-11-19 | 对齐报告。§5.3 和 §6.2 同步完成驻留到期后进入 `WAITING` 的状态流转与预览。§3 IPC 事件、§4.1 错误码、§4.2 蓝牙结果码、§6～§8 主题字段及 ADR/KAD-21 引用均已核对。 |
 | V1.47 | 2026-11-19 | 对齐报告。§3.6 移除旧端口设置，§4.1 补齐 IPC 错误码，§5.3 修复 ADR 链接并校准最近活动仲裁与驻留到期行为，§6.2 修正模拟灯的主题规范引用。§3 IPC 事件、§4.1 AppError.code、§4.2 蓝牙结果码、§6～§8 主题字段及 ADR/KAD 引用均已核对。 |
 | V1.46 | 2026-09-12 | §3/§4.4.1/§6.3 新增启动期长期恢复和 `waitingForDevice` 视觉态，与运行中 `reconnecting` 分离。对齐报告（变更后自动，5 项语义硬检查通过）：§3 Source Event `device-connection-changed` 存在于 ipc-contract §5，字段与 reason 已同步；§4.1 AppError.code 未变；§4.2 蓝牙 result code 未变且与 V0.4 §3.6 一致；§6～§8 未新增主题字段；ADR-0007、KAD-20 引用有效。 |

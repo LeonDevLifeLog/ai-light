@@ -12,7 +12,7 @@ import {
   Unplug,
   WifiOff,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppState } from "@/app/app-context";
 import {
   ActionButton,
@@ -29,6 +29,8 @@ import {
   type DeviceState,
   type RememberedDevice,
   type ScannedDevice,
+  type UsbStatus,
+  usbFaultMessage,
 } from "@/lib/ailight";
 import { batteryStatus, batteryStatusLabel } from "@/lib/battery-status";
 import { cn, runAsync } from "@/lib/utils";
@@ -46,25 +48,37 @@ function signalLabel(rssi: number | null) {
   return "信号较弱";
 }
 
-function sortNearbyDevices(
-  devices: ScannedDevice[],
-  rememberedAddress?: string
-) {
+function deviceKey(device: RememberedDevice) {
+  return "usbUid" in device ? `usb:${device.usbUid}` : `ble:${device.address}`;
+}
+
+function snapshotDevice(device?: DeviceState): RememberedDevice | null {
+  const name = device?.name ?? "AgentCore-Light";
+  if (device?.usbUid) {
+    return { name, usbUid: device.usbUid };
+  }
+  return device?.address ? { name, address: device.address } : null;
+}
+
+function sortNearbyDevices(devices: ScannedDevice[], remembered?: string) {
   return [...devices].sort((left, right) => {
     const rememberedDifference =
-      Number(right.address === rememberedAddress) -
-      Number(left.address === rememberedAddress);
+      Number(deviceKey(right) === remembered) -
+      Number(deviceKey(left) === remembered);
     if (rememberedDifference !== 0) {
       return rememberedDifference;
     }
 
-    const signalDifference =
-      (right.rssi ?? Number.NEGATIVE_INFINITY) -
-      (left.rssi ?? Number.NEGATIVE_INFINITY);
+    const transportDifference =
+      Number("usbUid" in right) - Number("usbUid" in left);
+    if (transportDifference !== 0) {
+      return transportDifference;
+    }
+    const signalDifference = (right.rssi ?? -128) - (left.rssi ?? -128);
     if (signalDifference !== 0) {
       return signalDifference;
     }
-    return left.address.localeCompare(right.address);
+    return deviceKey(left).localeCompare(deviceKey(right));
   });
 }
 
@@ -96,6 +110,64 @@ function batteryLabel(device: DeviceState, connected: boolean) {
   return batteryStatusLabel(batteryStatus(device));
 }
 
+const usbSceneLabels = ["已清空", "运行中", "已完成", "故障"];
+const USB_CAP_PASSIVE_BUZZER = 2;
+
+function usbBuzzerLabel(output: UsbStatus["output"], capabilities: number) {
+  // biome-ignore lint/suspicious/noBitwiseOperators: USB V1.0 reports capabilities as a bit field.
+  if (!(capabilities & USB_CAP_PASSIVE_BUZZER)) {
+    return "未配备蜂鸣";
+  }
+  if (output.buzzerState === 0) {
+    return "蜂鸣已停止";
+  }
+  return `蜂鸣播放中 · ${output.buzzerFrequencyHz} Hz · 强度 ${output.buzzerVolume}%`;
+}
+
+function UsbStatusReadback({ capabilities }: { capabilities: number | null }) {
+  const [status, setStatus] = useState<UsbStatus | null>(null);
+  const [reading, setReading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const read = async () => {
+    setReading(true);
+    setError(null);
+    try {
+      setStatus(await api.readUsbStatus());
+    } catch (failure) {
+      setStatus(null);
+      setError(asAppError(failure).message);
+    } finally {
+      setReading(false);
+    }
+  };
+
+  return (
+    <div className="connected-device__readback">
+      <ActionButton busy={reading} onClick={() => runAsync(read())}>
+        读取硬件状态
+      </ActionButton>
+      {error ? (
+        <InlineAlert title="USB 状态读取失败">{error}</InlineAlert>
+      ) : null}
+      {status ? (
+        <p className="mono" role="status">
+          {usbSceneLabels[status.output.sceneState]} · RGB{" "}
+          {status.output.rgb
+            .map((color) => `(${color.join(", ")})`)
+            .join(" / ")}
+          {" · "}
+          {usbBuzzerLabel(status.output, capabilities ?? 0)}
+          {" · "}租期 {status.runtime.leaseRemainingMs} ms
+          {status.runtime.faultFlags
+            ? ` · ${usbFaultMessage(status.runtime.faultFlags)}`
+            : ""}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function ManagedDeviceCard({
   connected,
   connecting,
@@ -119,6 +191,13 @@ function ManagedDeviceCard({
   reconnecting: boolean;
   waitingForDevice: boolean;
 }) {
+  const isUsb = "usbUid" in managedDevice;
+  let ConnectionIcon = Bluetooth;
+  if (isUsb) {
+    ConnectionIcon = PlugZap;
+  } else if (connected) {
+    ConnectionIcon = Radio;
+  }
   const status = connectionStatus(
     connected,
     connecting,
@@ -127,6 +206,10 @@ function ManagedDeviceCard({
   );
   const detail = (value: string | number | null) =>
     connected ? (value ?? "—") : "—";
+  const hardwareRevision =
+    device.hardwareRevision === null
+      ? null
+      : `0x${device.hardwareRevision.toString(16).padStart(4, "0")}`;
   let disconnectLabel = "断开连接";
   if (reconnecting) {
     disconnectLabel = "停止重连";
@@ -143,15 +226,13 @@ function ManagedDeviceCard({
       <Card className="connected-device">
         <div className="connected-device__identity">
           <div className={cn("device-orb", connected && "is-connected")}>
-            {connected ? (
-              <Radio aria-hidden="true" />
-            ) : (
-              <Bluetooth aria-hidden="true" />
-            )}
+            <ConnectionIcon aria-hidden="true" />
           </div>
           <div className="connected-device__name">
             <strong>{managedDevice.name || "AgentCore-Light"}</strong>
-            <span className="mono">{managedDevice.address}</span>
+            <span className="mono">
+              {isUsb ? managedDevice.usbUid : managedDevice.address}
+            </span>
           </div>
           <StatusTag tone={status.tone}>
             {connected ? <CheckCircle2 aria-hidden="true" size={13} /> : null}
@@ -161,14 +242,22 @@ function ManagedDeviceCard({
         <div className="connected-device__details">
           <dl className="device-stats">
             <div>
-              <Battery
-                aria-hidden="true"
-                className="device-stat__icon"
-                size={16}
-              />
+              {isUsb ? (
+                <PlugZap
+                  aria-hidden="true"
+                  className="device-stat__icon"
+                  size={16}
+                />
+              ) : (
+                <Battery
+                  aria-hidden="true"
+                  className="device-stat__icon"
+                  size={16}
+                />
+              )}
               <div className="device-stat__copy">
-                <dt>电量</dt>
-                <dd>{batteryLabel(device, connected)}</dd>
+                <dt>{isUsb ? "供电" : "电量"}</dt>
+                <dd>{isUsb ? "USB 供电" : batteryLabel(device, connected)}</dd>
               </div>
             </div>
             <div>
@@ -185,8 +274,10 @@ function ManagedDeviceCard({
                 size={16}
               />
               <div className="device-stat__copy">
-                <dt>硬件型号</dt>
-                <dd>{detail(device.hardwareVariant)}</dd>
+                <dt>{isUsb ? "硬件版本" : "硬件型号"}</dt>
+                <dd>
+                  {detail(isUsb ? hardwareRevision : device.hardwareVariant)}
+                </dd>
               </div>
             </div>
           </dl>
@@ -221,6 +312,12 @@ function ManagedDeviceCard({
             </ActionButton>
           </div>
         </div>
+        {isUsb && connected ? (
+          <UsbStatusReadback
+            capabilities={device.capabilityBits}
+            key={managedDevice.usbUid}
+          />
+        ) : null}
       </Card>
     </section>
   );
@@ -239,6 +336,7 @@ function ScanDeviceRow({
   isRemembered: boolean;
   onConnect: () => void;
 }) {
+  const isUsb = "usbUid" in device;
   let actionLabel = "连接";
   if (isConnected) {
     actionLabel = "已连接";
@@ -249,14 +347,24 @@ function ScanDeviceRow({
   return (
     <Card className="device-row">
       <div className="device-orb">
-        <Bluetooth aria-hidden="true" />
+        {isUsb ? (
+          <PlugZap aria-hidden="true" />
+        ) : (
+          <Bluetooth aria-hidden="true" />
+        )}
       </div>
       <div className="device-row__copy">
-        <strong>{device.name || "未命名蓝牙设备"}</strong>
-        <span className="mono">{device.address}</span>
+        <strong>{device.name || "AgentCore-Light"}</strong>
+        <span className="mono">{isUsb ? device.usbUid : device.address}</span>
       </div>
       <span className="signal-copy">
-        <Signal aria-hidden="true" size={15} /> {signalLabel(device.rssi)}
+        {isUsb ? (
+          "USB"
+        ) : (
+          <>
+            <Signal aria-hidden="true" size={15} /> {signalLabel(device.rssi)}
+          </>
+        )}
       </span>
       {device.recognized ? (
         <StatusTag tone={isRemembered ? "warning" : "success"}>
@@ -281,26 +389,65 @@ export function DevicesPage() {
   const { config, snapshot, fault, notify, refresh } = useAppState();
   const [devices, setDevices] = useState<ScannedDevice[]>([]);
   const [scanning, setScanning] = useState(false);
-  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanErrors, setScanErrors] = useState<{ ble?: string; usb?: string }>(
+    {}
+  );
   const [connecting, setConnecting] = useState<string | null>(null);
   const [hasScanned, setHasScanned] = useState(false);
   const [deviceAction, setDeviceAction] = useState<
     "disconnect" | "forget" | null
   >(null);
   const [confirmForget, setConfirmForget] = useState(false);
+  const scanId = useRef(0);
 
   const scan = useCallback(async () => {
+    const id = ++scanId.current;
     setScanning(true);
-    setScanError(null);
-    try {
-      const [found] = await Promise.all([
-        api.scanDevices(),
-        new Promise((resolve) => window.setTimeout(resolve, 400)),
-      ]);
-      setDevices(found.filter((device) => device.recognized === true));
-    } catch (error) {
-      setScanError(asAppError(error).message);
-    } finally {
+    setScanErrors({});
+
+    const collect = async (
+      transport: "ble" | "usb",
+      result: Promise<ScannedDevice[]>
+    ) => {
+      let found: ScannedDevice[] = [];
+      try {
+        found = await result;
+      } catch (error) {
+        if (scanId.current === id) {
+          setScanErrors((current) => ({
+            ...current,
+            [transport]: asAppError(error).message,
+          }));
+        }
+      }
+      if (scanId.current === id) {
+        setDevices((current) => [
+          ...current.filter(
+            (device) => "usbUid" in device !== (transport === "usb")
+          ),
+          ...found,
+        ]);
+      }
+    };
+
+    await Promise.all([
+      collect(
+        "ble",
+        api
+          .scanDevices()
+          .then((items) => items.filter((item) => item.recognized))
+      ),
+      collect(
+        "usb",
+        api
+          .scanUsbDevices()
+          .then((items) =>
+            items.map((item) => ({ ...item, recognized: true, rssi: null }))
+          )
+      ),
+      new Promise((resolve) => window.setTimeout(resolve, 400)),
+    ]);
+    if (scanId.current === id) {
       setScanning(false);
       setHasScanned(true);
     }
@@ -308,16 +455,19 @@ export function DevicesPage() {
 
   useEffect(() => {
     runAsync(scan());
+    return () => {
+      scanId.current += 1;
+    };
   }, [scan]);
 
-  const connect = async (device: Pick<ScannedDevice, "address" | "name">) => {
-    setConnecting(device.address);
+  const connect = async (device: RememberedDevice) => {
+    setConnecting(deviceKey(device));
     try {
-      await api.connectDevice(device.address);
+      await api.connectDevice(device);
       await refresh();
       notify({
         tone: "success",
-        title: "连接请求已发送",
+        title: "设备已连接",
         message: device.name,
       });
     } catch (error) {
@@ -367,25 +517,23 @@ export function DevicesPage() {
   };
 
   const rememberedDevice = config?.rememberedDevice;
+  const rememberedKey = rememberedDevice
+    ? deviceKey(rememberedDevice)
+    : undefined;
+  const currentDevice = snapshotDevice(snapshot?.device);
+  const currentKey = currentDevice ? deviceKey(currentDevice) : undefined;
   const sortedDevices = useMemo(
-    () => sortNearbyDevices(devices, rememberedDevice?.address),
-    [devices, rememberedDevice?.address]
+    () => sortNearbyDevices(devices, rememberedKey),
+    [devices, rememberedKey]
   );
-  const managedDevice =
-    rememberedDevice ??
-    (snapshot?.device.address
-      ? {
-          address: snapshot.device.address,
-          name: snapshot.device.name ?? "AgentCore-Light",
-        }
-      : null);
+  const managedDevice = rememberedDevice ?? currentDevice;
+  const managedKey = managedDevice ? deviceKey(managedDevice) : undefined;
   const managedDeviceIsConnected = Boolean(
-    managedDevice &&
-      snapshot?.device.connected &&
-      snapshot.device.address === managedDevice.address
+    managedDevice && snapshot?.device.connected && currentKey === managedKey
   );
   const managedDeviceIsConnecting =
-    managedDevice != null && connecting === managedDevice.address;
+    managedDevice != null && connecting === managedKey;
+  const usbFaultFlags = snapshot?.device.usbFaultFlags ?? 0;
 
   return (
     <div className="page-stack">
@@ -404,14 +552,14 @@ export function DevicesPage() {
             </span>
           </ActionButton>
         }
-        description="查找并连接附近的状态灯"
+        description="查找并连接 USB 或蓝牙状态灯"
         title="设备"
       />
 
       {scanning ? (
         <Card className="scan-status" role="status">
           <span className="scan-pip" />
-          <span>正在查找附近的灯牌，扫描大约需要 5 秒…</span>
+          <span>正在查找 USB 和蓝牙灯牌…</span>
           <div
             aria-label="扫描进行中"
             aria-valuemax={100}
@@ -423,14 +571,22 @@ export function DevicesPage() {
           </div>
         </Card>
       ) : null}
-      {scanError ? (
+      {scanErrors.ble ? (
         <InlineAlert title="无法扫描蓝牙设备">
-          {scanError}。请检查系统蓝牙权限后重试。
+          {scanErrors.ble}。请检查系统蓝牙权限后重试。
         </InlineAlert>
+      ) : null}
+      {scanErrors.usb ? (
+        <InlineAlert title="无法查找 USB 灯牌">{scanErrors.usb}</InlineAlert>
       ) : null}
       {fault ? (
         <InlineAlert title="设备故障">
           来源 {fault.source}，故障码 {fault.code}，上下文 {fault.context}。
+        </InlineAlert>
+      ) : null}
+      {usbFaultFlags ? (
+        <InlineAlert title="USB 灯牌故障">
+          {usbFaultMessage(usbFaultFlags)}
         </InlineAlert>
       ) : null}
 
@@ -451,7 +607,7 @@ export function DevicesPage() {
 
       <section aria-labelledby="nearby-title">
         <h2 className="section-title" id="nearby-title">
-          附近设备
+          发现的设备
         </h2>
         {!scanning && devices.length === 0 && hasScanned ? (
           <Card>
@@ -461,23 +617,22 @@ export function DevicesPage() {
                   <RefreshCw size={16} /> 重新查找设备
                 </ActionButton>
               }
-              description="请确认灯牌已上电、处于广播范围内，并允许 AI-Light 使用蓝牙。"
+              description="请检查 USB 数据线，或确认蓝牙灯牌已上电且在广播范围内。"
               icon={<WifiOff />}
-              title="未发现附近的状态灯"
+              title="未发现状态灯"
             />
           </Card>
         ) : (
           <div className="device-list">
             {sortedDevices.map((device) => (
               <ScanDeviceRow
-                connecting={connecting === device.address}
+                connecting={connecting === deviceKey(device)}
                 device={device}
                 isConnected={Boolean(
-                  snapshot?.device.connected &&
-                    snapshot.device.address === device.address
+                  snapshot?.device.connected && currentKey === deviceKey(device)
                 )}
-                isRemembered={rememberedDevice?.address === device.address}
-                key={device.address}
+                isRemembered={rememberedKey === deviceKey(device)}
+                key={deviceKey(device)}
                 onConnect={() => runAsync(connect(device))}
               />
             ))}

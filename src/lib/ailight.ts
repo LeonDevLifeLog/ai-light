@@ -24,12 +24,16 @@ export interface DeviceState {
   chargeState: number | null;
   connected: boolean;
   fwVersion: string | null;
+  hardwareRevision: number | null;
   hardwareVariant: number | null;
   name: string | null;
   powerFlags: number | null;
   powerSource: number | null;
   /** 断连后是否处于自动重连中（device-connection-changed 事件字段） */
   reconnecting: boolean;
+  transport: "ble" | "usb" | null;
+  usbFaultFlags: number | null;
+  usbUid: string | null;
   /** 启动恢复是否已进入长期低频等待 */
   waitingForDevice: boolean;
 }
@@ -60,16 +64,58 @@ export interface ExportThemeResult {
   status: "exported" | "cancelled";
 }
 
-export interface ScannedDevice {
-  address: string;
-  name: string;
+type DeviceIdentity = { address: string } | { usbUid: string };
+
+export type RememberedDevice = DeviceIdentity & { name: string };
+
+export type ScannedDevice = RememberedDevice & {
   recognized: boolean;
   rssi: number | null;
+};
+
+export interface UsbStatus {
+  output: {
+    buzzerFrequencyHz: number;
+    buzzerState: number;
+    buzzerVolume: number;
+    rgb: [number, number, number][];
+    sceneDigest: number;
+    sceneState: number;
+  };
+  runtime: {
+    faultFlags: number;
+    leaseRemainingMs: number;
+    sceneValid: boolean;
+  };
 }
 
-export interface RememberedDevice {
-  address: string;
-  name: string;
+export interface BleDeviceFault {
+  code: number;
+  context: number;
+  source: number;
+}
+
+export type DeviceFault =
+  | BleDeviceFault
+  | { faultFlags: number; raised: number; usbUid: string };
+
+const usbFaultLabels = [
+  { bit: 0x00_01, label: "RGB 输出驱动故障" },
+  { bit: 0x00_02, label: "蜂鸣驱动故障" },
+  { bit: 0x00_10, label: "内部协议错误" },
+];
+
+export function usbFaultMessage(flags: number) {
+  const faults = usbFaultLabels
+    // biome-ignore lint/suspicious/noBitwiseOperators: USB V1.0 reports faults as a bit field.
+    .filter(({ bit }) => flags & bit)
+    .map(({ label }) => label);
+  // biome-ignore lint/suspicious/noBitwiseOperators: Keep any fault bits a newer firmware adds.
+  const unknown = flags & ~0x00_13;
+  if (unknown) {
+    faults.push(`未知故障位 0x${unknown.toString(16).toUpperCase()}`);
+  }
+  return faults.join("、");
 }
 
 export interface AppConfig {
@@ -210,6 +256,7 @@ const mockSnapshot: AppSnapshot = {
     address: null,
     name: null,
     fwVersion: null,
+    hardwareRevision: null,
     hardwareVariant: null,
     capabilityBits: null,
     batteryMv: null,
@@ -217,6 +264,9 @@ const mockSnapshot: AppSnapshot = {
     powerFlags: null,
     powerSource: null,
     chargeState: null,
+    transport: null,
+    usbFaultFlags: null,
+    usbUid: null,
     reconnecting: false,
     waitingForDevice: false,
   },
@@ -384,7 +434,18 @@ export const api = {
     isTauri() ? call<{ ok: boolean }>("delete_theme", { name }) : { ok: true },
   scanDevices: async () =>
     isTauri() ? call<ScannedDevice[]>("scan_devices") : [],
-  connectDevice: (address: string) => call<void>("connect_device", { address }),
+  scanUsbDevices: async () =>
+    isTauri()
+      ? call<{ name: string; usbUid: string }[]>("scan_usb_devices")
+      : [],
+  connectDevice: (device: DeviceIdentity) =>
+    call<void>(
+      "connect_device",
+      "usbUid" in device
+        ? { usbUid: device.usbUid }
+        : { address: device.address }
+    ),
+  readUsbStatus: () => call<UsbStatus>("read_usb_status"),
   disconnectDevice: async () =>
     isTauri() ? call<{ ok: boolean }>("disconnect_device") : { ok: true },
   forgetDevice: async () =>

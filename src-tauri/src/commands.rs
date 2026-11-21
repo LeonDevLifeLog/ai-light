@@ -3,6 +3,7 @@
 use serde::Serialize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_dialog::DialogExt;
@@ -10,10 +11,13 @@ use tokio::sync::mpsc;
 
 use ailight_core::arbiter::ST_IDLE;
 use ailight_core::ble::{self, BleDeviceInfo};
-use ailight_core::config::{AppConfig, RememberedDevice};
+use ailight_core::config::{AppConfig, DeviceTransport, RememberedDevice};
+use ailight_core::device::ConnectedDevice;
 use ailight_core::engine::{self, EngineError};
 use ailight_core::hook_server::{BusinessSnapshot, DeviceSnapshot, ServiceSnapshot, SharedState};
 use ailight_core::theme::{self, ThemeFile};
+use ailight_core::transport::{Transport, TransportError};
+use ailight_core::usb;
 
 use crate::toolchain::model::states;
 use crate::toolchain::model::{
@@ -768,8 +772,10 @@ pub async fn scan_devices(_app: AppHandle) -> CmdResult<Vec<BleDeviceInfo>> {
         duration_seconds = 5,
         "开始扫描状态灯"
     );
-    let adapter = ble::default_adapter().await.map_err(internal)?;
-    // recognized（广播名前缀，协议 §2.1）由 ble::scan 计算；服务 UUID 识别在连接后
+    let adapter = tokio::time::timeout(Duration::from_secs(8), ble::default_adapter())
+        .await
+        .map_err(|_| internal("等待蓝牙适配器超时"))?
+        .map_err(internal)?;
     let devices = ble::scan(&adapter, 5).await.map_err(internal)?;
     tracing::info!(
         event = "ble_scan_completed",
@@ -780,198 +786,314 @@ pub async fn scan_devices(_app: AppHandle) -> CmdResult<Vec<BleDeviceInfo>> {
     Ok(devices)
 }
 
-/// 连接设备（供 command 与启动自动连接共用）
-pub(crate) async fn connect_device_internal(
-    app: &AppHandle,
-    address: &str,
-    name: &str,
-    generation: u64,
-) -> Result<(), String> {
-    const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
-    let addr_norm = ble::normalize_address(address);
-    tracing::info!(address = %addr_norm, generation, "BLE 连接请求开始");
-
-    let result = tokio::time::timeout(CONNECT_TIMEOUT, async {
-        let state = app.state::<AppState>();
-        let _connection_guard = state.connection_lock.lock().await;
-        if state.connection_generation.load(Ordering::SeqCst) != generation {
-            return Err("连接请求已取消".to_string());
-        }
-
-        tracing::info!(address = %addr_norm, "BLE 获取默认适配器");
-        let adapter = ble::default_adapter().await.map_err(|e| e.to_string())?;
-        tracing::info!(address = %addr_norm, "BLE 扫描设备（4 秒）");
-        let _ = ble::scan(&adapter, 4).await.map_err(|e| e.to_string())?;
-        tracing::info!(address = %addr_norm, "BLE 扫描完成，开始连接与握手");
-        let (ble_io, actual_name, handshake) = ble::connect_to_address(&adapter, &addr_norm)
-            .await
-            .map_err(|e| e.to_string())?;
-        let display_name = if name.is_empty() {
-            actual_name
-        } else {
-            name.to_string()
-        };
-        attach_device(
-            app,
-            ble_io,
-            handshake,
-            addr_norm.clone(),
-            display_name,
-            generation,
+fn usb_vid_pid() -> CmdResult<Option<(u16, u16)>> {
+    let runtime = if cfg!(debug_assertions) {
+        (
+            std::env::var("AILIGHT_USB_VID").ok(),
+            std::env::var("AILIGHT_USB_PID").ok(),
         )
-        .await
-    })
-    .await
-    .map_err(|_| format!("连接超时（{} 秒）", CONNECT_TIMEOUT.as_secs()))?;
-
-    match &result {
-        Ok(()) => tracing::info!(address = %addr_norm, generation, "BLE 连接请求完成"),
-        Err(error) => tracing::warn!(address = %addr_norm, generation, %error, "BLE 连接请求失败"),
+    } else {
+        (None, None)
+    };
+    let pair = match (&runtime.0, &runtime.1) {
+        (None, None) => (
+            option_env!("AILIGHT_USB_VID"),
+            option_env!("AILIGHT_USB_PID"),
+        ),
+        _ => (runtime.0.as_deref(), runtime.1.as_deref()),
+    };
+    fn parse_id(value: &str) -> Option<u16> {
+        let hex = value
+            .strip_prefix("0x")
+            .or_else(|| value.strip_prefix("0X"))
+            .unwrap_or(value);
+        u16::from_str_radix(hex, 16).ok().filter(|id| *id != 0)
     }
-    result
+    match (
+        pair.0.filter(|value| !value.is_empty()),
+        pair.1.filter(|value| !value.is_empty()),
+    ) {
+        (None, None) => Ok(None),
+        (Some(vid), Some(pid)) => parse_id(vid).zip(parse_id(pid)).map(Some).ok_or_else(|| {
+            err(
+                "BAD_REQUEST",
+                "请为 AILIGHT_USB_VID 和 AILIGHT_USB_PID 同时配置有效的十六进制值",
+            )
+        }),
+        _ => Err(err(
+            "BAD_REQUEST",
+            "请为 AILIGHT_USB_VID 和 AILIGHT_USB_PID 同时配置有效的十六进制值",
+        )),
+    }
 }
 
-/// 连接成功后的统一装配：快照 → 事件 → 持久化 → 热切换 → resync → 设备事件循环
-pub(crate) async fn attach_device(
-    app: &AppHandle,
-    mut ble_io: ble::BleIo,
-    handshake: ble::HandshakeInfo,
-    address: String,
-    name: String,
-    generation: u64,
-) -> Result<(), String> {
-    let s = shared(app);
-    let state = app.state::<AppState>();
+fn usb_error(error: usb::Error) -> AppError {
+    let code = match &error {
+        usb::Error::NotFound => "NOT_FOUND",
+        usb::Error::InvalidScene(_) => "BAD_REQUEST",
+        usb::Error::Rejected { result: 0x04, .. } => "CONFLICT",
+        usb::Error::Closed => "DEVICE_NOT_CONNECTED",
+        _ => "INTERNAL",
+    };
+    err(code, error.to_string())
+}
 
-    if state.connection_generation.load(Ordering::SeqCst) != generation {
-        ble_io.disconnect().await.map_err(|e| e.to_string())?;
-        return Err("连接请求已取消".into());
+#[tauri::command]
+pub async fn scan_usb_devices() -> CmdResult<Vec<usb::Candidate>> {
+    match usb_vid_pid()? {
+        Some((vid, pid)) => usb::scan(vid, pid).await.map_err(usb_error),
+        None => Ok(vec![]),
     }
+}
 
-    // 设备快照（含握手信息：固件 / 硬件变体 / 电量）
-    {
-        let mut dev = s.device.write().map_err(|_| "device 锁".to_string())?;
-        dev.connected = true;
-        dev.reconnecting = false;
-        dev.waiting_for_device = false;
-        dev.address = Some(address.clone());
-        dev.name = Some(name.clone());
-        dev.fw_version = Some(format!(
-            "{}.{}.{}",
-            handshake.device_info.fw.0, handshake.device_info.fw.1, handshake.device_info.fw.2
-        ));
-        dev.hardware_variant = Some(handshake.device_info.hardware_variant);
-        dev.capability_bits = Some(handshake.capabilities.capability_bits);
-        if let Some(p) = &handshake.power {
-            dev.power_source = Some(p.power_source);
-            dev.power_flags = Some(p.power_flags);
-            dev.charge_state = Some(p.charge_state);
-            dev.battery_mv = (p.battery_mv != 0xFFFF).then_some(p.battery_mv);
-            dev.battery_percent = (p.battery_percent != 0xFF).then_some(p.battery_percent);
+fn snapshot_for(device: &RememberedDevice) -> DeviceSnapshot {
+    let mut snapshot = DeviceSnapshot {
+        name: Some(device.name().into()),
+        ..Default::default()
+    };
+    match device {
+        RememberedDevice::Ble { address, .. } => {
+            snapshot.transport = Some(DeviceTransport::Ble);
+            snapshot.address = Some(address.clone());
+        }
+        RememberedDevice::Usb { usb_uid, .. } => {
+            snapshot.transport = Some(DeviceTransport::Usb);
+            snapshot.usb_uid = Some(usb_uid.clone());
         }
     }
+    snapshot
+}
+
+fn publish_device(app: &AppHandle, snapshot: DeviceSnapshot, reason: Option<&str>) {
+    #[derive(Clone, Serialize)]
+    struct ConnectionEvent<'a> {
+        #[serde(flatten)]
+        device: &'a DeviceSnapshot,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<&'a str>,
+    }
+    *shared(app).device.write().unwrap() = snapshot.clone();
     let _ = app.emit(
         "device-connection-changed",
-        serde_json::json!({
-            "connected": true,
-            "reconnecting": false,
-            "waitingForDevice": false,
-            "address": address,
-            "name": name,
-        }),
+        ConnectionEvent {
+            device: &snapshot,
+            reason,
+        },
     );
-    crate::tray::update_device(app, true, Some(&name));
-    if let Some(p) = &handshake.power {
-        let _ = app.emit(
-            "device-power-changed",
-            serde_json::json!({
-                "capabilityBits": handshake.capabilities.capability_bits,
-                "batteryMv": (p.battery_mv != 0xFFFF).then_some(p.battery_mv),
-                "batteryPercent": (p.battery_percent != 0xFF).then_some(p.battery_percent),
-                "powerSource": p.power_source,
-                "chargeState": p.charge_state,
-                "powerFlags": p.power_flags,
-            }),
-        );
-    }
+    crate::tray::update_device(app, snapshot.connected, snapshot.name.as_deref());
+}
 
-    // 记住设备
-    if let Ok(mut cfg) = state.config.write() {
-        cfg.remembered_device = Some(RememberedDevice {
-            address: address.clone(),
-            name: name.clone(),
-        });
-        persist_config(app, &cfg).map_err(|e| e.message)?;
-    }
-
-    // 热切换设备（Engine 无需重建）
-    let events_rx = ble_io.take_events();
-    let ble_io = std::sync::Arc::new(ble_io);
-    state.device_io.set(Some(ble_io.clone())).await;
-    *state.active_ble.lock().await = Some(ble_io);
-    // 重连对齐：重发当前业务 SCENE（协议 §15.5）
-    state.engine.resync().await.map_err(|e| e.to_string())?;
-
-    tracing::info!(
-        event = "device_connected",
-        address = %address,
-        device_name = %name,
-        generation,
-        firmware = ?handshake.device_info.fw,
-        hardware_variant = handshake.device_info.hardware_variant,
-        capability_bits = handshake.capabilities.capability_bits,
-        "设备连接与状态对齐完成"
-    );
-
-    if let Some(rx) = events_rx {
-        spawn_device_event_loop(app.clone(), rx, address, name, generation);
+fn remember_device(app: &AppHandle, device: RememberedDevice) -> CmdResult<()> {
+    let state = app.state::<AppState>();
+    let mut config = state.config.write().map_err(|_| internal("config 锁"))?;
+    if config.remembered_device.as_ref() != Some(&device) {
+        let mut updated = config.clone();
+        updated.remembered_device = Some(device);
+        persist_config(app, &updated)?;
+        *config = updated;
+        let _ = app.emit("config-changed", &*config);
     }
     Ok(())
 }
 
-/// 消费设备主动事件：电源变化 / 故障 → Tauri events；断开 → 快照 + 退避重连
-fn spawn_device_event_loop(
+async fn close_output(connection: &ConnectedDevice, switching: bool) -> CmdResult<()> {
+    match connection {
+        ConnectedDevice::Ble { io, transport } => {
+            if switching {
+                if let Err(error) = transport.reset_outputs().await {
+                    tracing::warn!(%error, "切换设备前未能复位蓝牙灯牌");
+                }
+            }
+            io.disconnect()
+                .await
+                .map_err(|e| err("DEVICE_DISCONNECT_FAILED", e.to_string()))?;
+        }
+        ConnectedDevice::Usb(session) => {
+            match tokio::time::timeout(Duration::from_secs(4), session.close()).await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => tracing::warn!(%error, "USB 会话关闭应答不可用"),
+                Err(_) => tracing::warn!("等待 USB 会话关闭超时"),
+            }
+        }
+    }
+    Ok(())
+}
+
+// The connection lock serializes attach, detach and recovery commits.
+async fn connect_locked(
+    app: &AppHandle,
+    target: &RememberedDevice,
+    generation: u64,
+) -> CmdResult<()> {
+    let state = app.state::<AppState>();
+    if state.exiting.load(Ordering::SeqCst) {
+        return Err(internal("应用正在退出"));
+    }
+    let (connection, device, mut snapshot, ble_events) = match target {
+        RememberedDevice::Ble { address, name } => {
+            let addr = ble::normalize_address(address);
+            let (mut io, actual_name, handshake) =
+                tokio::time::timeout(Duration::from_secs(20), async {
+                    let adapter = ble::default_adapter().await.map_err(internal)?;
+                    let _ = ble::scan(&adapter, 4).await.map_err(internal)?;
+                    let mut result = ble::connect_to_address(&adapter, &addr).await;
+                    if matches!(result, Err(ble::BleError::DeviceNotFound(_))) {
+                        let _ = ble::scan(&adapter, 4).await.map_err(internal)?;
+                        result = ble::connect_to_address(&adapter, &addr).await;
+                    }
+                    result.map_err(|error| match error {
+                        ble::BleError::DeviceNotFound(_) => err("NOT_FOUND", error.to_string()),
+                        error => internal(error),
+                    })
+                })
+                .await
+                .map_err(|_| internal("蓝牙连接超时"))??;
+            let device = RememberedDevice::Ble {
+                address: addr,
+                name: if name.is_empty() {
+                    actual_name
+                } else {
+                    name.clone()
+                },
+            };
+            let mut snapshot = snapshot_for(&device);
+            let (major, minor, patch) = handshake.device_info.fw;
+            snapshot.fw_version = Some(format!("{major}.{minor}.{patch}"));
+            snapshot.hardware_variant = Some(handshake.device_info.hardware_variant);
+            snapshot.capability_bits = Some(handshake.capabilities.capability_bits);
+            if let Some(power) = handshake.power {
+                snapshot.power_source = Some(power.power_source);
+                snapshot.power_flags = Some(power.power_flags);
+                snapshot.charge_state = Some(power.charge_state);
+                snapshot.battery_mv = (power.battery_mv != 0xFFFF).then_some(power.battery_mv);
+                snapshot.battery_percent =
+                    (power.battery_percent != 0xFF).then_some(power.battery_percent);
+            }
+            let events = io.take_events();
+            let io = Arc::new(io);
+            let transport = Transport::new(io.clone(), None);
+            (
+                ConnectedDevice::Ble { io, transport },
+                device,
+                snapshot,
+                events,
+            )
+        }
+        RememberedDevice::Usb { usb_uid, .. } => {
+            let (vid, pid) =
+                usb_vid_pid()?.ok_or_else(|| err("BAD_REQUEST", "当前构建未登记 USB VID/PID"))?;
+            let session = tokio::time::timeout(
+                Duration::from_secs(10),
+                usb::Session::open(vid, pid, usb_uid.to_ascii_uppercase()),
+            )
+            .await
+            .map_err(|_| internal("USB 握手超时"))?
+            .map_err(usb_error)?;
+            let info = &session.handshake;
+            let device = RememberedDevice::Usb {
+                usb_uid: info.device.uid.clone(),
+                name: info.name.clone(),
+            };
+            let mut snapshot = snapshot_for(&device);
+            let (major, minor, patch) = info.device.firmware;
+            snapshot.fw_version = Some(format!("{major}.{minor}.{patch}"));
+            snapshot.hardware_revision = Some(info.device.hardware_revision);
+            snapshot.capability_bits = Some(info.capabilities.capability_bits);
+            (ConnectedDevice::Usb(session), device, snapshot, None)
+        }
+    };
+
+    state.devices.set(Some(connection.clone()));
+    let sync = async {
+        match state.engine.resync().await {
+            Err(EngineError::Transport(TransportError::Usb(error)))
+                if error.is_scene_rejection() =>
+            {
+                tracing::warn!(%error, "USB 灯牌未应用当前主题场景");
+            }
+            Err(error) => return Err(internal(error)),
+            Ok(()) => {}
+        }
+        if let ConnectedDevice::Usb(session) = &connection {
+            let status = session.status().await.map_err(usb_error)?;
+            snapshot.usb_fault_flags = Some(status.runtime.fault_flags);
+            tracing::info!(
+                event = "usb_status_read",
+                scene_digest = status.output.scene_digest,
+                lease_remaining_ms = status.runtime.lease_remaining_ms,
+                fault_flags = status.runtime.fault_flags,
+                "USB 灯牌状态读回成功"
+            );
+        }
+        remember_device(app, device.clone())
+    }
+    .await;
+    if let Err(error) = sync {
+        state.devices.set(None);
+        let _ = close_output(&connection, false).await;
+        return Err(error);
+    }
+
+    snapshot.connected = true;
+    publish_device(app, snapshot.clone(), None);
+    if snapshot.power_flags.is_some() {
+        emit_device_power(app, &snapshot);
+    }
+    if let Some(events) = ble_events {
+        spawn_ble_events(app.clone(), events, device, generation);
+    } else if let ConnectedDevice::Usb(session) = connection {
+        if let (Some(uid), Some(flags)) = (&snapshot.usb_uid, snapshot.usb_fault_flags) {
+            if flags != 0 {
+                emit_usb_fault(app, uid, flags, flags);
+            }
+        }
+        spawn_usb_monitor(app.clone(), session, device, generation);
+    }
+    tracing::info!(event = "device_connected", device_name = ?snapshot.name, generation, transport = ?snapshot.transport, "设备连接与状态对齐完成");
+    Ok(())
+}
+
+fn emit_device_power(app: &AppHandle, snapshot: &DeviceSnapshot) {
+    let _ = app.emit(
+        "device-power-changed",
+        serde_json::json!({
+            "capabilityBits": snapshot.capability_bits,
+            "batteryMv": snapshot.battery_mv,
+            "batteryPercent": snapshot.battery_percent,
+            "powerSource": snapshot.power_source,
+            "chargeState": snapshot.charge_state,
+            "powerFlags": snapshot.power_flags,
+        }),
+    );
+}
+
+fn spawn_ble_events(
     app: AppHandle,
     mut events: mpsc::UnboundedReceiver<ble::BleEvent>,
-    address: String,
-    name: String,
+    device: RememberedDevice,
     generation: u64,
 ) {
     tauri::async_runtime::spawn(async move {
-        while let Some(ev) = events.recv().await {
-            if app
-                .state::<AppState>()
-                .connection_generation
-                .load(Ordering::SeqCst)
-                != generation
-            {
+        while let Some(event) = events.recv().await {
+            let state = app.state::<AppState>();
+            let _guard = state.connection_lock.lock().await;
+            if state.connection_generation.load(Ordering::SeqCst) != generation {
                 return;
             }
-            match ev {
-                ble::BleEvent::PowerChanged(p) => {
-                    let s = shared(&app);
-                    let capability_bits = if let Ok(mut dev) = s.device.write() {
-                        dev.power_source = Some(p.power_source);
-                        dev.power_flags = Some(p.power_flags);
-                        dev.charge_state = Some(p.charge_state);
-                        dev.battery_mv = (p.battery_mv != 0xFFFF).then_some(p.battery_mv);
-                        dev.battery_percent =
-                            (p.battery_percent != 0xFF).then_some(p.battery_percent);
-                        dev.capability_bits
-                    } else {
-                        None
+            match event {
+                ble::BleEvent::PowerChanged(power) => {
+                    let snapshot = {
+                        let mut snapshot = state.shared.device.write().unwrap();
+                        snapshot.power_source = Some(power.power_source);
+                        snapshot.power_flags = Some(power.power_flags);
+                        snapshot.charge_state = Some(power.charge_state);
+                        snapshot.battery_mv =
+                            (power.battery_mv != 0xFFFF).then_some(power.battery_mv);
+                        snapshot.battery_percent =
+                            (power.battery_percent != 0xFF).then_some(power.battery_percent);
+                        snapshot.clone()
                     };
-                    let _ = app.emit(
-                        "device-power-changed",
-                        serde_json::json!({
-                            "capabilityBits": capability_bits,
-                            "batteryMv": (p.battery_mv != 0xFFFF).then_some(p.battery_mv),
-                            "batteryPercent": (p.battery_percent != 0xFF).then_some(p.battery_percent),
-                            "powerSource": p.power_source,
-                            "chargeState": p.charge_state,
-                            "powerFlags": p.power_flags,
-                        }),
-                    );
+                    emit_device_power(&app, &snapshot);
                 }
                 ble::BleEvent::Fault {
                     source,
@@ -987,38 +1109,9 @@ fn spawn_device_event_loop(
                 ble::BleEvent::ButtonEvent { event, duration_ms } => {
                     tracing::info!("设备按键 event={event} duration_ms={duration_ms}（V2 展示）");
                 }
-                ble::BleEvent::DeviceReady(_) => {
-                    // 握手阶段已消费；此处分支仅为穷尽匹配
-                }
+                ble::BleEvent::DeviceReady(_) => {}
                 ble::BleEvent::Disconnected => {
-                    tracing::warn!("设备断开: {name}");
-                    let s = shared(&app);
-                    if let Ok(mut dev) = s.device.write() {
-                        dev.connected = false;
-                        dev.reconnecting = true;
-                        dev.waiting_for_device = false;
-                        dev.power_source = None;
-                        dev.power_flags = None;
-                        dev.charge_state = None;
-                        dev.battery_mv = None;
-                        dev.battery_percent = None;
-                    }
-                    let state = app.state::<AppState>();
-                    state.device_io.set(None).await;
-                    *state.active_ble.lock().await = None;
-                    let _ = app.emit(
-                        "device-connection-changed",
-                        serde_json::json!({
-                            "connected": false,
-                            "reconnecting": true,
-                            "waitingForDevice": false,
-                            "reason": "link_lost",
-                            "address": address,
-                            "name": name,
-                        }),
-                    );
-                    crate::tray::update_device(&app, false, None);
-                    spawn_reconnect(app, address, name, 1, generation);
+                    link_lost(&app, device, generation, false);
                     return;
                 }
             }
@@ -1026,246 +1119,227 @@ fn spawn_device_event_loop(
     });
 }
 
-/// 断连退避重连：延迟后重试 connect_device_internal；期间已手动连接则放弃
-pub(crate) fn spawn_reconnect(
+fn emit_usb_fault(app: &AppHandle, uid: &str, flags: u16, raised: u16) {
+    if raised != 0 {
+        tracing::warn!(fault_flags = flags, raised, "USB 灯牌报告故障");
+    }
+    let _ = app.emit(
+        "device-fault",
+        serde_json::json!({ "usbUid": uid, "faultFlags": flags, "raised": raised }),
+    );
+}
+
+fn spawn_usb_monitor(
     app: AppHandle,
-    address: String,
-    name: String,
-    attempt: u32,
+    session: usb::Session,
+    device: RememberedDevice,
     generation: u64,
 ) {
-    if app
-        .state::<AppState>()
-        .connection_generation
-        .load(Ordering::SeqCst)
-        != generation
-    {
-        return;
-    }
-    if attempt > ble::FAST_RECOVERY_ATTEMPTS {
-        tracing::warn!("设备 {name} 重连达到上限，停止自动重连");
-        if let Ok(mut dev) = shared(&app).device.write() {
-            dev.reconnecting = false;
-            dev.waiting_for_device = false;
-        }
-        let _ = app.emit(
-            "device-connection-changed",
-            serde_json::json!({
-                "connected": false,
-                "reconnecting": false,
-                "waitingForDevice": false,
-                "reason": "reconnect_failed",
-                "address": address,
-                "name": name,
-            }),
-        );
-        return;
-    }
-    if let Ok(mut dev) = shared(&app).device.write() {
-        dev.connected = false;
-        dev.reconnecting = true;
-        dev.waiting_for_device = false;
-        dev.address = Some(address.clone());
-        dev.name = Some(name.clone());
-    }
     tauri::async_runtime::spawn(async move {
-        let delay = std::time::Duration::from_secs(ble::reconnect_delay_secs(attempt));
-        tracing::info!(
-            "{delay:?} 后尝试重连 {name}（第 {attempt}/{} 次）",
-            ble::FAST_RECOVERY_ATTEMPTS
-        );
-        tokio::time::sleep(delay).await;
         let state = app.state::<AppState>();
-        if state.connection_generation.load(Ordering::SeqCst) != generation {
-            return;
-        }
-        if state.device_io.is_connected().await {
-            return;
-        }
-        match connect_device_internal(&app, &address, &name, generation).await {
-            Ok(()) => tracing::info!("设备 {name} 重连成功"),
-            Err(e) => {
-                tracing::warn!("设备 {name} 重连第 {attempt} 次失败: {e}");
-                spawn_reconnect(app, address, name, attempt + 1, generation);
+        let mut updates = session.fault_updates();
+        let closed = session.wait_closed();
+        tokio::pin!(closed);
+        loop {
+            tokio::select! {
+                biased;
+                result = &mut closed => {
+                    let _guard = state.connection_lock.lock().await;
+                    if state.connection_generation.load(Ordering::SeqCst) == generation {
+                        tracing::warn!(?result, "USB 灯牌连接中断");
+                        link_lost(&app, device, generation, true);
+                    }
+                    return;
+                }
+                Ok(()) = updates.changed() => {
+                    let _guard = state.connection_lock.lock().await;
+                    if state.connection_generation.load(Ordering::SeqCst) != generation {
+                        return;
+                    }
+                    let flags = *updates.borrow_and_update();
+                    let previous = state.shared.device.write().unwrap().usb_fault_flags.replace(flags);
+                    if let RememberedDevice::Usb { usb_uid, .. } = &device {
+                        if previous != Some(flags) {
+                            emit_usb_fault(&app, usb_uid, flags, flags & !previous.unwrap_or(0));
+                        }
+                    }
+                }
             }
         }
     });
 }
 
-fn recovery_jitter() -> u8 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |duration| duration.subsec_nanos() as u8)
+fn link_lost(app: &AppHandle, device: RememberedDevice, generation: u64, keep_waiting: bool) {
+    app.state::<AppState>().devices.set(None);
+    publish_device(
+        app,
+        DeviceSnapshot {
+            reconnecting: true,
+            ..snapshot_for(&device)
+        },
+        Some("link_lost"),
+    );
+    spawn_recovery(app.clone(), device, generation, keep_waiting);
 }
 
-/// 启动恢复：5 次快速退避后转为长期低频尝试，直到成功或代次失效。
-pub(crate) fn spawn_startup_recovery(
-    app: AppHandle,
-    address: String,
-    name: String,
-    attempt: u32,
-    generation: u64,
-) {
-    if app
-        .state::<AppState>()
-        .connection_generation
-        .load(Ordering::SeqCst)
-        != generation
-    {
-        return;
-    }
-
-    let waiting = ble::startup_recovery_is_waiting(attempt);
-    if let Ok(mut dev) = shared(&app).device.write() {
-        dev.connected = false;
-        dev.reconnecting = !waiting;
-        dev.waiting_for_device = waiting;
-        dev.address = Some(address.clone());
-        dev.name = Some(name.clone());
-    }
-    if attempt == ble::FAST_RECOVERY_ATTEMPTS + 1 {
-        tracing::warn!(
-            event = "startup_device_waiting",
-            address = %address,
-            generation,
-            "启动快速恢复失败，转为长期等待设备 {name}"
-        );
-        let _ = app.emit(
-            "device-connection-changed",
-            serde_json::json!({
-                "connected": false,
-                "reconnecting": false,
-                "waitingForDevice": true,
-                "reason": "startup_waiting",
-                "address": address,
-                "name": name,
-            }),
-        );
-    }
-
+fn spawn_recovery(app: AppHandle, device: RememberedDevice, generation: u64, keep_waiting: bool) {
     tauri::async_runtime::spawn(async move {
-        let delay_secs = ble::startup_recovery_delay_secs(attempt, recovery_jitter());
-        let delay = std::time::Duration::from_secs(delay_secs);
-        tracing::info!(
-            event = "startup_device_recovery_scheduled",
-            address = %address,
-            generation,
-            attempt,
-            waiting,
-            delay_secs,
-            "已安排启动设备恢复 {name}"
-        );
-        tokio::time::sleep(delay).await;
-        let state = app.state::<AppState>();
-        if state.connection_generation.load(Ordering::SeqCst) != generation
-            || state.device_io.is_connected().await
-        {
-            return;
-        }
-        match connect_device_internal(&app, &address, &name, generation).await {
-            Ok(()) => tracing::info!(
-                event = "startup_device_recovered",
-                address = %address,
-                generation,
-                attempt,
-                "启动设备恢复成功 {name}"
-            ),
-            Err(error) => {
-                tracing::warn!(
-                    event = "startup_device_recovery_failed",
-                    address = %address,
-                    generation,
-                    attempt,
-                    %error,
-                    "启动设备恢复失败 {name}"
-                );
-                spawn_startup_recovery(app, address, name, attempt + 1, generation);
+        for attempt in 1u32.. {
+            let delay = if keep_waiting {
+                ble::startup_recovery_delay_secs(attempt, rand::random::<u8>())
+            } else {
+                ble::reconnect_delay_secs(attempt)
+            };
+            tokio::time::sleep(Duration::from_secs(delay)).await;
+            let state = app.state::<AppState>();
+            let _guard = state.connection_lock.lock().await;
+            if state.connection_generation.load(Ordering::SeqCst) != generation
+                || state.devices.current().is_some()
+            {
+                return;
+            }
+            match connect_locked(&app, &device, generation).await {
+                Ok(()) => return,
+                Err(error) => {
+                    tracing::warn!(device = device.name(), attempt, error = %error.message, "设备恢复失败")
+                }
+            }
+            if attempt == ble::FAST_RECOVERY_ATTEMPTS {
+                let snapshot = DeviceSnapshot {
+                    waiting_for_device: keep_waiting,
+                    ..snapshot_for(&device)
+                };
+                let reason = if keep_waiting {
+                    "startup_waiting"
+                } else {
+                    "reconnect_failed"
+                };
+                publish_device(&app, snapshot, Some(reason));
+                if !keep_waiting {
+                    return;
+                }
             }
         }
     });
+}
+
+pub(crate) async fn connect_at_startup(app: AppHandle, device: RememberedDevice) {
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let state = app.state::<AppState>();
+    let _guard = state.connection_lock.lock().await;
+    if state
+        .connection_generation
+        .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return;
+    }
+    if let Err(error) = connect_locked(&app, &device, 1).await {
+        tracing::warn!(error = %error.message, "启动时连接设备失败");
+        publish_device(
+            &app,
+            DeviceSnapshot {
+                reconnecting: true,
+                ..snapshot_for(&device)
+            },
+            None,
+        );
+        spawn_recovery(app.clone(), device, 1, true);
+    }
 }
 
 #[tauri::command]
-pub async fn connect_device(app: AppHandle, address: String) -> CmdResult<()> {
-    let generation = app
-        .state::<AppState>()
-        .connection_generation
-        .fetch_add(1, Ordering::SeqCst)
-        + 1;
-    connect_device_internal(&app, &address, "", generation)
-        .await
-        .map_err(internal)
-}
-
-async fn disconnect_current(app: &AppHandle) -> CmdResult<()> {
+pub async fn connect_device(
+    app: AppHandle,
+    address: Option<String>,
+    usb_uid: Option<String>,
+) -> CmdResult<()> {
+    let target = match (address, usb_uid) {
+        (Some(address), None) => RememberedDevice::Ble {
+            address: ble::normalize_address(&address),
+            name: String::new(),
+        },
+        (None, Some(uid))
+            if uid.len() == 24 && uid.bytes().all(|byte| byte.is_ascii_hexdigit()) =>
+        {
+            RememberedDevice::Usb {
+                usb_uid: uid.to_ascii_uppercase(),
+                name: String::new(),
+            }
+        }
+        _ => return Err(err("BAD_REQUEST", "请选择一个蓝牙地址或 USB 设备")),
+    };
     let state = app.state::<AppState>();
-    let current = state.active_ble.lock().await.clone();
-    if let Some(ble) = current {
-        ble.disconnect()
-            .await
-            .map_err(|e| err("DEVICE_DISCONNECT_FAILED", e.to_string()))?;
+    let _guard = state.connection_lock.lock().await;
+    let snapshot = state.shared.device.read().unwrap().clone();
+    let selected = snapshot_for(&target);
+    if snapshot.connected
+        && snapshot.address == selected.address
+        && snapshot.usb_uid == selected.usb_uid
+    {
+        return Ok(());
     }
-
-    state.connection_generation.fetch_add(1, Ordering::SeqCst);
-    state.device_io.set(None).await;
-    *state.active_ble.lock().await = None;
-    if let Ok(mut device) = state.shared.device.write() {
-        *device = DeviceSnapshot::default();
+    let generation = detach_locked(&app, true).await?;
+    if snapshot.connected || snapshot.reconnecting || snapshot.waiting_for_device {
+        publish_device(&app, DeviceSnapshot::default(), None);
     }
-    Ok(())
+    connect_locked(&app, &target, generation).await
 }
 
-fn emit_disconnected(app: &AppHandle, reason: &str) {
-    let _ = app.emit(
-        "device-connection-changed",
-        serde_json::json!({
-            "connected": false,
-            "reconnecting": false,
-            "waitingForDevice": false,
-            "reason": reason,
-            "address": null,
-            "name": null,
-        }),
-    );
-    crate::tray::update_device(app, false, None);
+#[tauri::command]
+pub async fn read_usb_status(app: AppHandle) -> CmdResult<usb::Status> {
+    let state = app.state::<AppState>();
+    let _guard = state.connection_lock.lock().await;
+    match state.devices.current() {
+        Some(ConnectedDevice::Usb(session)) => session.status().await.map_err(usb_error),
+        _ => Err(err("DEVICE_NOT_CONNECTED", "请先连接 USB 灯牌")),
+    }
+}
+
+async fn detach_locked(app: &AppHandle, switching: bool) -> CmdResult<u64> {
+    let state = app.state::<AppState>();
+    if let Some(connection) = state.devices.take() {
+        if let Err(error) = close_output(&connection, switching).await {
+            state.devices.set(Some(connection));
+            return Err(error);
+        }
+    }
+    Ok(state.connection_generation.fetch_add(1, Ordering::SeqCst) + 1)
+}
+
+pub(crate) fn close_usb_on_exit(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    state.exiting.store(true, Ordering::SeqCst);
+    if let Some(connection @ ConnectedDevice::Usb(_)) = state.devices.current() {
+        // Native macOS Quit reaches Exit directly. The HID worker can finish without the UI loop.
+        let _ = tauri::async_runtime::block_on(close_output(&connection, false));
+    }
 }
 
 #[tauri::command]
 pub async fn disconnect_device(app: AppHandle) -> CmdResult<serde_json::Value> {
-    tracing::info!(
-        event = "device_disconnect_requested",
-        reason = "manual_disconnect",
-        "请求断开设备"
-    );
-    disconnect_current(&app).await?;
-    emit_disconnected(&app, "manual_disconnect");
-    tracing::info!(
-        event = "device_disconnected",
-        reason = "manual_disconnect",
-        "设备已主动断开"
-    );
+    let state = app.state::<AppState>();
+    let _guard = state.connection_lock.lock().await;
+    detach_locked(&app, false).await?;
+    publish_device(&app, DeviceSnapshot::default(), Some("manual_disconnect"));
     Ok(serde_json::json!({ "ok": true }))
 }
 
 #[tauri::command]
 pub async fn forget_device(app: AppHandle) -> CmdResult<serde_json::Value> {
-    tracing::info!(event = "device_forget_requested", "请求忘记设备");
-    disconnect_current(&app).await?;
     let state = app.state::<AppState>();
-    let mut candidate = state
-        .config
-        .read()
-        .map_err(|_| internal("config 锁"))?
-        .clone();
-    candidate.remembered_device = None;
-    if let Err(e) = persist_config(&app, &candidate) {
-        emit_disconnected(&app, "manual_disconnect");
-        return Err(e);
+    let _guard = state.connection_lock.lock().await;
+    detach_locked(&app, false).await?;
+    let mut config = state.config.write().map_err(|_| internal("config 锁"))?;
+    let mut updated = config.clone();
+    updated.remembered_device = None;
+    if let Err(error) = persist_config(&app, &updated) {
+        publish_device(&app, DeviceSnapshot::default(), Some("manual_disconnect"));
+        return Err(error);
     }
-    *state.config.write().map_err(|_| internal("config 锁"))? = candidate.clone();
-    let _ = app.emit("config-changed", &candidate);
-    emit_disconnected(&app, "forgotten");
-    tracing::info!(event = "device_forgotten", "设备记录已清除");
+    *config = updated;
+    let _ = app.emit("config-changed", &*config);
+    publish_device(&app, DeviceSnapshot::default(), Some("forgotten"));
     Ok(serde_json::json!({ "ok": true }))
 }
 
@@ -1290,30 +1364,40 @@ pub async fn preview_scene(
     content: Option<String>,
 ) -> CmdResult<()> {
     let app_state = app.state::<AppState>();
-    if !app_state.device_io.is_connected().await {
+    if app_state.devices.current().is_none() {
         return Err(err("DEVICE_NOT_CONNECTED", "请先连接设备后再试听灯效"));
     }
     let engine = &app_state.engine;
     if let Some(content) = content {
         let draft = theme::load(&content).map_err(|e| err("THEME_INVALID", e.to_string()))?;
-        engine.preview_theme(&draft, &state).await.map_err(internal)
+        engine
+            .preview_theme(&draft, &state)
+            .await
+            .map_err(output_error)
     } else {
         engine
             .preview(&state, theme.as_deref())
             .await
-            .map_err(internal)
+            .map_err(output_error)
     }
 }
 
 #[tauri::command]
 pub async fn reset_outputs(app: AppHandle) -> CmdResult<()> {
     let engine = &app.state::<AppState>().engine;
-    engine.reset().await.map_err(internal)?;
+    engine.reset().await.map_err(output_error)?;
     let _ = app.emit(
         "business-state-changed",
         serde_json::json!({ "state": ST_IDLE }),
     );
     Ok(())
+}
+
+fn output_error(error: EngineError) -> AppError {
+    match error {
+        EngineError::Transport(TransportError::Usb(error)) => usb_error(error),
+        error => internal(error),
+    }
 }
 
 // ---- 配置域 ----

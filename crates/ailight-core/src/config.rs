@@ -1,6 +1,7 @@
 //! config.json 结构与默认值（ipc-contract §3）
 
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::theme;
 
@@ -12,10 +13,25 @@ pub const MIN_USER_PORT: u16 = 1024;
 pub const PORT_FALLBACK_ATTEMPTS: u16 = 10;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct RememberedDevice {
-    pub address: String,
-    pub name: String,
+#[serde(untagged, rename_all_fields = "camelCase")]
+pub enum RememberedDevice {
+    Usb { usb_uid: String, name: String },
+    Ble { address: String, name: String },
+}
+
+impl RememberedDevice {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Usb { name, .. } | Self::Ble { name, .. } => name,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum DeviceTransport {
+    Ble,
+    Usb,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -142,11 +158,27 @@ mod tests {
         );
         assert!(warn.is_none());
         assert_eq!(cfg.port_preference, 25685);
-        assert_eq!(cfg.remembered_device.as_ref().unwrap().address, "AA:BB:CC");
+        assert_eq!(
+            cfg.remembered_device,
+            Some(RememberedDevice::Ble {
+                address: "AA:BB:CC".into(),
+                name: "ACLight-1A2B".into(),
+            })
+        );
         assert_eq!(cfg.token, "secret");
         assert!(cfg.autostart);
         assert_eq!(cfg.theme_mode, "dark");
         assert!(!cfg.to_json().contains("arbitrationMode"));
+    }
+
+    #[test]
+    fn usb_device_round_trips_by_serial() {
+        let (cfg, warning) = AppConfig::load(
+            r#"{"rememberedDevice":{"usbUid":"00112233445566778899AABB","name":"AgentCore-Light USB"}}"#,
+        );
+        assert!(warning.is_none());
+        assert!(matches!(cfg.remembered_device, Some(RememberedDevice::Usb { .. })));
+        assert_eq!(AppConfig::load(&cfg.to_json()), (cfg, None));
     }
 
     #[test]

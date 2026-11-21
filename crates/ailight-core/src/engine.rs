@@ -11,6 +11,7 @@
 use std::sync::Arc;
 
 use crate::arbiter::{ApplyOutcome, HookEvent, ST_IDLE};
+use crate::device::SceneOutput;
 use crate::hook_server::{OutboundScene, SharedState};
 use crate::protocol::{self, OutputScene};
 use crate::theme;
@@ -161,7 +162,7 @@ fn compile_business_scene(shared: &SharedState, state: &str) -> Result<OutputSce
 /// 业务引擎：消费 outbound 下发设备 + 管理性操作
 pub struct Engine {
     pub shared: Arc<SharedState>,
-    transport: Transport,
+    output: Arc<dyn SceneOutput>,
 }
 
 impl Engine {
@@ -174,17 +175,27 @@ impl Engine {
     /// 详见 `docs/decisions/ADR-0003-async-执行模型边界与setup契约.md` D-02 / D-03
     /// 与 `docs/specs/architecture.md` KAD-08。
     pub fn new(shared: Arc<SharedState>, io: Arc<dyn crate::transport::TransportIo>) -> Self {
+        Self::with_output(shared, Arc::new(Transport::new(io, None)))
+    }
+
+    pub fn with_output(shared: Arc<SharedState>, output: Arc<dyn SceneOutput>) -> Self {
         // 开发期防御：未来若有人从 sync 上下文误调，debug 构建立刻可见（KAD-08 D-03）。
         debug_assert!(
             tokio::runtime::Handle::try_current().is_ok(),
             "Engine::new 必须在 Tokio runtime 上下文中调用（内部使用 tokio::spawn）。\
              见 docs/decisions/ADR-0003 / KAD-08。"
         );
-        let transport = Transport::new(io, None);
-        let task_transport = transport.clone();
+        let task_output = output.clone();
         let mut rx = shared.outbound_rx();
         tokio::spawn(async move {
-            while let Some(outbound) = rx.recv().await {
+            while let Some(mut outbound) = rx.recv().await {
+                if task_output.coalesce_scenes() {
+                    for _ in 0..rx.len() {
+                        if let Ok(latest) = rx.try_recv() {
+                            outbound = latest;
+                        }
+                    }
+                }
                 // 单 writer 队列内串行下发（协议 §15.6）
                 tracing::debug!(event = "scene_dispatch_started", signal_id = %outbound.signal_id, state = %outbound.state, "开始下发 SCENE");
                 let span = tracing::info_span!(
@@ -192,7 +203,8 @@ impl Engine {
                     signal_id = %outbound.signal_id,
                     state = %outbound.state
                 );
-                if let Err(e) = transport_set_scene(&task_transport, &outbound.scene)
+                if let Err(e) = task_output
+                    .apply_scene(&outbound.scene)
                     .instrument(span)
                     .await
                 {
@@ -202,7 +214,7 @@ impl Engine {
                 }
             }
         });
-        Self { shared, transport }
+        Self { shared, output }
     }
 
     /// 断线重连对齐：重发当前业务 SCENE（APPLY_IF_CHANGED 幂等，协议 §15.5）
@@ -212,7 +224,10 @@ impl Engine {
             "开始对齐设备当前灯效"
         );
         let scene = compile_current(&self.shared)?;
-        transport_set_scene(&self.transport, &scene).await?;
+        self.output
+            .apply_scene(&scene)
+            .await
+            .map_err(EngineError::Transport)?;
         tracing::info!(
             event = "device_scene_resync_completed",
             "设备当前灯效对齐完成"
@@ -239,7 +254,10 @@ impl Engine {
         let t = theme.ok_or_else(|| EngineError::State("未加载主题".into()))?;
         let mut scene = theme::compile_state(&t, state).map_err(EngineError::Theme)?;
         scene.apply_mode = protocol::RESTART_SCENE;
-        transport_set_scene(&self.transport, &scene).await?;
+        self.output
+            .apply_scene(&scene)
+            .await
+            .map_err(EngineError::Transport)?;
         tracing::info!(
             event = "scene_preview_completed",
             state,
@@ -264,7 +282,10 @@ impl Engine {
         theme::validate(draft).map_err(EngineError::Theme)?;
         let mut scene = theme::compile_state(draft, state).map_err(EngineError::Theme)?;
         scene.apply_mode = protocol::RESTART_SCENE;
-        transport_set_scene(&self.transport, &scene).await?;
+        self.output
+            .apply_scene(&scene)
+            .await
+            .map_err(EngineError::Transport)?;
         tracing::info!(
             event = "scene_preview_completed",
             state,
@@ -288,8 +309,8 @@ impl Engine {
             previous
         };
         tracing::info!(event = "outputs_reset_started", from_state = %previous.state, to_state = "IDLE", reason = "manual_reset", "开始复位设备输出");
-        self.transport
-            .reset_outputs()
+        self.output
+            .clear_outputs()
             .await
             .map_err(EngineError::Transport)?;
         tracing::info!(
@@ -299,37 +320,6 @@ impl Engine {
         );
         Ok(())
     }
-}
-
-async fn transport_set_scene(
-    transport: &Transport,
-    scene: &OutputScene,
-) -> Result<(), EngineError> {
-    let mut wire_scene = scene.clone();
-    for led in &mut wire_scene.leds {
-        // 临时兼容当前固件：即使是黑色空轨，brightness 也必须是 1..=100。
-        led.brightness = led.brightness.max(1);
-    }
-    for segment in &mut wire_scene.buzzer.segments {
-        // 静音间隔必须保持 frequency=0, volume=0；有声段暂按 1..=100。
-        segment.volume = if segment.frequency_hz == 0 {
-            0
-        } else {
-            segment.volume.max(1)
-        };
-    }
-    let frame = transport
-        .set_scene(&wire_scene)
-        .await
-        .map_err(EngineError::Transport)?;
-    // 应答语义对账（协议 §8.5）：非 OK 结果码告警（低电量/参数拒绝等）
-    let rc = protocol::parse_set_scene_response(&frame.data);
-    if let Ok((rc, _)) = rc {
-        if rc != protocol::ResultCode::Ok {
-            tracing::warn!(event = "scene_rejected", result_code = %rc, "SET_SCENE 被设备拒绝");
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

@@ -13,7 +13,10 @@ import {
   type AppSnapshot,
   api,
   asAppError,
+  type BleDeviceFault,
+  type DeviceFault,
   subscribe,
+  usbFaultMessage,
 } from "@/lib/ailight";
 import { runAsync } from "@/lib/utils";
 
@@ -28,7 +31,7 @@ interface AppContextValue {
   config: AppConfig | null;
   dismissToast: (id: number) => void;
   fatalError: AppError | null;
-  fault: { source: number; code: number; context: number } | null;
+  fault: BleDeviceFault | null;
   loading: boolean;
   notify: (toast: Omit<ToastItem, "id">) => void;
   patchConfig: (patch: Partial<AppConfig>) => Promise<AppConfig>;
@@ -121,6 +124,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         await subscribe<Partial<AppSnapshot["device"]> & { reason?: string }>(
           "device-connection-changed",
           (device) => {
+            if (device.connected === false) {
+              setFault(null);
+            }
             setSnapshot((current) =>
               current
                 ? {
@@ -150,17 +156,36 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             );
           }
         ),
-        await subscribe<AppContextValue["fault"]>(
-          "device-fault",
-          (nextFault) => {
-            setFault(nextFault);
-            notify({
-              tone: "error",
-              title: "设备报告故障",
-              message: `故障码 ${nextFault?.code}`,
-            });
+        await subscribe<DeviceFault>("device-fault", (nextFault) => {
+          if ("usbUid" in nextFault) {
+            setSnapshot((current) =>
+              current?.device.connected &&
+              current.device.usbUid === nextFault.usbUid
+                ? {
+                    ...current,
+                    device: {
+                      ...current.device,
+                      usbFaultFlags: nextFault.faultFlags,
+                    },
+                  }
+                : current
+            );
+            if (nextFault.raised) {
+              notify({
+                tone: "error",
+                title: "USB 灯牌报告故障",
+                message: usbFaultMessage(nextFault.raised),
+              });
+            }
+            return;
           }
-        ),
+          setFault(nextFault);
+          notify({
+            tone: "error",
+            title: "设备报告故障",
+            message: `故障码 ${nextFault.code}`,
+          });
+        }),
         await subscribe<{ name: string }>("theme-changed", ({ name }) => {
           setSnapshot((current) =>
             current

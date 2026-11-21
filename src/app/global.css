@@ -745,6 +745,13 @@ pre,
   background: var(--overlay-hover);
   border-top: 1px solid var(--border-soft);
 }
+.connected-device__readback {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--border-soft);
+}
 .device-stats {
   display: grid;
   flex: 1;

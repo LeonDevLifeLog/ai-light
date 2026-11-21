@@ -33,6 +33,7 @@ pub enum TransportError {
     Closed,
     /// 帧解析失败
     Parse(ParseError),
+    Usb(crate::usb::Error),
 }
 
 impl std::fmt::Display for TransportError {
@@ -42,6 +43,7 @@ impl std::fmt::Display for TransportError {
             TransportError::Timeout => write!(f, "应答超时"),
             TransportError::Closed => write!(f, "传输通道关闭"),
             TransportError::Parse(e) => write!(f, "帧解析失败: {e:?}"),
+            TransportError::Usb(e) => e.fmt(f),
         }
     }
 }

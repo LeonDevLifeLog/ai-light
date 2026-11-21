@@ -1,6 +1,6 @@
 # AI-Light
 
-AI-Light 是一款面向 macOS、Windows 和 Linux 的智能体状态灯客户端。它接收 Claude Code、Codex、Qoder 等 AI 编程工具的任务事件，将 `WORKING`、`WAITING`、`SUCCESS`、`ERROR` 等状态实时转换为蓝牙状态灯的灯效与提示音。
+AI-Light 是一款面向 macOS、Windows 和 Linux 的智能体状态灯客户端。它接收 Claude Code、Codex、Qoder 等 AI 编程工具的任务事件，将 `WORKING`、`WAITING`、`SUCCESS`、`ERROR` 等状态实时转换为蓝牙或 USB HID 状态灯的灯效与提示音。USB 构建配置和联调方法见[设备管理](docs/user-guide/devices.md#开发板联调)。
 
 应用本地运行，不需要云端中转。接入工具只需调用一个回环地址 HTTP API；灯效策略由可分享的 JSON 主题定义。
 

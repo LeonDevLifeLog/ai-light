@@ -5,14 +5,14 @@ mod storage;
 mod toolchain;
 mod tray;
 
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, RwLock};
 
 use tauri::{Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 
-use ailight_core::ble::DeviceIo;
 use ailight_core::config::{AppConfig, DEFAULT_PORT};
+use ailight_core::device::DeviceSlot;
 use ailight_core::engine::Engine;
 use ailight_core::hook_server::{BusinessSnapshot, SharedState};
 use ailight_core::{logging, theme};
@@ -22,12 +22,12 @@ pub struct AppState {
     pub _logging_guard: logging::LoggingGuard,
     pub shared: Arc<SharedState>,
     pub engine: Engine,
-    pub device_io: Arc<DeviceIo>,
+    pub devices: Arc<DeviceSlot>,
     pub config: RwLock<AppConfig>,
     pub hook_server: tokio::sync::Mutex<Option<ailight_core::hook_server::HookServer>>,
-    pub active_ble: tokio::sync::Mutex<Option<Arc<ailight_core::ble::BleIo>>>,
     pub connection_lock: tokio::sync::Mutex<()>,
     pub connection_generation: AtomicU64,
+    pub exiting: AtomicBool,
     pub runtime_token: RwLock<String>,
     /// Node/npm/Adapter 工具链解析（设计方案 §4：ToolchainService）
     pub toolchain: toolchain::ToolchainService,
@@ -142,13 +142,13 @@ pub fn run() {
             *shared.token.write().unwrap() = Some(runtime_token.clone());
 
             // 设备代理 + 引擎
-            let device_io = DeviceIo::new();
-            // Engine::new 内部使用 tokio::spawn，必须处于 runtime 上下文；
+            let devices = Arc::new(DeviceSlot::default());
+            // Engine::with_output 内部使用 tokio::spawn，必须处于 runtime 上下文；
             // setup 回调运行在 AppKit 主线程（不在 runtime 上下文），故显式 enter。
             // 见 docs/decisions/ADR-0003 / docs/specs/architecture.md KAD-08。
             let engine = {
                 let _guard = tauri::async_runtime::handle().inner().enter();
-                Engine::new(shared.clone(), device_io.clone())
+                Engine::with_output(shared.clone(), devices.clone())
             };
 
             // 驱动驻留到期并将最新仲裁状态同步给前端和托盘。
@@ -197,12 +197,12 @@ pub fn run() {
                 _logging_guard: logging_guard,
                 shared,
                 engine,
-                device_io,
+                devices,
                 config: RwLock::new(config),
                 hook_server: tokio::sync::Mutex::new(None),
-                active_ble: tokio::sync::Mutex::new(None),
                 connection_lock: tokio::sync::Mutex::new(()),
                 connection_generation: AtomicU64::new(0),
+                exiting: AtomicBool::new(false),
                 runtime_token: RwLock::new(runtime_token),
                 toolchain: toolchain::ToolchainService::new(),
             });
@@ -262,46 +262,9 @@ pub fn run() {
                 .read()
                 .map(|c| c.remembered_device.clone())
                 .unwrap_or(None);
-            tauri::async_runtime::spawn(async move {
-                if let Some(dev) = remembered {
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    let generation = auto_handle
-                        .state::<AppState>()
-                        .connection_generation
-                        .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-                        + 1;
-                    match commands::connect_device_internal(
-                        &auto_handle,
-                        &dev.address,
-                        &dev.name,
-                        generation,
-                    )
-                    .await
-                    {
-                        Ok(()) => tracing::info!("已自动连接设备 {}", dev.name),
-                        Err(e) => {
-                            tracing::warn!("自动连接失败: {e}，进入退避重连");
-                            let _ = auto_handle.emit(
-                                "device-connection-changed",
-                                serde_json::json!({
-                                    "connected": false,
-                                    "reconnecting": true,
-                                    "waitingForDevice": false,
-                                    "address": dev.address.clone(),
-                                    "name": dev.name.clone(),
-                                }),
-                            );
-                            commands::spawn_startup_recovery(
-                                auto_handle,
-                                dev.address,
-                                dev.name,
-                                1,
-                                generation,
-                            );
-                        }
-                    }
-                }
-            });
+            if let Some(device) = remembered {
+                tauri::async_runtime::spawn(commands::connect_at_startup(auto_handle, device));
+            }
 
             tracing::info!(event = "app_started", "AI-Light 初始化完成");
             Ok(())
@@ -323,7 +286,9 @@ pub fn run() {
             commands::export_theme,
             commands::delete_theme,
             commands::scan_devices,
+            commands::scan_usb_devices,
             commands::connect_device,
+            commands::read_usb_status,
             commands::disconnect_device,
             commands::forget_device,
             commands::trigger_state,
@@ -355,6 +320,7 @@ pub fn run() {
                 }
             }
             if let tauri::RunEvent::Exit = event {
+                commands::close_usb_on_exit(app);
                 tracing::info!(event = "app_exiting", "AI-Light 正在退出");
                 storage::remove_runtime();
             }

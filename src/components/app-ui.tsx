@@ -188,7 +188,7 @@ export function DeviceSummary({
   let subtitle = "连接灯牌后即可同步状态灯效";
   if (connected) {
     title = name || "AgentCore-Light";
-    subtitle = "蓝牙连接正常";
+    subtitle = device.transport === "usb" ? "USB 连接正常" : "蓝牙连接正常";
   } else if (reconnecting) {
     title = "正在重连…";
     subtitle = "设备断开，自动重连中";
@@ -209,7 +209,7 @@ export function DeviceSummary({
         <strong title={title}>{title}</strong>
         <div className="device-summary__meta">
           <span>{subtitle}</span>
-          {connected ? (
+          {connected && device.transport !== "usb" ? (
             <span className="battery-value">
               <Battery aria-hidden="true" size={16} />
               {batteryStatusLabel(batteryStatus(device))}

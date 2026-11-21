@@ -14,11 +14,16 @@ const device = (overrides: Partial<DeviceState>): DeviceState => ({
   chargeState: null,
   connected: true,
   fwVersion: "0.0.9",
+  hardwareRevision: null,
   hardwareVariant: 1,
   name: "StatusLight",
   powerFlags: null,
   powerSource: null,
   reconnecting: false,
+  transport: "ble",
+  usbFaultFlags: null,
+  usbUid: null,
+  waitingForDevice: false,
   ...overrides,
 });
 
