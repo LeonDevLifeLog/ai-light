@@ -46,21 +46,22 @@ pnpm --dir packages/ailight-adapter test
 
 CI 使用 `--no-bundle` 校验前端与原生应用编译链路，不生成安装包；跨平台安装包由 Release 工作流统一生成。该策略让 PR 保留低成本的完整 Linux 编译门禁，并在代码进入主干后补充 macOS、Windows 兼容性反馈。
 
-CI 和 Release 的 Linux 构建一律通过 `awalsh128/cache-apt-pkgs-action` 安装 WebKitGTK 等系统开发包。两份清单都包含 `libdbus-1-dev`，它为核心测试和桌面构建中的 BLE 依赖提供 `dbus-1.pc`。该安装步骤的超时为 30 分钟。
+CI 和 Release 的 Linux 构建通过 `awalsh128/cache-apt-pkgs-action` 安装系统开发包。BLE 依赖使用 `libdbus-1-dev`，USB HID 的 hidraw 后端使用 `libudev-dev`。该安装步骤的超时为 30 分钟。
 
-Linux runner 先将 Azure 和 `mirror+file` 的 Ubuntu 源指向 Ubuntu 官方归档并刷新索引。安装后用 `pkg-config` 校验 D-Bus 和 WebKitGTK 开发库，再开始 Rust 测试或编译。
+Linux runner 先将 Azure 和 `mirror+file` 的 Ubuntu 源指向 Ubuntu 官方归档并刷新索引。安装后用 `pkg-config` 校验 D-Bus、libudev 和 WebKitGTK 开发库，再开始 Rust 测试或编译。
 
 三平台矩阵设置 `fail-fast: false`，一个平台失败不会取消其他平台，便于横向定位平台差异。
 
 ## 权限与依赖
 
-- 工作流仅拥有 `contents: read` 权限
+- CI 使用 `contents: read` 和 `pull-requests: read` 权限
 - Node.js 固定为 24
 - pnpm 通过兼容 Node.js 24 的 `pnpm/action-setup@v6.0.9` 安装
 - pnpm 版本由 `package.json` 的 `packageManager` 字段固定
 - Rust 使用 stable 工具链
 - 前端依赖必须与 `pnpm-lock.yaml` 一致
 - Rust 依赖必须保留并提交 `src-tauri/Cargo.lock`
+- Release 将仓库变量 `AILIGHT_USB_VID` 和 `AILIGHT_USB_PID` 传给编译器。发布支持 USB 的构建时同时设置两项获授权的十六进制标识。
 
 ## 分支保护建议
 

@@ -19,7 +19,7 @@ use utoipa::{Modify, OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::arbiter::Arbiter;
-use crate::config::{DEFAULT_PORT, PORT_FALLBACK_ATTEMPTS};
+use crate::config::{DeviceTransport, DEFAULT_PORT, PORT_FALLBACK_ATTEMPTS};
 use crate::engine;
 use crate::protocol::OutputScene;
 use crate::theme::ThemeFile;
@@ -46,10 +46,16 @@ pub struct DeviceSnapshot {
     /// 启动恢复是否已进入长期低频等待。
     #[schema(example = false)]
     pub waiting_for_device: bool,
+    /// 当前或正在恢复的设备使用的连接类型。
+    pub transport: Option<DeviceTransport>,
     /// 设备的系统蓝牙地址；未连接时为 null。
     #[schema(example = "AA:BB:CC:DD:EE:FF")]
     pub address: Option<String>,
-    /// 蓝牙广播名称；未连接或设备未提供时为 null。
+    /// USB 灯牌的持久序列号。
+    pub usb_uid: Option<String>,
+    /// USB 会话最新一次轮询的故障位；未连接 USB 时为 null。
+    pub usb_fault_flags: Option<u16>,
+    /// 设备名称；未连接或设备未提供时为 null。
     #[schema(example = "StatusLight-1A2B")]
     pub name: Option<String>,
     /// 设备固件版本；设备未提供时为 null。
@@ -58,6 +64,8 @@ pub struct DeviceSnapshot {
     /// 硬件变体编号；设备未提供时为 null。
     #[schema(example = 1)]
     pub hardware_variant: Option<u8>,
+    /// USB 硬件修订号。
+    pub hardware_revision: Option<u16>,
     /// 设备能力位；设备未提供时为 null。
     #[schema(example = 63)]
     pub capability_bits: Option<u32>,

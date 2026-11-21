@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | V1.4 |
-| 文档状态 | 生效；已增加启动期长期设备恢复状态（2026-09-12） |
+| 文档版本 | V1.6 |
+| 文档状态 | 生效。设备域支持蓝牙与 USB HID（2026-11-21） |
 | 适用范围 | Rust Core ↔ 前端（React）的接口面；以及 config.json 存储格式 |
 | 架构依据 | KAD-03（Rust 唯一事实源 + events 推送）、ADR-0001/0002、hook-api V1.0、theme-format V1.0 |
 | 生效日期 | 2026-08-19 |
@@ -32,8 +32,9 @@
   "service": { "version": "0.1.0", "port": 25679, "tokenEnabled": false },
   "device": {
     "connected": false, "reconnecting": false, "waitingForDevice": false,
-    "address": null, "name": null,
-    "fwVersion": null, "hardwareVariant": null,
+    "transport": null, "address": null, "usbUid": null, "usbFaultFlags": null,
+    "name": null,
+    "fwVersion": null, "hardwareVariant": null, "hardwareRevision": null,
     "capabilityBits": null, "powerFlags": null,
     "batteryMv": null, "batteryPercent": null,
     "powerSource": null, "chargeState": null
@@ -48,6 +49,8 @@
 ```
 
 > `device` 字段按能力位可缺省（无电池版无 battery 字段）；未连接时相关字段为 null。`reconnecting` 表示有限快速重连，`waitingForDevice` 表示启动恢复已进入长期低频等待；两者都属于 Rust 侧连接生命周期快照，且不得同时为 true。
+
+`usbFaultFlags` 保存当前 USB 会话最新的故障位。`0` 表示设备报告无故障，连接蓝牙或未连接时为 `null`。
 
 ### 2.2 主题域
 
@@ -70,13 +73,17 @@
 
 | Command | 请求 | 响应 | 错误码 | 优先级 |
 |---|---|---|---|---|
-| `scan_devices()` | — | `[{ "name": "ACLight-1A2B", "address": "AA:BB:…", "rssi": -55, "recognized": true }]` | — | P1 |
-| `connect_device(address)` | address: string | `()`（连接结果同时走 events） | `NOT_FOUND` | P1 |
+| `scan_devices()` | — | `[{ "name": "ACLight-1A2B", "address": "AA:BB:…", "rssi": -55, "recognized": true }]` | `INTERNAL` | P1 |
+| `scan_usb_devices()` | — | USB 候选数组，每项包含 `usbUid` 和 `name` | `BAD_REQUEST` / `INTERNAL` | P1 |
+| `connect_device(address?, usbUid?)` | 蓝牙 `address` 或 USB `usbUid` 二选一 | `()`，成功后发连接事件 | `BAD_REQUEST` / `NOT_FOUND` / `CONFLICT` / `DEVICE_DISCONNECT_FAILED` / `INTERNAL` | P1 |
+| `read_usb_status()` | — | `{ runtime, output }` | `DEVICE_NOT_CONNECTED` / `CONFLICT` / `INTERNAL` | P1 |
 | `disconnect_device()` | — | `{ "ok": true }` | `DEVICE_DISCONNECT_FAILED` | P1 |
 | `forget_device()` | — | `{ "ok": true }` | `DEVICE_DISCONNECT_FAILED` / `INTERNAL` | P1 |
 
 - **扫描筛选**：`recognized` 当前由广播名是否以 `ACLight-` 开头计算；设备页仅展示 `recognized === true` 的扫描结果。此标记用于候选列表筛选，不代表设备类型或能力已验证；连接后仍须发现 GB_TRANS 服务并完成 V0.4 握手。
-- **connect 成功后**：自动写入 `config.remembered_device` + 执行 V0.4 握手（§5）→ 重发当前业务 SCENE（APPLY_IF_CHANGED）对齐
+- USB 发现按已登记的 VID/PID 和 HID 描述符过滤。建立会话前再校验应用协议身份、能力及序列号。两种发现命令独立返回结果。
+- 握手成功后安装活动连接，重发当前业务 SCENE，保存已记住设备并发布连接快照。USB 在发布快照前还读回运行和输出状态。USB 的 `usbUid` 为 24 位大写十六进制，取自设备 UID。
+- `read_usb_status` 依次发出 USB V1.0 `GET_RUNTIME_STATUS` 和 `GET_OUTPUT_STATUS`。运行状态包含 `usbState`、`statusLed1Mode`、`statusLed2Mode`、`activeSessionId`、`leaseRemainingMs`、`uptimeMs`、`sceneValid`、`faultFlags`。输出状态包含 `sceneDigest`、`sceneState`、`rgb`、`buzzerState`、`buzzerFrequencyHz`、`buzzerVolume`、`sceneUptimeMs`。
 - **disconnect**：主动断开并取消当前连接代次的自动重连，保留 `rememberedDevice`，下次启动仍自动连接
 - **forget**：先主动断开并取消自动重连，成功后清除并持久化 `rememberedDevice`
 - 扫描时长：客户端实现，建议 5s（P1 可配置化）
@@ -163,6 +170,7 @@
 ```
 
 - 未知字段：加载时忽略并记日志（向前兼容）
+- USB 设备使用 `rememberedDevice: { usbUid, name }`。既有蓝牙设备继续使用 `{ address, name }`。
 - 非法值：回退默认值 + 记日志，不拒绝启动（`themeMode` 非法回退 `"dark"`）
 - `token` 明文存储为已知风险（KAD-04 后果，V2 迁系统钥匙串）
 
@@ -170,12 +178,12 @@
 
 | code | 含义 | 场景 |
 |---|---|---|
-| `BAD_REQUEST` | 参数非法 | trigger_state 状态名非法、patch 字段非法、export_theme 名称非法 |
-| `NOT_FOUND` | 对象不存在 | get_theme/set_active_theme/export_theme/delete_theme、connect_device 地址未扫到 |
-| `CONFLICT` | 冲突 | import_theme 与内置主题同名 |
+| `BAD_REQUEST` | 参数非法 | 状态名、配置字段或 USB 标识无效，USB 下发场景超出设备能力 |
+| `NOT_FOUND` | 对象不存在 | 主题不存在、USB 设备已拔出或标识已变化 |
+| `CONFLICT` | 冲突 | 导入主题与内置主题同名、USB 灯牌已被其他应用会话使用 |
 | `THEME_INVALID` | 主题校验失败 | import/set_active_theme/preview_scene/export_theme（含校验失败原因于 message） |
 | `THEME_BUILTIN` | 内置主题不可操作 | delete_theme/export_theme(内置) |
-| `DEVICE_NOT_CONNECTED` | 设备未连接 | preview_scene 前置检查 |
+| `DEVICE_NOT_CONNECTED` | 设备未连接 | 试听、读取 USB 状态或 USB 会话已关闭 |
 | `DEVICE_DISCONNECT_FAILED` | 主动断开失败 | disconnect_device / forget_device；忘记操作不会清除记忆 |
 | `AUTOSTART_FAILED` | 开机自启 OS 登录项操作失败 | update_config(autostart) 时 enable/disable 抛错（权限、路径失效、平台异常等） |
 | `ADAPTER_NOT_FOUND` | Adapter CLI 不可执行 | 查询或管理 Claude Code/Codex/Qoder/TraeCode/WorkBuddy 接入 |
@@ -201,15 +209,17 @@
 | 事件名 | 触发时机 | payload | 实现状态（2026-08-21） |
 |---|---|---|---|
 | `business-state-changed` | 仲裁结果变化（含 hold 回落） | `{ state, source, session, sinceTs, theme }`（`reset_outputs` 复位时仅携带 `state`，其余字段保持前端现值） | ✅ 已 emit |
-| `device-connection-changed` | 连接/断开/恢复阶段变化 | `{ connected, address, name, reason?, reconnecting?, waitingForDevice? }`（`reason`：`link_lost` / `reconnect_failed` / `startup_waiting` / `manual_disconnect` / `forgotten`） | ✅ 全部已 emit |
+| `device-connection-changed` | 连接、断开或恢复阶段变化 | 完整 `DeviceSnapshot`，附可选 `reason`（`link_lost` / `reconnect_failed` / `startup_waiting` / `manual_disconnect` / `forgotten`） | ✅ 已 emit |
 | `device-power-changed` | POWER_CHANGED / 握手后首次查询 | `{ capabilityBits, batteryMv, batteryPercent, powerSource, chargeState, powerFlags }` | ✅ 握手 + 主动事件均已 emit |
-| `device-fault` | FAULT_EVENT | `{ source, code, context }` | ✅ 已 emit |
+| `device-fault` | 蓝牙 FAULT_EVENT；USB 连接时有故障或运行中故障位变化 | 蓝牙 `{ source, code, context }`；USB `{ usbUid, faultFlags, raised }` | ✅ 已 emit |
 | `theme-changed` | 主题切换生效 | `{ name }` | ✅ 已 emit |
 | `config-changed` | 配置更新成功（设置页 / 托盘徽章朝向） | 更新后完整 Config | ✅ 已 emit |
 | `open-config` | 托盘「打开配置」点击 | —（UI 导航事件） | ✅ 托盘已 emit，前端跳转 /devices |
 | `hook-log`（P2） | 每次 hook 事件受理 | `{ source, state, session, applied, ts }`（排障日志面板用） | ❌ P2 未实现 |
 
 **订阅约定**：前端启动时订阅全部事件；`get_app_state` 快照 + 事件增量构成完整视图。Rust 侧不关心前端是否在监听（事件可丢弃，前端可随时用快照自愈）。
+
+USB 的 `faultFlags` 是完整位图，`raised` 是本次新置位的子集。前端用 `usbUid` 匹配当前连接，更新告警卡；`faultFlags` 为零时清除告警，`raised` 非零时弹出 Toast。
 
 ## 6. 与既有规范的映射关系
 
@@ -249,5 +259,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.6 | 2026-11-21 | USB 会话使用运行状态轮询同步 `usbFaultFlags`，通过 `device-fault` 上报故障及恢复。 |
+| V1.5 | 2026-11-21 | 新增 USB 发现、连接与状态读回，使用 USB UID 记住设备。连接事件携带完整设备快照。 |
 | V1.3 | 2026-09-05 | 新增 `fetch_latest_release` / `resolve_update_download_url` 与 `UPDATE_CHECK_FAILED`：Rust 侧负责多源超时、响应基础校验和下载镜像探测，前端负责版本比较、6 小时缓存及用户反馈。 |
 | V1.2 | 2026-09-01 | 设备快照与 `device-power-changed` 补齐 `capabilityBits`、`batteryMv`；`batteryPercent = null` 仅表示百分比不可用，电池存在性由 `capabilityBits.Bit4` 与 `powerFlags.Bit0` 判断。 |
